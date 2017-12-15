@@ -481,9 +481,7 @@ extern "C" {
     void AindexWrapper_load_reads(AindexWrapper* foo, char* reads_file){ foo->load_reads(reads_file); }
 
     void AindexWrapper_load_index(AindexWrapper* foo, char* index_prefix, size_t max_tf){ foo->load_index(index_prefix, max_tf); }
-    void AindexWrapper_load_index(AindexWrapper* foo, char* index_prefix, size_t max_tf){ foo->load_index(index_prefix, max_tf); }
-
-
+    
     void AindexWrapper_increase(AindexWrapper* foo, char* kmer){ foo->increase(kmer); }
     void AindexWrapper_decrease(AindexWrapper* foo, char* kmer){ foo->decrease(kmer); }
     size_t AindexWrapper_get(AindexWrapper* foo, char* x){ return foo->get(x); }
