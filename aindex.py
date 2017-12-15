@@ -249,7 +249,7 @@ def iter_reads_by_sequence(sequence, kmer2tf, used_reads=None, only_left=False, 
     ''' Yield reads containing sequence
         (start, next_read_start, read, pos_if_uniq|None, all_poses)
 
-    TODO: more effective implementation than if sequence in reads
+    TODO: more effective implementation than if sequence in read
     '''
     if len(sequence) >= k:
         kmer = sequence[:k]
@@ -258,7 +258,7 @@ def iter_reads_by_sequence(sequence, kmer2tf, used_reads=None, only_left=False, 
             read = data[2]
             print data
             for pos in all_poses:
-                if sequence in reads:
+                if sequence in read:
                     yield data            
     else:
         yield None
