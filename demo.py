@@ -56,7 +56,7 @@ print lefts
 print "Right flanks:"
 print rights
 
-print "Task 6. Iter reads by sequence, returs (start, next_read_start, read, pos_if_uniq|None, all_poses)"
+print "Task 6. Iter reads by sequence, returтs (start, next_read_start, read, pos_if_uniq|None, all_poses)"
 raw_input("\nReady?")
 sequence = "AATATTATTAAGGTATTTAAAAAATACTATTATAGTATTTAACATA"
 for read in iter_reads_by_sequence(sequence, index):
