@@ -9,6 +9,7 @@
 #include <vector>
 #include <unordered_map>
 #include <thread>
+#include "emphf/common.hpp"
 #include <cstdint>
 #include <cstring>
 #include <limits.h>
@@ -16,14 +17,13 @@
 #include <mutex>
 #include <algorithm>
 #include <assert.h>
-#include <atomic>
-#include <cassert>
-
 #include "kmers.hpp"
+#include <atomic>
 #include "hash.hpp"
+#include <cassert>
 #include "read.hpp"
 #include "emphf/common.hpp"
-
+#include <cassert>
 
 int main(int argc, char** argv) {
 

@@ -16,7 +16,6 @@
 #include "emphf/mphf.hpp"
 #include "emphf/base_hash.hpp"
 #include <atomic>
-#include "emphf/common.hpp"
 
 static std::mutex barrier;
 #include <math.h>
