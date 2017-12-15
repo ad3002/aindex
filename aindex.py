@@ -165,6 +165,10 @@ def load_aindex(settings, prefix=None, reads=None, aindex_prefix=None, skip_read
     if reads is None and not skip_reads:
         reads = settings["reads_file"]
 
+    if not "max_tf" in settings:
+        print "default max_tf is 10000"
+        settings["max_tf"] = 10000
+
     if aindex_prefix is None and not skip_aindex:
         aindex_prefix = settings["aindex_prefix"]
     
