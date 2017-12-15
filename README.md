@@ -87,18 +87,18 @@ for i, read in enumerate(index.iter_reads()):
 
 print "Task 3. Iter reads by kmer, returs (start, next_read_start, read, pos_if_uniq|None, all_poses)"
 raw_input("\nReady?")
-for read in index.iter_reads_by_kmer(test_kmer, index):
+for read in iter_reads_by_kmer(test_kmer, index):
     print read
 
 
 print "Task 4. Get distances in reads for two kmers, returns a list of (rid, left_kmer_pos, right_kmer_pos) tuples."
 raw_input("\nReady?")
-print index.get_left_right_distances(test_kmer, right_kmer, index)
+print get_left_right_distances(test_kmer, right_kmer, index)
 
 
 print "Task 4. Get layout for kmer, returns (max_pos, reads, lefts, rights, rids, starts), for details see source code"
 raw_input("\nReady?")
-max_pos, reads, lefts, rights, rids, starts = index.get_layout_for_kmer(right_kmer, index)
+max_pos, reads, lefts, rights, rids, starts = get_layout_for_kmer(right_kmer, index)
 print "Central layout:"
 for read in reads:
     print read
@@ -108,7 +108,6 @@ print lefts
 raw_input("\nNext?")
 print "Right flanks:"
 print rights
-
 
 
 ```
