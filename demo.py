@@ -20,6 +20,7 @@ sequence = "TAAGTTATTATTTAGTTAATACTTTTAACAATATTATTAAGGTATTTAAAAAATACTATTATAGTATT
 test_kmer = "TAAGTTATTATTTAGTTAATACT"
 right_kmer = "AGTTAATACTTTTAACAATATTA"
 
+
 print "Task 1. Get kmer frequency"
 raw_input("\nReady?")
 for i in xrange(len(sequence)-k+1):
@@ -57,6 +58,11 @@ raw_input("\nNext?")
 print "Right flanks:"
 print rights
 
+print "Task 5. Iter reads by sequence, returs (start, next_read_start, read, pos_if_uniq|None, all_poses)"
+raw_input("\nReady?")
+sequence = "AATATTATTAAGGTATTTAAAAAATACTATTATAGTATTTAACATA"
+for read in iter_reads_by_kmer(sequence, index):
+    print read
 
 
 

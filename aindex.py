@@ -245,6 +245,25 @@ def iter_reads_by_kmer(kmer, kmer2tf, used_reads=None, only_left=False, skip_mul
             yield [rid, end+1, read, one_hit, poses]
 
 
+def iter_reads_by_sequence(sequence, kmer2tf, used_reads=None, only_left=False, skip_multiple=True, k=23):
+    ''' Yield reads containing sequence
+        (start, next_read_start, read, pos_if_uniq|None, all_poses)
+
+    - only_left: return only left reads
+    - skip_multiple: skip if more then one hit in read
+    '''
+    if len(sequence) < k:
+        return []
+    kmer = sequence[:k]
+    for data in iter_reads_by_kmer(kmer, kmer2tf, used_reads=used_reads, only_left=only_left, skip_multiple=skip_multiple, k=k):
+        all_poses = data[-1]
+        read = data[2]
+        for pos in all_poses:
+            print pos, read[pos:pos+k]
+            assert kmer == read[pos]
+
+
+
 def get_reads_se_by_kmer(kmer, kmer2tf, used_reads, k=23):
     ''' Split springs and return subreads.
 
@@ -298,6 +317,7 @@ def get_reads_se_by_kmer(kmer, kmer2tf, used_reads, k=23):
                 continue
             result.append([hit, end+1, read[spring_pos+1:], pos, 1, was_reversed, rid2poses])
     return result
+
 
 
 def get_left_right_distances(left_kmer, right_kmer, kmer2tf):
