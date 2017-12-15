@@ -9,21 +9,23 @@
 #include <vector>
 #include <unordered_map>
 #include <thread>
+#include "emphf/common.hpp"
+#include "debrujin.hpp"
+
+
 #include <cstdint>
 #include <cstring>
 #include <limits.h>
 #include <math.h>
 #include <mutex>
-#include <cassert>
 
-#include "emphf/common.hpp"
-
-#include "debrujin.hpp"
-// #include "correction.hpp"
 #include "kmers.hpp"
-#include "hash.hpp"
-#include "read.hpp"
 
+#include "hash.hpp"
+
+#include "read.hpp"
+#include "emphf/common.hpp"
+#include <cassert>
 
 static std::mutex barrier;
 emphf::stl_string_adaptor str_adapter;
