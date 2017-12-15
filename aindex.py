@@ -20,11 +20,20 @@ else:
     raise Exception("Aridna's dll was not found: %s" % str(dll_paths))
 
 from PyExp import Timer
-import jellyfish
 import numpy as np
 import mmap
 from collections import defaultdict
-from trseeker.tools.sequence_tools import get_revcomp
+
+def get_revcomp(sequence):
+    '''Return reverse complementary sequence.
+
+    >>> complementary('AT CG')
+    'CGAT'
+
+    '''
+    c = dict(zip('ATCGNatcgn~[]', 'TAGCNtagcn~]['))
+    return ''.join(c.get(nucleotide, '') for nucleotide in reversed(sequence))
+
 
 class AIndex(object):
     ''' Wrapper for working with cpp aindex implementation.
