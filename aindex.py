@@ -256,7 +256,6 @@ def iter_reads_by_sequence(sequence, kmer2tf, used_reads=None, only_left=False, 
         for data in iter_reads_by_kmer(kmer, kmer2tf, used_reads=used_reads, only_left=only_left, skip_multiple=skip_multiple, k=k):
             all_poses = data[-1]
             read = data[2]
-            print data
             for pos in all_poses:
                 if sequence in read:
                     yield data            
