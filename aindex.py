@@ -196,7 +196,7 @@ def get_rid2poses(kmer, kmer2tf):
     return hits
 
 
-def iter_reads_by_kmer(kmer, kmer2tf, used_reads, only_left=False, skip_multiple=True, k=23):
+def iter_reads_by_kmer(kmer, kmer2tf, used_reads=None, only_left=False, skip_multiple=True, k=23):
     ''' Yield 
         (start, next_read_start, read, pos_if_uniq|None, all_poses)
 
