@@ -249,8 +249,7 @@ def iter_reads_by_sequence(sequence, kmer2tf, used_reads=None, only_left=False, 
     ''' Yield reads containing sequence
         (start, next_read_start, read, pos_if_uniq|None, all_poses)
 
-    - only_left: return only left reads
-    - skip_multiple: skip if more then one hit in read
+    TODO: more effective implementation than if sequence in reads
     '''
     if len(sequence) < k:
         return []
@@ -260,8 +259,8 @@ def iter_reads_by_sequence(sequence, kmer2tf, used_reads=None, only_left=False, 
         read = data[2]
         print data
         for pos in all_poses:
-            print pos, read[pos:pos+k], kmer, sequence
-            
+            if sequence in reads:
+                yield data            
 
 def get_reads_se_by_kmer(kmer, kmer2tf, used_reads, k=23):
     ''' Split springs and return subreads.
