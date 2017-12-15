@@ -45,23 +45,21 @@ raw_input("\nReady?")
 print get_left_right_distances(test_kmer, right_kmer, index)
 
 
-print "Task 4. Get layout for kmer, returns (max_pos, reads, lefts, rights, rids, starts), for details see source code"
+print "Task 5. Get layout for kmer, returns (max_pos, reads, lefts, rights, rids, starts), for details see source code"
 raw_input("\nReady?")
 max_pos, reads, lefts, rights, rids, starts = get_layout_for_kmer(right_kmer, index)
 print "Central layout:"
 for read in reads:
     print read
-raw_input("\nNext?")
 print "Left flanks:"
 print lefts
-raw_input("\nNext?")
 print "Right flanks:"
 print rights
 
-print "Task 5. Iter reads by sequence, returs (start, next_read_start, read, pos_if_uniq|None, all_poses)"
+print "Task 6. Iter reads by sequence, returs (start, next_read_start, read, pos_if_uniq|None, all_poses)"
 raw_input("\nReady?")
 sequence = "AATATTATTAAGGTATTTAAAAAATACTATTATAGTATTTAACATA"
-for read in iter_reads_by_kmer(sequence, index):
+for read in iter_reads_by_sequence(sequence, index):
     print read
 
 
