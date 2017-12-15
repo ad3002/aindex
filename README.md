@@ -55,6 +55,8 @@ cut -f1 kmers.23.dat > kmer.23.kmers
 
 Usage from Python:
 
+You can simply run **demo.py** or:
+
 ```python
 
 from aindex import *
