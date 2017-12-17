@@ -49,7 +49,7 @@ if __name__ == '__main__':
                     hits[hid][1] = i-pos
 
                 results.append(hits[hid])
-                
+    results.sort(key=lambda x: x[1])    
     with open("/home/akomissarov/Dropbox/PySatDNA/temp.layout", "w") as fh:
         fh.write(seq_obj.sequence)
         fh.write("\n")
