@@ -4,6 +4,7 @@ import sys
 sys.path.append("/mnt/guatemala/akomissarov/Boechera_spatifolia/aindex")
 
 from aindex import *
+from collections import Counter
 from trseeker.seqio.fasta_file import sc_iter_fasta
 
 
@@ -49,7 +50,17 @@ if __name__ == '__main__':
                     hits[hid][1] = i-pos
 
                 results.append(hits[hid])
-    results.sort(key=lambda x: x[1])    
+    results.sort(key=lambda x: x[1]) 
+
+    for i in xrange(seq_obj.length):
+        nucleotides = [x[2][i] for x in results if i<len(x[2]) and x[2][i] != 'N']
+        c = Counter(nucleotides)
+        print i, c.most_common()
+
+        raw_input("?")
+
+
+
     with open("/home/akomissarov/Dropbox/PySatDNA/temp.layout", "w") as fh:
         fh.write(seq_obj.sequence)
         fh.write("\n")
