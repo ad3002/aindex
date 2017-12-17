@@ -20,15 +20,27 @@ if __name__ == '__main__':
     k = 23
     index = load_aindex(settings)
 
+    user_reads = set()
     for seq_obj in sc_iter_fasta(settings["gene_fasta"]):
 
         for i in xrange(seq_obj.length-k+1):
             kmer = seq_obj.sequence[i:i+k]
+            tf = index[kmer]
+            if not tf:
+                continue
 
-            print i, kmer, index[kmer]
+            print i, kmer, tf
 
-            for read in iter_reads_by_kmer(kmer, index):
-                print read
+            hits = []
+            for data in get_reads_se_by_kmer(kmer, index, used_reads):
+                start, next_read_start, subread, pos, spring_pos, was_reversed, poses_in_read = data
+                user_reads.append((srart, spring_pos))
+                hits.append((pos, subread, poses_in_read, was_reversed))
+
+            max_pos = max([x[0] for x in hits])
+
+            for pos, subread, poses_in_read, was_reversed in hits:
+                print "N"*(max_pos-pos) + subread
 
             raw_input("?")
 
