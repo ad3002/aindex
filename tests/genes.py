@@ -58,9 +58,10 @@ if __name__ == '__main__':
     for i in xrange(seq_obj.length):
         nucleotides = [x[-1][i] for x in results if i<len(x[-1]) and x[-1][i] != 'N']
         c = Counter(nucleotides)
-        print i, set(nucleotides), c.most_common()
+        print i, set(nucleotides), c.most_common(), seq_obj.sequence[i]
 
-        raw_input("?")
+        if len(set(nucleotides)) > 1 or (len(set(nucleotides)) == 1 and nucleotides[0] != seq_obj.sequence[i]):
+            raw_input("?")
 
 
 
