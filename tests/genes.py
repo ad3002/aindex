@@ -42,7 +42,11 @@ if __name__ == '__main__':
                 continue
             max_pos = max([x[0] for x in hits])
             for hid, (pos, nnn, subread, poses_in_read, was_reversed) in enumerate(hits):
-                hits[hid][1] = i+max_pos-pos
+                if i-pos < 0:
+                    hits[hid][1] = 0
+                    hits[hid][2] = subread[abs(i-pos):]
+                else:
+                    hits[hid][1] = i-pos
 
                 results.append(hits[hid])
                 
