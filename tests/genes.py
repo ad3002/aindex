@@ -40,8 +40,8 @@ if __name__ == '__main__':
             if not hits:
                 continue
             max_pos = max([x[0] for x in hits])
-            for pos, nnn, subread, poses_in_read, was_reversed in hits:
-                hits[1] = i+max_pos-pos
+            for hid, (pos, nnn, subread, poses_in_read, was_reversed) in enumerate(hits):
+                hits[hid][1] = i+max_pos-pos
                 
 
             with open("/home/akomissarov/Dropbox/PySatDNA/temp.layout", "w") as fh:
