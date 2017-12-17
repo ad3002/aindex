@@ -313,7 +313,7 @@ def get_reads_se_by_kmer(kmer, kmer2tf, used_reads, k=23):
             pos = right_poses[0]
             if (hit,1) in used_reads:
                 continue
-            result.append([hit, end+1, read[spring_pos+1:], pos, 1, was_reversed, rid2poses])
+            result.append([hit, end+1, read[spring_pos+1:], pos, 1, was_reversed, right_poses])
     return result
 
 
