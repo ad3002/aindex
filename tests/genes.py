@@ -36,7 +36,7 @@ if __name__ == '__main__':
             for data in get_reads_se_by_kmer(kmer, index, used_reads):
                 start, next_read_start, subread, pos, spring_pos, was_reversed, poses_in_read = data
                 used_reads.add((start, spring_pos))
-                hits.append((pos, 0, subread, poses_in_read, was_reversed))
+                hits.append([pos, 0, subread, poses_in_read, was_reversed])
             if not hits:
                 continue
             max_pos = max([x[0] for x in hits])
