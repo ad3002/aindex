@@ -8,4 +8,5 @@
 dll_paths = [
 	'python_wrapper.so',
 	'python_wrapper.dylib',
+	'/mnt/guatemala/akomissarov/Boechera_spatifolia/aindex/python_wrapper.so',
 ]
