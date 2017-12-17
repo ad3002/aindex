@@ -50,13 +50,11 @@ if __name__ == '__main__':
 
                 results.append(hits[hid])
                 
-
     with open("/home/akomissarov/Dropbox/PySatDNA/temp.layout", "w") as fh:
+        fh.write(seq_obj.sequence)
+        fh.write("\n")
         for pos, nnn, subread, poses_in_read, was_reversed in results:
                 fh.write("%s\n" % ("N"*nnn+subread))
-
-
-
 
 
 
