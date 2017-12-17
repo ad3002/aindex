@@ -20,7 +20,7 @@ if __name__ == '__main__':
     k = 23
     index = load_aindex(settings)
 
-    user_reads = set()
+    used_reads = set()
     for seq_obj in sc_iter_fasta(settings["gene_fasta"]):
 
         for i in xrange(seq_obj.length-k+1):
@@ -34,7 +34,7 @@ if __name__ == '__main__':
             hits = []
             for data in get_reads_se_by_kmer(kmer, index, used_reads):
                 start, next_read_start, subread, pos, spring_pos, was_reversed, poses_in_read = data
-                user_reads.append((srart, spring_pos))
+                used_reads.append((srart, spring_pos))
                 hits.append((pos, subread, poses_in_read, was_reversed))
 
             max_pos = max([x[0] for x in hits])
