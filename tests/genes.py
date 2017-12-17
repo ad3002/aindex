@@ -22,6 +22,7 @@ if __name__ == '__main__':
 
     
     used_reads = set()
+    results = []
     for seq_obj in sc_iter_fasta(settings["gene_fasta"]):
 
         for i in xrange(seq_obj.length-k+1):
@@ -42,10 +43,12 @@ if __name__ == '__main__':
             max_pos = max([x[0] for x in hits])
             for hid, (pos, nnn, subread, poses_in_read, was_reversed) in enumerate(hits):
                 hits[hid][1] = i+max_pos-pos
+
+                results.append(hits[hid])
                 
 
             with open("/home/akomissarov/Dropbox/PySatDNA/temp.layout", "w") as fh:
-                for pos, nnn, subread, poses_in_read, was_reversed in hits:
+                for pos, nnn, subread, poses_in_read, was_reversed in results:
                     fh.write("%s\n" % ("N"*nnn+subread))
             raw_input("?")
 
