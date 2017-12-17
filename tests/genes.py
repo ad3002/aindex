@@ -52,10 +52,13 @@ if __name__ == '__main__':
                 results.append(hits[hid])
     results.sort(key=lambda x: x[1]) 
 
+    for i, (pos, nnn, subread, poses_in_read, was_reversed) in enumerate(results):
+        results[i].append("N"*nnn+subread)
+
     for i in xrange(seq_obj.length):
-        nucleotides = [x[2][i] for x in results if i<len(x[2]) and x[2][i] != 'N']
+        nucleotides = [x[-1][i] for x in results if i<len(x[-1]) and x[-1][i] != 'N']
         c = Counter(nucleotides)
-        print i, c.most_common()
+        print i, set(nucleotides), c.most_common()
 
         raw_input("?")
 
