@@ -293,7 +293,7 @@ def get_reads_se_by_kmer(kmer, kmer2tf, used_reads, k=23):
             poses = [len(read) - x - k for x in poses]
             pos = poses[0]
             was_reversed = 1
-            if not read[pos:pos+k] != kmer:
+            if read[pos:pos+k] != kmer:
                 print "Critical error kmer and ref are not equal:"
                 print read[pos:pos+k]
                 print kmer
