@@ -160,6 +160,11 @@ def load_aindex(settings, prefix=None, reads=None, aindex_prefix=None, skip_read
     2. reads (if not skip_reads set);
     3. aindex (if not skip_aindex set);
     '''
+    if "aindex_prefix" in settings and settings["aindex_prefix"] is None:
+        skip_aindex = True
+    if "reads_file" in settings and settings["reads_file"] is None:
+        skip_reads = True
+
     if prefix is None:
         prefix = settings["index_prefix"]
     if reads is None and not skip_reads:
