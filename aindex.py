@@ -35,6 +35,12 @@ def get_revcomp(sequence):
     return ''.join(c.get(nucleotide, '') for nucleotide in reversed(sequence))
 
 
+def hamming_distance(s1, s2):
+    """ Get Hamming distance: the number of corresponding symbols that differs in given strings.
+    """
+    return sum(i != j for (i,j) in zip(s1, s2) if i != 'N' and j != 'N')
+
+
 class AIndex(object):
     ''' Wrapper for working with cpp aindex implementation.
     '''
@@ -266,6 +272,27 @@ def iter_reads_by_sequence(sequence, kmer2tf, used_reads=None, only_left=False, 
                     yield data            
     else:
         yield None
+
+
+def iter_reads_by_sequence_and_hamming(sequence, hd, kmer2tf, used_reads=None, only_left=False, skip_multiple=True, k=23):
+    ''' Yield reads containing sequence
+        (start, next_read_start, read, pos_if_uniq|None, all_poses)
+
+    TODO: more effective implementation than if sequence in read
+    '''
+    if len(sequence) >= k:
+        kmer = sequence[:k]
+        n = len(sequence)
+        for data in iter_reads_by_kmer(kmer, kmer2tf, used_reads=used_reads, only_left=only_left, skip_multiple=skip_multiple, k=k):
+            all_poses = data[-1]
+            read = data[2]
+            for pos in all_poses:
+                if len(read[pos:]) == n:
+                    if hamming_distance(read[pos:], sequence) <= hd:
+                        yield data            
+    else:
+        yield None
+
 
 def get_reads_se_by_kmer(kmer, kmer2tf, used_reads, k=23):
     ''' Split springs and return subreads.
