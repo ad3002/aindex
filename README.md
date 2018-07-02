@@ -46,13 +46,13 @@ FASTQ2=raw_reads.101bp.IS350bp25_2.fastq
 jellyfish count -m 23 -s 2G -t 4 -C -o kmers.23.jf2 $FASTQ1 $FASTQ2
 jellyfish dump -c -t -o kmers.23.dat kmers.23.jf2
 cut -f1 kmers.23.dat > kmer.23.kmers
-../external/emphf/compute_mphf_seq kmer.23.kmers kmer.23.p
+../external/emphf/compute_mphf_seq kmer.23.kmers kmer.23.pf
 
-../bin/compute_index.exe kmers.23.dat kmers.23.pf kemrs.23 4 0
+../bin/compute_index.exe kmers.23.dat kmers.23.pf kmers.23 4 0
 
 ../bin/compute_reads.exe raw_reads.101bp.IS350bp25_1.fastq raw_reads.101bp.IS350bp25_2.fastq fastq reads.reads
 
-../bin/compute_aindex.exe reads.reads kmers.23.pf kmers.23 kmers.23 4 23 kmers.23.tf.bin 
+../bin/compute_aindex.exe reads.reads kmers.23.pf kmers.23 kmers.23 40 23 kmers.23.tf.bin 
 
 ```
 
