@@ -395,6 +395,24 @@ void load_hash(PHASH_MAP &hash_map, std::string &output_prefix, std::string &tf_
     is.close();
 }
 
+
+void load_only_hash(PHASH_MAP &hash_map, std::string &hash_filename) {
+
+    barrier.lock();
+    emphf::logger() << "Hash loading.." << std::endl;
+    barrier.unlock();
+    std::ifstream is;
+    HASHER hasher;
+    hash_map.hasher = hasher;
+    is.open(hash_filename, std::ios::binary);
+    if (!is) {
+        emphf::logger() << "Failed to open hash file: " << hash_filename << std::endl;
+        exit(10);
+    }
+    hash_map.hasher.load(is);
+    is.close();
+}
+
 void load_hash_full_tf(PHASH_MAP &hash_map, std::string &output_prefix, std::string &tf_file, std::string &hash_filename) {
 
     barrier.lock();
