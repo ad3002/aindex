@@ -511,7 +511,7 @@ extern "C" {
 
     size_t AindexWrapper_get_kid_by_kmer(AindexWrapper* foo, char* kmer){ return foo->get_kid_by_kmer(kmer); }
 
-    void AindexWrapper_get_kmer_by_kid(AindexWrapper* foo, size_t kid, char* kmer){ return foo->get_kmer_by_kid(kid, kmer); }
+    void AindexWrapper_get_kmer_by_kid(AindexWrapper* foo, size_t kid, char* kmer){ foo->get_kmer_by_kid(kid, kmer); }
 
     size_t AindexWrapper_get(AindexWrapper* foo, char* x){ return foo->get(x); }
 
