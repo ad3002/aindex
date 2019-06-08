@@ -99,7 +99,6 @@ struct PHASH_MAP {
         right_qtf_values = nullptr;
         checker = nullptr;
         n = 0;
-
     }
 
     size_t get_n() {
@@ -486,6 +485,7 @@ struct AtomicCounter {
 };
 
 extern void load_hash(PHASH_MAP &hash_map, std::string &output_prefix, std::string &tf_file, std::string &hash_filename);
+extern void load_only_hash(PHASH_MAP &hash_map, std::string &hash_filename);
 void construct_hash_unordered_hash_illumina(std::string data_file, HASH_MAP13 &kmers);
 void load_hash_for_qkmer(PHASH_MAP &hash_map, size_t n, std::string &data_filename, std::string &hash_filename);
 void index_hash(PHASH_MAP &hash_map, std::string &dat_filename, std::string &hash_filename);
