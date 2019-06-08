@@ -12,18 +12,6 @@ namespace DEBRUJIN {
 
     int get_freq(uint64_t kmer, PHASH_MAP &kmers) {
 
-//    HASH_MAP::const_iterator got = kmers.find(kmer);
-//    if (got == kmers.end() ) {
-//        kmer = reverseDNA(kmer);
-//
-//        got = kmers.find(kmer);
-//        if (got == kmers.end() ) {
-//            return 0;
-//        }
-//        return got->second;
-//    }
-//    return got->second;
-
         return kmers.get_freq(kmer);
     }
 
