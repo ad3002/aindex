@@ -17,9 +17,8 @@ for dll_path in dll_paths:
     except OSError:
         continue
 else:
-    raise Exception("Aridna's dll was not found: %s" % str(dll_paths))
+    raise Exception("Ariadna's dll was not found: %s" % str(dll_paths))
 
-from PyExp import Timer
 import numpy as np
 import mmap
 from collections import defaultdict
@@ -56,6 +55,14 @@ class AIndex(object):
         ''' Return tf for kmer.
         '''
         return lib.AindexWrapper_get(self.obj, kmer)
+
+    def get_kid_by_kmer(self, kmer):
+        return lib.AindexWrapper_get_kid_by_kmer(self.obj, kmer)
+
+    def get_kmer_by_kid(self, kid):
+        kmer = ctypes.c_char_p("N"*k)
+        lib.AindexWrapper_get_kmer_kid(self.obj, kid, kmer)
+        return kmer.value
 
     def load(self, index_prefix, max_tf):
         ''' Load aindex. max_tf limits 
@@ -177,20 +184,17 @@ def load_aindex(settings, prefix=None, reads=None, aindex_prefix=None, skip_read
         reads = settings["reads_file"]
 
     if not "max_tf" in settings:
-        print "default max_tf is 10000"
+        print("default max_tf is 10000")
         settings["max_tf"] = 10000
 
     if aindex_prefix is None and not skip_aindex:
         aindex_prefix = settings["aindex_prefix"]
     
-    with Timer("PF loading..."):
-        kmer2tf = AIndex(prefix)
+    kmer2tf = AIndex(prefix)
     if not skip_reads:
-        with Timer("Reads loading..."):
-            kmer2tf.load_reads(reads)
+        kmer2tf.load_reads(reads)
     if not skip_aindex:
-        with Timer("Pos loading..."):
-            settings["max_tf"] = kmer2tf.load(aindex_prefix, settings["max_tf"])
+        settings["max_tf"] = kmer2tf.load(aindex_prefix, settings["max_tf"])
     return kmer2tf
 
 
@@ -326,9 +330,9 @@ def get_reads_se_by_kmer(kmer, kmer2tf, used_reads, k=23):
             pos = poses[0]
             was_reversed = 1
             if read[pos:pos+k] != kmer:
-                print "Critical error kmer and ref are not equal:"
-                print read[pos:pos+k]
-                print kmer
+                print("Critical error kmer and ref are not equal:")
+                print(read[pos:pos+k])
+                print(kmer)
                 continue
                 
         spring_pos = read.find("~")
@@ -438,5 +442,5 @@ def get_layout_for_kmer(kmer, kmer2tf, used_reads=None, k=23):
     max_length = max([len(x)+max_pos-starts[i] for i,x in enumerate(reads)])
     for i,read in enumerate(reads):
         reads[i] = 'N'*(max_pos-starts[i]) + read + "N" * (max_length-max_pos+starts[i]-len(read))
-    return max_pos, reads, lefts, rights, rids, starts
+    return max_pos, reads, lefts, rights, rids, start_pos
 
