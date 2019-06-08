@@ -59,10 +59,8 @@ class AIndex(object):
     def get_kid_by_kmer(self, kmer):
         return lib.AindexWrapper_get_kid_by_kmer(self.obj, kmer)
 
-    def get_kmer_by_kid(self, kid, k=23):
-        kmer = ctypes.c_char_p("N"*k)
-        lib.AindexWrapper_get_kmer_by_kid(self.obj, kid, kmer)
-        return kmer.value
+    def get_kmer_by_kid(self):
+        return lib.AindexWrapper_get_kmer_by_kid(self.obj, kid)
 
     def load(self, index_prefix, max_tf):
         ''' Load aindex. max_tf limits 
