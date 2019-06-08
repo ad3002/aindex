@@ -7,7 +7,7 @@
 
 import ctypes
 from ctypes import cdll
-from ctypes import c_size_t
+from ctypes import c_size_t, c_char_p
 
 from settings import dll_paths
 for dll_path in dll_paths:
