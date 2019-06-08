@@ -59,7 +59,7 @@ class AIndex(object):
     def get_kid_by_kmer(self, kmer):
         return lib.AindexWrapper_get_kid_by_kmer(self.obj, kmer)
 
-    def get_kmer_by_kid(self):
+    def get_kmer_by_kid(self, kid):
         return lib.AindexWrapper_get_kmer_by_kid(self.obj, kid)
 
     def load(self, index_prefix, max_tf):
