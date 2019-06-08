@@ -17,9 +17,8 @@ for dll_path in dll_paths:
     except OSError:
         continue
 else:
-    raise Exception("Aridna's dll was not found: %s" % str(dll_paths))
+    raise Exception("Ariadna's dll was not found: %s" % str(dll_paths))
 
-from PyExp import Timer
 import numpy as np
 import mmap
 from collections import defaultdict
@@ -33,6 +32,12 @@ def get_revcomp(sequence):
     '''
     c = dict(zip('ATCGNatcgn~[]', 'TAGCNtagcn~]['))
     return ''.join(c.get(nucleotide, '') for nucleotide in reversed(sequence))
+
+
+def hamming_distance(s1, s2):
+    """ Get Hamming distance: the number of corresponding symbols that differs in given strings.
+    """
+    return sum(i != j for (i,j) in zip(s1, s2) if i != 'N' and j != 'N')
 
 
 class AIndex(object):
@@ -50,6 +55,14 @@ class AIndex(object):
         ''' Return tf for kmer.
         '''
         return lib.AindexWrapper_get(self.obj, kmer)
+
+    def get_kid_by_kmer(self, kmer):
+        return lib.AindexWrapper_get_kid_by_kmer(self.obj, kmer)
+
+    def get_kmer_by_kid(self, kid):
+        kmer = ctypes.c_char_p("N"*k)
+        lib.AindexWrapper_get_kmer_kid(self.obj, kid, kmer)
+        return kmer.value
 
     def load(self, index_prefix, max_tf):
         ''' Load aindex. max_tf limits 
@@ -160,26 +173,28 @@ def load_aindex(settings, prefix=None, reads=None, aindex_prefix=None, skip_read
     2. reads (if not skip_reads set);
     3. aindex (if not skip_aindex set);
     '''
+    if "aindex_prefix" in settings and settings["aindex_prefix"] is None:
+        skip_aindex = True
+    if "reads_file" in settings and settings["reads_file"] is None:
+        skip_reads = True
+
     if prefix is None:
         prefix = settings["index_prefix"]
     if reads is None and not skip_reads:
         reads = settings["reads_file"]
 
     if not "max_tf" in settings:
-        print "default max_tf is 10000"
+        print("default max_tf is 10000")
         settings["max_tf"] = 10000
 
     if aindex_prefix is None and not skip_aindex:
         aindex_prefix = settings["aindex_prefix"]
     
-    with Timer("PF loading..."):
-        kmer2tf = AIndex(prefix)
+    kmer2tf = AIndex(prefix)
     if not skip_reads:
-        with Timer("Reads loading..."):
-            kmer2tf.load_reads(reads)
+        kmer2tf.load_reads(reads)
     if not skip_aindex:
-        with Timer("Pos loading..."):
-            settings["max_tf"] = kmer2tf.load(aindex_prefix, settings["max_tf"])
+        settings["max_tf"] = kmer2tf.load(aindex_prefix, settings["max_tf"])
     return kmer2tf
 
 
@@ -262,6 +277,27 @@ def iter_reads_by_sequence(sequence, kmer2tf, used_reads=None, only_left=False, 
     else:
         yield None
 
+
+def iter_reads_by_sequence_and_hamming(sequence, hd, kmer2tf, used_reads=None, only_left=False, skip_multiple=True, k=23):
+    ''' Yield reads containing sequence
+        (start, next_read_start, read, pos_if_uniq|None, all_poses)
+
+    TODO: more effective implementation than if sequence in read
+    '''
+    if len(sequence) >= k:
+        kmer = sequence[:k]
+        n = len(sequence)
+        for data in iter_reads_by_kmer(kmer, kmer2tf, used_reads=used_reads, only_left=only_left, skip_multiple=skip_multiple, k=k):
+            all_poses = data[-1]
+            read = data[2]
+            for pos in all_poses:
+                if len(read[pos:]) == n:
+                    if hamming_distance(read[pos:], sequence) <= hd:
+                        yield data            
+    else:
+        yield None
+
+
 def get_reads_se_by_kmer(kmer, kmer2tf, used_reads, k=23):
     ''' Split springs and return subreads.
 
@@ -293,7 +329,11 @@ def get_reads_se_by_kmer(kmer, kmer2tf, used_reads, k=23):
             poses = [len(read) - x - k for x in poses]
             pos = poses[0]
             was_reversed = 1
-            assert read[pos:pos+k] == kmer
+            if read[pos:pos+k] != kmer:
+                print("Critical error kmer and ref are not equal:")
+                print(read[pos:pos+k])
+                print(kmer)
+                continue
                 
         spring_pos = read.find("~")
 
@@ -313,7 +353,7 @@ def get_reads_se_by_kmer(kmer, kmer2tf, used_reads, k=23):
             pos = right_poses[0]
             if (hit,1) in used_reads:
                 continue
-            result.append([hit, end+1, read[spring_pos+1:], pos, 1, was_reversed, rid2poses])
+            result.append([hit, end+1, read[spring_pos+1:], pos, 1, was_reversed, right_poses])
     return result
 
 
@@ -402,5 +442,5 @@ def get_layout_for_kmer(kmer, kmer2tf, used_reads=None, k=23):
     max_length = max([len(x)+max_pos-starts[i] for i,x in enumerate(reads)])
     for i,read in enumerate(reads):
         reads[i] = 'N'*(max_pos-starts[i]) + read + "N" * (max_length-max_pos+starts[i]-len(read))
-    return max_pos, reads, lefts, rights, rids, starts
+    return max_pos, reads, lefts, rights, rids, start_pos
 

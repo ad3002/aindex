@@ -41,7 +41,7 @@ public:
     char *reads = nullptr;
 
     AindexWrapper() {
-        std::cout << "Init AIndex " << this << std::endl;
+        std::cout << "Init AIndex Wrapper " << this << std::endl;
     }
 
     ~AindexWrapper() {
@@ -59,19 +59,20 @@ public:
 
     void load(std::string index_prefix){
 
-        std::cout << "Init AIndex " << this << std::endl;
+        std::cout << "Init AIndex tf only " << this << std::endl;
         hash_map = PHASH_MAP();
-
+        std::cout << "...Done" << this << std::endl;
         // Load perfect hash into hash_map into memory
         emphf::logger() << "Reading index and hash..." << std::endl;
         std::string tf_file = index_prefix + ".tf.bin";
         std::string hash_filename = index_prefix + ".pf";
-
-//        std::cout << "xxxx0 " << hash_map.get_n() << std::endl;
-
-
         load_hash(hash_map, index_prefix, tf_file, hash_filename);
         emphf::logger() << "\tDone" << std::endl;
+    }
+
+    void load_hash_file(std::string hash_filename) {
+        std::cout << "Init AIndex hash" << this << std::endl;
+        load_only_hash(hash_map, hash_filename);
     }
 
     void load_reads(std::string reads_file) {
@@ -177,6 +178,8 @@ public:
 
     }
 
+
+
     std::string get_read_by_rid(uint32_t rid, int ori) {
 
         size_t start = start_positions[rid];
@@ -203,6 +206,10 @@ public:
         }
     }
 
+    size_t get_n() {
+        return hash_map.n;
+    }
+
     size_t get_rid(size_t pos) {
         // Get rid by position.
         while (true){
@@ -214,6 +221,20 @@ public:
             }
             pos -= 1;
         }
+    }
+
+    size_t get_kid_by_kmer(std::string _kmer) {
+        uint64_t kmer = get_dna23_bitset(_kmer);
+        return hash_map.get_pfid_by_umer_safe(kmer);
+
+    }
+
+    void get_kmer_by_kid(size_t r, std::string kmer) {
+            if (r >= hash_map.n) {
+                return
+            }
+            uint64_t h1 = hash_map.checker[r];
+            get_bitset_dna23(h1, kmer);
     }
 
     void get_positions(size_t* r, std::string kmer) {
@@ -255,6 +276,8 @@ public:
         }
         return 0;
     }
+
+
 
     size_t get_kmer(size_t p, char* kmer, char* rkmer) {
         // Get tf, kmer and rev_kmer stored in given arrays.
@@ -477,6 +500,7 @@ extern "C" {
 
     AindexWrapper* AindexWrapper_new(){ return new AindexWrapper(); }
     void AindexWrapper_load(AindexWrapper* foo, char* index_prefix){ foo->load(index_prefix); }
+    void AindexWrapper_load_hash_file(AindexWrapper* foo, char* hash_filename){ foo->load(hash_filename); }
 
     void AindexWrapper_load_reads(AindexWrapper* foo, char* reads_file){ foo->load_reads(reads_file); }
 
@@ -484,7 +508,15 @@ extern "C" {
     
     void AindexWrapper_increase(AindexWrapper* foo, char* kmer){ foo->increase(kmer); }
     void AindexWrapper_decrease(AindexWrapper* foo, char* kmer){ foo->decrease(kmer); }
+
+    size_t AindexWrapper_get_kid_by_kmer(AindexWrapper* foo, char* kmer){ return foo->get_kid_by_kmer(kmer); }
+
+    void AindexWrapper_get_kmer_by_kid(AindexWrapper* foo, size_t kid, char* kmer){ return foo->get_kmer_by_kid(kid, kmer); }
+
     size_t AindexWrapper_get(AindexWrapper* foo, char* x){ return foo->get(x); }
+
+    size_t AindexWrapper_get_n(AindexWrapper* foo){ return foo->get_n(); }
+
     size_t AindexWrapper_get_rid(AindexWrapper* foo, size_t pos){ return foo->get_rid(pos); }
 
 //    char* AindexWrapper_get_read(AindexWrapper* foo, size_t start, int ori){ return foo->get_read(pos, ori); }

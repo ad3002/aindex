@@ -63,4 +63,11 @@ for read in iter_reads_by_sequence(sequence, index):
     print read
 
 
+print "Task 7. Iter reads by kmer with reads as SE, returns (start, next_read_start, subread, kmere_pos, -1|0|1 for spring_pos, was_reversed, poses_in_read)"
+raw_input("\nReady?")
+sequence = "AATATTATTAAGGTATTTAAAAAATACTATTATAGTATTTAACATA"
+for rid, nextrid, read, pos, spring_pos, was_reversed, poses in get_reads_se_by_kmer(kmer, index, user_reads, k=23):
+    print rid, read, pos
+
+
 
