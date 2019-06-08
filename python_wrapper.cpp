@@ -231,7 +231,7 @@ public:
 
     void get_kmer_by_kid(size_t r, std::string kmer) {
             if (r >= hash_map.n) {
-                return
+                return;
             }
             uint64_t h1 = hash_map.checker[r];
             get_bitset_dna23(h1, kmer);
