@@ -60,6 +60,7 @@ class AIndex(object):
         return lib.AindexWrapper_get_kid_by_kmer(self.obj, kmer)
 
     def get_kmer_by_kid(self, kid):
+        lib.AindexWrapper_get_kmer_by_kid.restype = c_char_p
         return lib.AindexWrapper_get_kmer_by_kid(self.obj, kid)
 
     def load(self, index_prefix, max_tf):
