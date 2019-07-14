@@ -33,7 +33,6 @@ uint32_t get_dna13_bitset(std::string dna_str);
 uint32_t get_dna13_bitset(char* dna_str);
 
 void get_revcomp(std::string &input, std::string &output);
-
 std::string get_revcomp(std::string &input);
 
 uint64_t reverseDNA(uint64_t num);

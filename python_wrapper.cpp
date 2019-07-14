@@ -229,12 +229,14 @@ public:
 
     }
 
-    void get_kmer_by_kid(size_t r, std::string kmer) {
-            if (r >= hash_map.n) {
-                return
-            }
+    const char *get_kmer_by_kid(size_t r) {
+            // if (r >= hash_map.n) {
+            //     return;
+            // }
+            std::string kmer = "NNNNNNNNNNNNNNNNNNNNNNN";
             uint64_t h1 = hash_map.checker[r];
             get_bitset_dna23(h1, kmer);
+            return kmer.c_str();
     }
 
     void get_positions(size_t* r, std::string kmer) {
@@ -511,7 +513,7 @@ extern "C" {
 
     size_t AindexWrapper_get_kid_by_kmer(AindexWrapper* foo, char* kmer){ return foo->get_kid_by_kmer(kmer); }
 
-    void AindexWrapper_get_kmer_by_kid(AindexWrapper* foo, size_t kid, char* kmer){ return foo->get_kmer_by_kid(kid, kmer); }
+    const char * AindexWrapper_get_kmer_by_kid(AindexWrapper* foo, size_t kid){ return foo->get_kmer_by_kid(kid); }
 
     size_t AindexWrapper_get(AindexWrapper* foo, char* x){ return foo->get(x); }
 

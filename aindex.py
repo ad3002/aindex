@@ -7,7 +7,7 @@
 
 import ctypes
 from ctypes import cdll
-from ctypes import c_size_t
+from ctypes import c_size_t, c_char_p
 
 from settings import dll_paths
 for dll_path in dll_paths:
@@ -60,9 +60,8 @@ class AIndex(object):
         return lib.AindexWrapper_get_kid_by_kmer(self.obj, kmer)
 
     def get_kmer_by_kid(self, kid):
-        kmer = ctypes.c_char_p("N"*k)
-        lib.AindexWrapper_get_kmer_kid(self.obj, kid, kmer)
-        return kmer.value
+        lib.AindexWrapper_get_kmer_by_kid.restype = c_char_p
+        return lib.AindexWrapper_get_kmer_by_kid(self.obj, kid)
 
     def load(self, index_prefix, max_tf):
         ''' Load aindex. max_tf limits 
