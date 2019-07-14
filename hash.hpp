@@ -217,7 +217,7 @@ struct PHASH_MAP {
             uint64_t rev_kmer = reverseDNA(_kmer);
             get_bitset_dna23(rev_kmer, _rev_kmer);
             auto h2 = hasher.lookup(_rev_kmer, str_adapter);
-            if (h2 < n && checker[h2] == _kmer) {
+            if (h2 < n && checker[h2] == rev_kmer) {
                 tf_values[h2]++;
             }
         }
@@ -238,7 +238,7 @@ struct PHASH_MAP {
             uint64_t rev_kmer = reverseDNA(_kmer);
             get_bitset_dna23(rev_kmer, _rev_kmer);
             auto h2 = hasher.lookup(_rev_kmer, str_adapter);
-            if (h2 < n && checker[h2] == _kmer) {
+            if (h2 < n && checker[h2] == rev_kmer) {
                 if (tf_values[h2] > 0) tf_values[h2]--;
             }
         }
