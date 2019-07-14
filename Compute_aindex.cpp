@@ -9,7 +9,6 @@
 #include <vector>
 #include <unordered_map>
 #include <thread>
-#include "emphf/common.hpp"
 #include <cstdint>
 #include <cstring>
 #include <limits.h>
@@ -17,18 +16,18 @@
 #include <mutex>
 #include <algorithm>
 #include <assert.h>
-#include "kmers.hpp"
 #include <atomic>
-#include "hash.hpp"
 #include <cassert>
+
 #include "read.hpp"
+#include "hash.hpp"
+#include "kmers.hpp"
 #include "emphf/common.hpp"
-#include <cassert>
 
 int main(int argc, char** argv) {
 
     if (argc < 8) {
-        std::cerr << "Compute AIndex index for genome with pf." << std::endl;
+        std::cerr << "Compute aindex index for genome with pf." << std::endl;
         std::cerr << "Expected arguments: " << argv[0]
         << " <reads_file> <pf_file> <index_prefix> <output_prefix> <p> <k> <tf_file>" << std::endl;
         std::terminate();
