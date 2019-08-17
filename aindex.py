@@ -228,7 +228,8 @@ def iter_reads_by_kmer(kmer, kmer2tf, used_reads=None, only_left=False, skip_mul
                 continue
 
         end = rid
-        while True:
+        N = len(kmer2tf.reads)
+        while True and end < N:
             if kmer2tf.reads[end] == '\n':
                 break
             end += 1
