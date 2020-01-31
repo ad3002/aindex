@@ -54,6 +54,10 @@ class AIndex(object):
         ''' Init Aindex wrapper and load perfect hash.
         '''
         self.obj = pointer(c_void_p(lib.AindexWrapper_new()))
+
+        assert os.path.isfile(index_prefix + ".tf.bin")
+        assert os.path.isfile(index_prefix + ".kmers.bin")
+
         lib.AindexWrapper_load(self.obj, index_prefix)
 
     def __getitem__(self, kmer):
@@ -73,12 +77,24 @@ class AIndex(object):
         the size of returning array with positions.
         '''
         print("Loadind aindex: %s.*" % index_prefix)
+
+        assert os.path.isfile(index_prefix + ".tf.bin")
+        assert os.path.isfile(index_prefix + ".pf")
+
+        assert os.path.isfile(index_prefix + ".kmers.bin")
+        assert os.path.isfile(index_prefix + ".tf.bin")
+        assert os.path.isfile(index_prefix + ".pos.bin")
+
+        assert os.path.isfile(index_prefix + ".index.bin")
+        assert os.path.isfile(index_prefix + ".indices.bin")
+
         self.max_tf = max_tf
         lib.AindexWrapper_load_index(self.obj, c_char_p(index_prefix), c_int64(max_tf))
 
     def load_reads(self, reads_file):
         ''' Load reads with mmap and with aindex.
         '''
+        assert os.path.isfile(reads_file)
         print("Loadind reads with mmap: %s" % reads_file)
         with open(reads_file, "r+b") as f:
             self.reads = mmap.mmap(f.fileno(), 0)
