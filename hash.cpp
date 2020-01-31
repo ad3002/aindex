@@ -365,7 +365,11 @@ void load_hash(PHASH_MAP &hash_map, std::string &output_prefix, std::string &tf_
     size_t pos = 0;
     std::ifstream fout3(output_prefix+".kmers.bin", std::ios::in | std::ios::binary);
     emphf::logger() << "Kmer array size: " << n <<  std::endl;
+    size_t i = 0;
     while(fout3.read(reinterpret_cast<char *>(&f), sizeof(f))) {
+        if (i && i % 1000000000 == 0) {
+            std::cout << "Loading checker: " << i << "/" << n << std::endl;
+        }
         hash_map.checker[pos] = f;
         pos += 1;
     }
@@ -376,13 +380,15 @@ void load_hash(PHASH_MAP &hash_map, std::string &output_prefix, std::string &tf_
     pos = 0;
     std::ifstream fout4(tf_file, std::ios::in | std::ios::binary);
     emphf::logger() << "Kmer array size: " << n <<  std::endl;
+    i = 0;
     while(fout4.read(reinterpret_cast<char *>(&f2), sizeof(f2))) {
+        if (i && i % 1000000000 == 0) {
+            std::cout << "Loading tf values: " << i << "/" << n << std::endl;
+        }
         hash_map.tf_values[pos] = f2;
         pos += 1;
     }
     fout4.close();
-
-
 
     HASHER hasher;
     hash_map.hasher = hasher;
