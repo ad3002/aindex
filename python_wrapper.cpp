@@ -30,7 +30,7 @@ class AindexWrapper{
 
 public:
 
-    PHASH_MAP hash_map;
+    PHASH_MAP *hash_map;
     size_t n_reads = 0;
     std::map<size_t, uint32_t> start2rid;
     std::vector<size_t> start_positions;
@@ -41,7 +41,7 @@ public:
     char *reads = nullptr;
 
     AindexWrapper() {
-        std::cout << "Init AIndex Wrapper " << this << std::endl;
+
     }
 
     ~AindexWrapper() {
@@ -52,27 +52,31 @@ public:
 
         if (start_postitions_raw != nullptr) delete[] start_postitions_raw;
 
+        delete hash_map;
+
         reads = nullptr;
         indices = nullptr;
         positions = nullptr;
+
     }
 
     void load(std::string index_prefix){
 
-        std::cout << "Init AIndex tf only " << this << std::endl;
-        hash_map = PHASH_MAP();
-        std::cout << "...Done" << this << std::endl;
+        hash_map = new PHASH_MAP();
         // Load perfect hash into hash_map into memory
         emphf::logger() << "Reading index and hash..." << std::endl;
         std::string tf_file = index_prefix + ".tf.bin";
         std::string hash_filename = index_prefix + ".pf";
-        load_hash(hash_map, index_prefix, tf_file, hash_filename);
+        emphf::logger() << "...files: " << index_prefix << std::endl;
+        emphf::logger() << "...files: " << tf_file << std::endl;
+        emphf::logger() << "...files: " << hash_filename << std::endl;
+        load_hash(*hash_map, index_prefix, tf_file, hash_filename);
         emphf::logger() << "\tDone" << std::endl;
     }
 
     void load_hash_file(std::string hash_filename) {
-        std::cout << "Init AIndex hash" << this << std::endl;
-        load_only_hash(hash_map, hash_filename);
+        std::cout << "Loading only hash..." << std::endl;
+        load_only_hash(*hash_map, hash_filename);
     }
 
     void load_reads(std::string reads_file) {
@@ -117,7 +121,7 @@ public:
     void load_index(std::string aindex_prefix, size_t _max_tf) {
         // Load aindex.
 
-        n = hash_map.n;
+        n = hash_map->n;
         max_tf = _max_tf;
 
         std::string pos_file = aindex_prefix + ".pos.bin";
@@ -207,7 +211,7 @@ public:
     }
 
     size_t get_n() {
-        return hash_map.n;
+        return hash_map->n;
     }
 
     size_t get_rid(size_t pos) {
@@ -225,23 +229,23 @@ public:
 
     size_t get_kid_by_kmer(std::string _kmer) {
         uint64_t kmer = get_dna23_bitset(_kmer);
-        return hash_map.get_pfid_by_umer_safe(kmer);
+        return hash_map->get_pfid_by_umer_safe(kmer);
 
     }
 
     const char *get_kmer_by_kid(size_t r) {
-            // if (r >= hash_map.n) {
+            // if (r >= hash_map->n) {
             //     return;
             // }
             std::string kmer = "NNNNNNNNNNNNNNNNNNNNNNN";
-            uint64_t h1 = hash_map.checker[r];
+            uint64_t h1 = hash_map->checker[r];
             get_bitset_dna23(h1, kmer);
             return kmer.c_str();
     }
 
     void get_positions(size_t* r, std::string kmer) {
         // Get read positions and save them to given r
-        auto h1 = hash_map.get_pfid(kmer);
+        auto h1 = hash_map->get_pfid(kmer);
         size_t j = 0;
         for (size_t i=indices[h1]; i < indices[h1+1]; ++i) {
             if (j == max_tf - 1) {
@@ -262,19 +266,19 @@ public:
     size_t get(std::string kmer) {
         // Return tf for given kmer
         uint64_t ukmer = get_dna23_bitset(kmer);
-        auto h1 = hash_map.hasher.lookup(kmer, str_adapter);
-        if (h1 >= hash_map.n || hash_map.checker[h1] != ukmer) {
+        auto h1 = hash_map->hasher.lookup(kmer, str_adapter);
+        if (h1 >= hash_map->n || hash_map->checker[h1] != ukmer) {
             std::string rev_kmer = "NNNNNNNNNNNNNNNNNNNNNNN";
             uint64_t urev_kmer = reverseDNA(ukmer);
             get_bitset_dna23(urev_kmer, rev_kmer);
-            auto h2 = hash_map.hasher.lookup(rev_kmer, str_adapter);
-            if (h2 >= hash_map.n || hash_map.checker[h2] != urev_kmer) {
+            auto h2 = hash_map->hasher.lookup(rev_kmer, str_adapter);
+            if (h2 >= hash_map->n || hash_map->checker[h2] != urev_kmer) {
                 return 0;
             } else {
-                return hash_map.tf_values[h2];
+                return hash_map->tf_values[h2];
             }
         } else {
-            return hash_map.tf_values[h1];
+            return hash_map->tf_values[h1];
         }
         return 0;
     }
@@ -283,11 +287,11 @@ public:
 
     size_t get_kmer(size_t p, char* kmer, char* rkmer) {
         // Get tf, kmer and rev_kmer stored in given arrays.
-        uint64_t ukmer = hash_map.checker[p];
+        uint64_t ukmer = hash_map->checker[p];
         uint64_t urev_kmer = reverseDNA(ukmer);
         get_bitset_dna23_c(ukmer, kmer, 23);
         get_bitset_dna23_c(urev_kmer, rkmer, 23);
-        return hash_map.tf_values[p];
+        return hash_map->tf_values[p];
     }
 
     size_t get_hash_size() {
@@ -296,17 +300,17 @@ public:
 
     void increase(char* ckmer) {
         std::string kmer = std::string(ckmer);
-        hash_map.increase(kmer);
+        hash_map->increase(kmer);
     }
 
     void decrease(char* ckmer) {
         std::string kmer = std::string(ckmer);
-        hash_map.decrease(kmer);
+        hash_map->decrease(kmer);
     }
 
     void set_positions(size_t* r, std::string kmer) {
         // Set read positions
-        auto h1 = hash_map.get_pfid(kmer);
+        auto h1 = hash_map->get_pfid(kmer);
         size_t j = 0;
         for (size_t i=indices[h1]; i < indices[h1+1]; ++i) {
             positions[i] = r[j];
@@ -316,12 +320,12 @@ public:
 
     void check_aindex() {
 
-        for (size_t h1=0; h1<hash_map.n; ++h1) {
-            size_t tf = hash_map.tf_values[h1];
+        for (size_t h1=0; h1<hash_map->n; ++h1) {
+            size_t tf = hash_map->tf_values[h1];
             size_t xtf = 0;
 
             if (h1 && h1 % 1000000 == 0) {
-                std::cout << "Completed: " << h1 << "/" << hash_map.n << std::endl;
+                std::cout << "Completed: " << h1 << "/" << hash_map->n << std::endl;
             }
 
             for (size_t i=indices[h1]; i < indices[h1+1]; ++i) {
@@ -339,7 +343,7 @@ public:
                 ckmer[Settings::K] = '\0';
                 std::string data_kmer = std::string(ckmer);
 
-                uint64_t h1_kmer = hash_map.checker[h1];
+                uint64_t h1_kmer = hash_map->checker[h1];
                 std::string kmer = get_bitset_dna23(h1_kmer);
                 if (data_kmer != kmer) {
                     size_t rh1 = reverseDNA(h1_kmer);
@@ -361,13 +365,13 @@ public:
         bool* used_reads = new bool[1];
         std::vector<Hit> hits;
 
-        for (size_t h1=0; h1<hash_map.n; ++h1) {
-            size_t tf = hash_map.tf_values[h1];
+        for (size_t h1=0; h1<hash_map->n; ++h1) {
+            
             if (h1 && h1 % 1000000 == 0) {
-                std::cout << "Completed: " << h1 << "/" << hash_map.n << std::endl;
+                std::cout << "Completed: " << h1 << "/" << hash_map->n << std::endl;
             }
 
-            uint64_t h1_kmer = hash_map.checker[h1];
+            uint64_t h1_kmer = hash_map->checker[h1];
             std::string kmer = get_bitset_dna23(h1_kmer);
             hits.clear();
             get_reads_se_by_kmer(kmer, h1, used_reads, hits);
@@ -378,7 +382,7 @@ public:
                 std::max(max_pos, hit.pos);
                 std::string subkmer = hit.read.substr(hit.pos, Settings::K);
                 assert(subkmer == kmer);
-                std::cout << kmer << " " << subkmer << " " << h1 << " " << hash_map.tf_values[h1] << std::endl;
+                std::cout << kmer << " " << subkmer << " " << h1 << " " << hash_map->tf_values[h1] << std::endl;
             }
         }
     }
@@ -502,6 +506,10 @@ extern "C" {
 
     AindexWrapper* AindexWrapper_new(){ return new AindexWrapper(); }
     void AindexWrapper_load(AindexWrapper* foo, char* index_prefix){ foo->load(index_prefix); }
+
+
+
+
     void AindexWrapper_load_hash_file(AindexWrapper* foo, char* hash_filename){ foo->load(hash_filename); }
 
     void AindexWrapper_load_reads(AindexWrapper* foo, char* reads_file){ foo->load_reads(reads_file); }
@@ -515,7 +523,7 @@ extern "C" {
 
     const char * AindexWrapper_get_kmer_by_kid(AindexWrapper* foo, size_t kid){ return foo->get_kmer_by_kid(kid); }
 
-    size_t AindexWrapper_get(AindexWrapper* foo, char* x){ return foo->get(x); }
+    size_t AindexWrapper_get(AindexWrapper* foo, char* kmer){ return foo->get(kmer); }
 
     size_t AindexWrapper_get_n(AindexWrapper* foo){ return foo->get_n(); }
 
