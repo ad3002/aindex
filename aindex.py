@@ -13,6 +13,8 @@ from ctypes import *
 from settings import dll_paths
 
 for dll_path in dll_paths:
+    if not "/" in dll_path:
+        dll_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), dll_path)
     if os.path.isfile(dll_path):
         print(dll_path, os.path.isfile(dll_path))
         lib = ctypes.CDLL(dll_path)
@@ -47,8 +49,6 @@ lib.AindexWrapper_get.restype = c_size_t
 class AIndex(object):
     ''' Wrapper for working with cpp aindex implementation.
     '''
-
-    local_buffer = {}
 
     def __init__(self, index_prefix):
         ''' Init Aindex wrapper and load perfect hash.
