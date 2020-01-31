@@ -89,7 +89,7 @@ class AIndex(object):
         assert os.path.isfile(index_prefix + ".indices.bin")
 
         self.max_tf = max_tf
-        lib.AindexWrapper_load_index(self.obj, c_char_p(index_prefix), c_int64(max_tf))
+        lib.AindexWrapper_load_index(self.obj, c_char_p(index_prefix), c_uint32(max_tf))
 
     def load_reads(self, reads_file):
         ''' Load reads with mmap and with aindex.

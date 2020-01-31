@@ -118,7 +118,7 @@ public:
 
     }
 
-    void load_index(std::string aindex_prefix, size_t _max_tf) {
+    void load_index(std::string aindex_prefix, uint32_t _max_tf) {
         // Load aindex.
 
         n = hash_map->n;
@@ -366,7 +366,7 @@ public:
         std::vector<Hit> hits;
 
         for (size_t h1=0; h1<hash_map->n; ++h1) {
-            
+
             if (h1 && h1 % 1000000 == 0) {
                 std::cout << "Completed: " << h1 << "/" << hash_map->n << std::endl;
             }
@@ -514,7 +514,7 @@ extern "C" {
 
     void AindexWrapper_load_reads(AindexWrapper* foo, char* reads_file){ foo->load_reads(reads_file); }
 
-    void AindexWrapper_load_index(AindexWrapper* foo, char* index_prefix, size_t max_tf){ foo->load_index(index_prefix, max_tf); }
+    void AindexWrapper_load_index(AindexWrapper* foo, char* index_prefix, uint32_t max_tf){ foo->load_index(index_prefix, max_tf); }
     
     void AindexWrapper_increase(AindexWrapper* foo, char* kmer){ foo->increase(kmer); }
     void AindexWrapper_decrease(AindexWrapper* foo, char* kmer){ foo->decrease(kmer); }
