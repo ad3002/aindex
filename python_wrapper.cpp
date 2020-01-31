@@ -121,12 +121,16 @@ public:
     void load_index(std::string aindex_prefix, uint32_t _max_tf) {
         // Load aindex.
 
+        std::cout << "Inside load index: " << _max_tf << std::endl;
+
         n = hash_map->n;
         max_tf = _max_tf;
 
         std::string pos_file = aindex_prefix + ".pos.bin";
         std::string index_file = aindex_prefix + ".index.bin";
         std::string indices_file = aindex_prefix + ".indices.bin";
+
+        std::cout << "END" << std::endl;
 
 //        emphf::logger() << "Reading aindex.pos.bin array..." << std::endl;
 //
