@@ -446,7 +446,7 @@ def get_layout_for_kmer(kmer, kmer2tf, used_reads=None, k=23):
         seen_rids.add(rid)
         pos = poses[0]
         spring_pos = read.find("~")
-        left,right = read.split("~")
+        left, right = read.split("~")
         if pos < spring_pos:
             lefts.append("")
             rights.append(right)
@@ -463,5 +463,5 @@ def get_layout_for_kmer(kmer, kmer2tf, used_reads=None, k=23):
     max_length = max([len(x)+max_pos-starts[i] for i,x in enumerate(reads)])
     for i,read in enumerate(reads):
         reads[i] = 'N'*(max_pos-starts[i]) + read + "N" * (max_length-max_pos+starts[i]-len(read))
-    return max_pos, reads, lefts, rights, rids, start_pos
+    return max_pos, reads, lefts, rights, rids, starts
 
