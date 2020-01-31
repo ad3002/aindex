@@ -5,17 +5,18 @@
 #@author: Aleksey Komissarov
 #@contact: ad3002@gmail.com
 
+import os
 import ctypes
 from ctypes import cdll
-from ctypes import c_size_t, c_char_p
+from ctypes import *
 
 from settings import dll_paths
+
 for dll_path in dll_paths:
-    try:
-        lib = cdll.LoadLibrary(dll_path)
+    if os.path.isfile(dll_path):
+        print(dll_path, os.path.isfile(dll_path))
+        lib = ctypes.CDLL(dll_path)
         break
-    except OSError:
-        continue
 else:
     raise Exception("Ariadna's dll was not found: %s" % str(dll_paths))
 
@@ -40,15 +41,19 @@ def hamming_distance(s1, s2):
     return sum(i != j for (i,j) in zip(s1, s2) if i != 'N' and j != 'N')
 
 
+lib.AindexWrapper_get.argtypes = [c_void_p, c_char_p]
+lib.AindexWrapper_get.restype = c_size_t
+
 class AIndex(object):
     ''' Wrapper for working with cpp aindex implementation.
     '''
 
+    local_buffer = {}
+
     def __init__(self, index_prefix):
         ''' Init Aindex wrapper and load perfect hash.
         '''
-        self.obj = lib.AindexWrapper_new()
-        print("Loadind index: %s.*" % index_prefix)
+        self.obj = pointer(c_void_p(lib.AindexWrapper_new()))
         lib.AindexWrapper_load(self.obj, index_prefix)
 
     def __getitem__(self, kmer):
@@ -69,7 +74,7 @@ class AIndex(object):
         '''
         print("Loadind aindex: %s.*" % index_prefix)
         self.max_tf = max_tf
-        lib.AindexWrapper_load_index(self.obj, index_prefix, max_tf)
+        lib.AindexWrapper_load_index(self.obj, c_char_p(index_prefix), c_int64(max_tf))
 
     def load_reads(self, reads_file):
         ''' Load reads with mmap and with aindex.
@@ -134,7 +139,7 @@ class AIndex(object):
         '''
         kmer = ctypes.c_char_p("N"*k)
         rkmer = ctypes.c_char_p("N"*k)
-        tf = lib.AindexWrapper_get_kmer(self.obj, pos, kmer, rkmer)
+        tf = lib.AindexWrapper_get_kmer(self.obj, pos, pointer(kmer), pointer(rkmer))
         return kmer.value, rkmer.value, tf
 
     def pos(self, kmer):
@@ -229,8 +234,7 @@ def iter_reads_by_kmer(kmer, kmer2tf, used_reads=None, only_left=False, skip_mul
                 continue
 
         end = rid
-        N = len(kmer2tf.reads)
-        while True and end < N:
+        while True:
             if kmer2tf.reads[end] == '\n':
                 break
             end += 1
