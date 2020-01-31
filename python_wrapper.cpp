@@ -25,7 +25,7 @@ class AindexWrapper{
     size_t *indices = nullptr;
 
     size_t n = 0;
-    size_t max_tf = 0;
+    uint32_t max_tf = 0;
     size_t indices_length = 0;
 
 public:
