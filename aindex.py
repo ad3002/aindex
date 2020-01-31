@@ -190,6 +190,7 @@ def load_aindex(settings, prefix=None, reads=None, aindex_prefix=None, skip_read
         aindex_prefix = settings["aindex_prefix"]
     
     kmer2tf = AIndex(prefix)
+    kmer2tf.max_tf = settings["max_tf"]
     if not skip_reads:
         kmer2tf.load_reads(reads)
     if not skip_aindex:
