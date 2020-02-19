@@ -5,6 +5,7 @@
 #include <string>
 #include <limits.h>
 #include <iostream>
+#include "settings.hpp"
 
 /// CONVERTERS to uint 23-mers and 13-mers from strings and char*
 
@@ -13,7 +14,7 @@ uint64_t get_dna23_bitset(std::string dna_str) {
      * Convert 23-mer to bit 23-mer.
      */
     uint64_t num = 0;
-    for (int8_t n=0; n<23; n++) {
+    for (int8_t n=0; n<Settings::K; n++) {
         num = num << 2;
         if (dna_str[n] == 'A') num += 0;
         if (dna_str[n] == 'C') num += 1;
@@ -43,7 +44,7 @@ uint64_t get_dna23_bitset(char* dna_str) {
      * Convert 23-mer to bit 23-mer.
      */
     uint64_t num = 0;
-    for (int8_t n=0; n<23; n++) {
+    for (int8_t n=0; n<Settings::K; n++) {
         num = num << 2;
         if (dna_str[n] == 'A') num += 0;
         if (dna_str[n] == 'C') num += 1;
