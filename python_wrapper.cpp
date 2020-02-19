@@ -121,7 +121,7 @@ public:
     void load_index(std::string aindex_prefix, uint32_t _max_tf) {
         // Load aindex.
 
-        std::cout << "Inside load index: " << _max_tf << std::endl;
+        // std::cout << "Inside load index: " << _max_tf << std::endl;
 
         n = hash_map->n;
         max_tf = _max_tf;
@@ -130,7 +130,7 @@ public:
         std::string index_file = aindex_prefix + ".index.bin";
         std::string indices_file = aindex_prefix + ".indices.bin";
 
-        std::cout << "END" << std::endl;
+        // std::cout << "END" << std::endl;
 
 //        emphf::logger() << "Reading aindex.pos.bin array..." << std::endl;
 //
@@ -237,15 +237,7 @@ public:
 
     }
 
-    const char *get_kmer_by_kid(size_t r) {
-            // if (r >= hash_map->n) {
-            //     return;
-            // }
-            std::string kmer = "NNNNNNNNNNNNNNNNNNNNNNN";
-            uint64_t h1 = hash_map->checker[r];
-            get_bitset_dna23(h1, kmer);
-            return kmer.c_str();
-    }
+    
 
     void get_positions(size_t* r, std::string kmer) {
         // Get read positions and save them to given r
@@ -285,6 +277,15 @@ public:
             return hash_map->tf_values[h1];
         }
         return 0;
+    }
+
+
+    void get_kmer_by_kid(size_t r, char* kmer) {
+            // if (r >= hash_map->n) {
+            //     return;
+            // }
+            uint64_t ukmer = hash_map->checker[r];
+            get_bitset_dna23_c(ukmer, kmer, 23);            
     }
 
 
@@ -504,6 +505,12 @@ public:
     }
 
 
+    void freeme(char* ptr)
+    {
+        std::cout << "freeing address: " << ptr << std::endl;
+        free(ptr);
+    }
+
 };
 
 extern "C" {
@@ -512,6 +519,7 @@ extern "C" {
     void AindexWrapper_load(AindexWrapper* foo, char* index_prefix){ foo->load(index_prefix); }
 
 
+    void AindexWrapper_freeme(AindexWrapper* foo, char* ptr){ foo->freeme(ptr); }
 
 
     void AindexWrapper_load_hash_file(AindexWrapper* foo, char* hash_filename){ foo->load(hash_filename); }
@@ -525,7 +533,7 @@ extern "C" {
 
     size_t AindexWrapper_get_kid_by_kmer(AindexWrapper* foo, char* kmer){ return foo->get_kid_by_kmer(kmer); }
 
-    const char * AindexWrapper_get_kmer_by_kid(AindexWrapper* foo, size_t kid){ return foo->get_kmer_by_kid(kid); }
+    void AindexWrapper_get_kmer_by_kid(AindexWrapper* foo, size_t kid, char* kmer){ foo->get_kmer_by_kid(kid, kmer); }
 
     size_t AindexWrapper_get(AindexWrapper* foo, char* kmer){ return foo->get(kmer); }
 
@@ -536,8 +544,10 @@ extern "C" {
 //    char* AindexWrapper_get_read(AindexWrapper* foo, size_t start, int ori){ return foo->get_read(pos, ori); }
 
     void AindexWrapper_get_positions(AindexWrapper* foo, size_t* r, char* kmer){ foo->get_positions(r, kmer); }
+
     void AindexWrapper_set_positions(AindexWrapper* foo, size_t* r, char* kmer){ foo->set_positions(r, kmer); }
 
     size_t AindexWrapper_get_kmer(AindexWrapper* foo, size_t p, char* kmer, char* rkmer){ return foo->get_kmer(p, kmer, rkmer); }
-    void AindexWrapper_get_hash_size(AindexWrapper* foo){ foo->get_hash_size(); }
+
+    size_t AindexWrapper_get_hash_size(AindexWrapper* foo){ return foo->get_hash_size(); }
 }
