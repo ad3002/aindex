@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <string>
 
+
 #define BASE_MASK 0x3 /* binary: 11 */
 
 /* useful constants */

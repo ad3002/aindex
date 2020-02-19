@@ -580,7 +580,6 @@ namespace READS {
 
     };
 
-
     struct INDEXER {
 
         size_t n_reads = 0;

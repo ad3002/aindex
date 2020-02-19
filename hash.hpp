@@ -80,6 +80,7 @@ struct Stats {
 };
 
 
+
 struct PHASH_MAP {
 
     HASHER hasher;
@@ -113,6 +114,7 @@ struct PHASH_MAP {
         if (left_qtf_values != nullptr) delete [] left_qtf_values;
         if (right_qtf_values != nullptr) delete [] right_qtf_values;
         if (checker != nullptr) delete [] checker;
+
     }
 
     inline unsigned int get_freq(uint64_t kmer) {
