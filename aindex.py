@@ -311,6 +311,46 @@ class AIndex(object):
 
         # chrm = list(head)[0][2].split()[0].split(".")[0]
 
+    def get_read_by_rid(self, rid, max_read_length=400):
+        ''' Get read sequnce as string by rid.
+        '''
+        return self.reads[rid:rid+400].decode("utf8").split("\n")[0]
+
+
+    def get_rid2poses(self, kmer):
+        ''' Wrapper that handle case when two kmer hits in one read.
+        Return rid->poses_in_read dictionary for given kmer. 
+        In this case rid is the start position in reads file.
+        '''
+        poses = self.pos(kmer)
+        hits = defaultdict(list)
+        for pos in poses:
+            start = self.get_rid(pos)
+            hits[start].append(c_size_t(pos).value - start)
+        return hits
+
+
+    def get_reads_for_assemby_by_kmer(self, kmer, used_reads, compute_cov=True, k=23):
+        ''' Get reads prepared for assembly-by-extension. 
+            Return sorted by pos list of (pos, read, rid, poses, cov)
+        '''    
+        to_assembly = []
+        for rid, poses in self.get_rid2poses(kmer).items():
+            if rid in used_reads:
+                continue
+            used_reads.add(rid)
+            read = self.get_read_by_rid(rid)
+            ori_poses = poses
+            if not read[poses[0]:poses[0]+k] == kmer:
+                read = get_revcomp(read)
+                poses = [x for x in map(lambda x: len(read)-x-k, poses)][::-1]
+            cov = None
+            if compute_cov:
+                cov = [self[read[i:i+k]] for i in range(len(read)-k+1)]
+            to_assembly.append((poses[0], read, rid, ori_poses, cov))
+        to_assembly.sort(reverse=True)
+        return to_assembly
+
 
 def load_aindex(settings, prefix=None, reads=None, aindex_prefix=None, skip_reads=False, skip_aindex=False):
     ''' Wrapper over aindex loading.
@@ -345,17 +385,21 @@ def load_aindex(settings, prefix=None, reads=None, aindex_prefix=None, skip_read
     return kmer2tf
 
 
-def get_rid2poses(kmer, kmer2tf):
-    ''' Wrapper that handle case when two kmer hits in one read.
-    Return rid->poses_in_read dictionary for given kmer. 
-    In this case rid is the start position in reads file.
+
+
+def get_srandness(kmer, kmer2tf, k=23):
+    ''' Wrapper that return number of + strand and - srand.
     '''
     poses = kmer2tf.pos(kmer)
-    hits = defaultdict(list)
+    plus = 0
+    minus = 0
     for pos in poses:
-        start = kmer2tf.get_rid(pos)
-        hits[start].append(c_size_t(pos).value - start)
-    return hits
+        _kmer = kmer2tf.reads[pos:pos+k]
+        if kmer == _kmer:
+            plus += 1
+        else:
+            minus += 1
+    return plus, minus, len(poses)
 
 
 def iter_reads_by_kmer(kmer, kmer2tf, used_reads=None, only_left=False, skip_multiple=True, k=23):
