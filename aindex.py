@@ -330,9 +330,10 @@ class AIndex(object):
         return hits
 
 
-    def get_reads_for_assemby_by_kmer(self, kmer, used_reads, compute_cov=True, k=23):
+    def get_reads_for_assemby_by_kmer(self, kmer, used_reads, compute_cov=True, k=23, mode=None):
         ''' Get reads prepared for assembly-by-extension. 
             Return sorted by pos list of (pos, read, rid, poses, cov)
+            Mode: left, right
         '''    
         to_assembly = []
         for rid, poses in self.get_rid2poses(kmer).items():
@@ -340,10 +341,26 @@ class AIndex(object):
                 continue
             used_reads.add(rid)
             read = self.get_read_by_rid(rid)
+
+            spring_pos = None
+            if mode:
+                spring_pos = read.find("~")
+
             ori_poses = poses
             if not read[poses[0]:poses[0]+k] == kmer:
                 read = get_revcomp(read)
                 poses = [x for x in map(lambda x: len(read)-x-k, poses)][::-1]
+
+            if mode == "left":
+                read = read.split("~")[0]
+                poses = [x for x in poses if x < spring_pos]
+            elif mode == "right":
+                read = read.split("~")[-1]
+                poses = [x for x in poses if x > spring_pos]
+
+            if not poses:
+                continue
+
             cov = None
             if compute_cov:
                 cov = [self[read[i:i+k]] for i in range(len(read)-k+1)]
