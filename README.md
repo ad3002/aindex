@@ -4,7 +4,6 @@ Perfect hash based Index for text data
 ## Installation
 
 ```
-cd external
 git clone https://github.com/ot/emphf.git
 cd emphf
 cmake .
