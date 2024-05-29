@@ -108,7 +108,6 @@ class AIndex(object):
         self.references["index_prefix"] = index_prefix.encode('utf-8')
         lib.AindexWrapper_load(self.obj, index_prefix.encode('utf-8'))
 
-
     def __getitem__(self, kmer):
         ''' Return tf for kmer.
         '''
@@ -119,13 +118,10 @@ class AIndex(object):
         '''
         return lib.AindexWrapper_get_strand(self.obj, kmer.encode('utf-8'))
 
-
     def get_kid_by_kmer(self, kmer):
         ''' Return kmer id for kmer
         '''
         return lib.AindexWrapper_get_kid_by_kmer(self.obj, kmer.encode('utf-8'))
-
-    
 
     def load(self, index_prefix, max_tf):
         ''' Load aindex. max_tf limits 
@@ -160,7 +156,6 @@ class AIndex(object):
         else:
             self.end_cheker = lambda x: self.reads[x] == "\n"
             self.python3 = False
-
 
     def iter_reads(self):
         ''' Iter over reads 
@@ -205,7 +200,6 @@ class AIndex(object):
         ''' 
         return lib.AindexWrapper_get_hash_size(self.obj)
 
-
     def get_rid(self, pos):
         ''' Get read id by positions in read file.
         '''
@@ -219,7 +213,6 @@ class AIndex(object):
         kmer.value = s.encode("utf-8")
         lib.AindexWrapper_get_kmer_by_kid(self.obj, c_size_t(kid), kmer)
         return kmer.value
-
 
     def get_kmer(self, pos, k=23):
         ''' Get kmer, revcomp kmer and corresondent tf 
@@ -236,7 +229,6 @@ class AIndex(object):
 
         tf = lib.AindexWrapper_get_kmer(self.obj, pos, kmer, rkmer)
         return kmer.value, rkmer.value, tf
-
 
     def pos(self, kmer):
         ''' Return array of positions for given kmer.
@@ -264,7 +256,6 @@ class AIndex(object):
                 break
         return poses_array
 
-
     def set(self, poses_array, kmer, batch_size):
         ''' Update kmer batch in case of fixed batches.
         '''
@@ -276,7 +267,6 @@ class AIndex(object):
             r[i] = ctypes.c_size_t(pos)
 
         lib.AindexWrapper_set_positions(self.obj, pointer(r), kmer.encode('utf-8'))
-
 
     def load_header(self, header_file):
         ''' Load reads meta information.
@@ -312,10 +302,9 @@ class AIndex(object):
         # chrm = list(head)[0][2].split()[0].split(".")[0]
 
     def get_read_by_rid(self, rid, max_read_length=400):
-        ''' Get read sequnce as string by rid.
+        ''' Get read sequence as string by rid.
         '''
-        return self.reads[rid:rid+400].decode("utf8").split("\n")[0]
-
+        return self.reads[rid:rid+max_read_length].decode("utf8").split("\n")[0]
 
     def get_rid2poses(self, kmer):
         ''' Wrapper that handle case when two kmer hits in one read.
@@ -328,7 +317,6 @@ class AIndex(object):
             start = self.get_rid(pos)
             hits[start].append(c_size_t(pos).value - start)
         return hits
-
 
     def get_reads_for_assemby_by_kmer(self, kmer, used_reads, compute_cov=True, k=23, mode=None):
         ''' Get reads prepared for assembly-by-extension. 
@@ -368,6 +356,15 @@ class AIndex(object):
         to_assembly.sort(reverse=True)
         return to_assembly
 
+    def print_sequence_coverage(self, seq, cutoff=0):
+        '''
+        '''
+        for i in range(len(seq)-self.k+1):
+            kmer = seq[i:i+23]
+            tf = self[kmer]
+            if tf >= cutoff:
+                print(i, kmer, tf)
+
 
 def load_aindex(settings, prefix=None, reads=None, aindex_prefix=None, skip_reads=False, skip_aindex=False):
     ''' Wrapper over aindex loading.
@@ -402,8 +399,6 @@ def load_aindex(settings, prefix=None, reads=None, aindex_prefix=None, skip_read
     return kmer2tf
 
 
-
-
 def get_srandness(kmer, kmer2tf, k=23):
     ''' Wrapper that return number of + strand and - srand.
     '''
@@ -428,7 +423,7 @@ def iter_reads_by_kmer(kmer, kmer2tf, used_reads=None, only_left=False, skip_mul
 
     '''
 
-    rid2poses = get_rid2poses(kmer, kmer2tf)
+    rid2poses = kmer2tf.get_rid2poses(kmer)
 
     for rid in rid2poses:
         if used_reads and rid in used_reads:
@@ -443,16 +438,16 @@ def iter_reads_by_kmer(kmer, kmer2tf, used_reads=None, only_left=False, skip_mul
             if kmer2tf.end_cheker(end):
                 break
             end += 1
-        read = kmer2tf.reads[rid:end]
+        read = kmer2tf.reads[rid:end].decode("utf8")
 
         pos = poses[0]
         is_multiple_hit = len(poses) > 1
-        if read[pos:pos+k] != kmer.encode("utf-8"):
+        if read[pos:pos+k] != kmer:
             read = get_revcomp(read)
             poses = [len(read) - x - k for x in poses]
             ori_pos = pos
             pos = poses[0]
-            assert read[pos:pos+k] == kmer.encode("utf-8")
+            assert read[pos:pos+k] == kmer
                 
         if only_left:
             spring_pos = read.find("~")
@@ -523,7 +518,7 @@ def get_reads_se_by_kmer(kmer, kmer2tf, used_reads, k=23):
 
 
     result = []
-    hits = get_rid2poses(kmer, kmer2tf)
+    hits = kmer2tf.get_rid2poses(kmer)
     rkmer = get_revcomp(kmer)
 
     for hit in hits:
@@ -568,7 +563,6 @@ def get_reads_se_by_kmer(kmer, kmer2tf, used_reads, k=23):
                 continue
             result.append([hit, end+1, read[spring_pos+1:], pos, 1, was_reversed, right_poses])
     return result
-
 
 
 def get_left_right_distances(left_kmer, right_kmer, kmer2tf, k=23):
@@ -645,8 +639,8 @@ def get_layout_for_kmer(kmer, kmer2tf, used_reads=None, k=23):
             continue
         seen_rids.add(rid)
         pos = poses[0]
-        spring_pos = read.find("~".encode("utf-8"))
-        left, right = read.split("~".encode("utf-8"))
+        spring_pos = read.find("~")
+        left, right = read.split("~")
         if pos < spring_pos:
             lefts.append("")
             rights.append(right)
@@ -662,7 +656,7 @@ def get_layout_for_kmer(kmer, kmer2tf, used_reads=None, k=23):
         rids.append(rid)
     max_length = max([len(x)+max_pos-starts[i] for i,x in enumerate(reads)])
     for i,read in enumerate(reads):
-        separator = "N".encode("utf-8")
+        separator = "N"
         reads[i] = separator*(max_pos-starts[i]) + read + separator * (max_length-max_pos+starts[i]-len(read))
     return max_pos, reads, lefts, rights, rids, starts
 

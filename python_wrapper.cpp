@@ -317,7 +317,7 @@ public:
     }
 
     size_t get_hash_size() {
-        return n;
+        return hash_map->n;
     }
 
     void increase(char* ckmer) {
