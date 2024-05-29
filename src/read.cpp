@@ -12,7 +12,7 @@
 #include <sstream>
 #include <algorithm>
 #include <math.h>
-#include "../emphf/common.hpp"
+#include "emphf/common.hpp"
 
 namespace READS {
 
