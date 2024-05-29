@@ -3,18 +3,14 @@
 // akomissarov@dell:~/Dropbox/Ariadna/Stirka$ g++ -std=c++11 -pthread -static -Wl,--whole-archive -lpthread -Wl,--no-whole-archive Compute_forks.cpp kmers.cpp kmers.hpp debrujin.cpp debrujin.hpp hash.cpp hash.hpp correction.cpp correction.hpp read.cpp read.hpp statistics.hpp settings.hpp settings.cpp -o bin/V2_forks.exe -O3 -rdynamic
 
 
-
 #ifndef STIRKA_READ_H
 #define STIRKA_READ_H
 
 #include <string>
 #include <vector>
-#include "settings.hpp"
-#include "hash.hpp"
+#include <tuple>
 #include <math.h>
 #include <bitset>
-#include "dna_bitseq.hpp"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -24,10 +20,17 @@
 #include <stdio.h>
 #include <string.h> // memchr
 #include <fcntl.h>
+#include <atomic>
+
+#include "settings.hpp"
+#include "hash.hpp"
+#include "dna_bitseq.hpp"
+
 
 const int MINIMAL_PHRED = 33;
 const int MAXIMAL_PHRED = 125;
 
+typedef std::atomic<size_t> ATOMIC_SIZE_T;
 
 //bool has_ending(std::string const &fullString, std::string const &ending) {
 //    if (fullString.length() >= ending.length()) {
@@ -37,21 +40,87 @@ const int MAXIMAL_PHRED = 125;
 //    }
 //}
 
+
+
 namespace READS {
+
+    struct CorrectionErrors {
+
+        std::atomic<int> simple_ok;
+        std::atomic<int> simple_n0;
+        std::atomic<int> simple_nM;
+        std::atomic<int> indel;
+        std::atomic<int> small_indel;
+        std::atomic<int> indel_stuck;
+
+
+        std::atomic<int> uindel;
+        std::atomic<int> uindel_multiple;
+        std::atomic<int> uindel_stuck;
+
+
+        std::atomic<int> indel_multiple;
+
+
+        std::atomic<int> small_indel_stuck;
+        std::atomic<int> small_indel_multiple;
+
+        std::atomic<int> dead_right_end;
+
+        CorrectionErrors() {
+            simple_ok = 0;
+            simple_n0 = 0;
+            simple_nM = 0;
+
+            uindel = 0;
+            small_indel = 0;
+            indel_stuck = 0;
+            indel_multiple = 0;
+
+            small_indel = 0;
+
+            uindel = 0;
+            uindel_stuck = 0;
+            uindel_multiple = 0;
+
+            small_indel_stuck = 0;
+            small_indel_multiple = 0;
+            dead_right_end = 0;
+        }
+
+
+        void print() {
+            emphf::logger() << "simple_ok: " << simple_ok.load()
+                    << " simple_n0: " << simple_n0.load()
+                    << " simple_nM: " << simple_nM.load()
+                    << " small_indel: " << small_indel.load()
+                    << " indel: " << indel.load()
+                    << " indel_stuck: " << indel_stuck.load()
+                    << " indel_multiple: " << indel_multiple.load()
+                    << " uindel: " << uindel.load()
+                    << " uindel_stuck: " << uindel_stuck.load()
+                    << " uindel_multiple: " << uindel_multiple.load()
+                    << " small_indel_stuck: " << indel_stuck.load()
+                    << " small_indel_multiple: " << indel_multiple.load()
+                    << " dead_right_end: " << dead_right_end.load()
+                    << std::endl;
+        }
+    };
 
     struct Correction {
 
         std::string type = "unknown";
         std::string prev_type = "unknown";
         unsigned int start_position = 0;
-        unsigned int end_postition = 0;
+        unsigned int end_position = 0;
         unsigned int stop_point = 0;
+        unsigned int position = 0;
         std::vector<int> fixed;
         int status = 0;
 
         Correction();
 
-        Correction(std::string _type, std::string _prev_type, unsigned int _start_position) {
+        Correction(const std::string& _type, const std::string& _prev_type, unsigned int _start_position) {
             type = _type;
             prev_type = _prev_type;
             start_position = _start_position;
@@ -77,7 +146,6 @@ namespace READS {
         int left_status = 0;
         int right_status = 0;
         int left_position = 0;
-        size_t n = 0;
         int meanq = 0;
         int solution = 0;
         int mi = 0;
@@ -87,6 +155,10 @@ namespace READS {
         int rmi = 0;
         int rma = 0;
         bool is_string = false;
+        size_t n = 0;
+
+        int start_position = 0;
+        int end_position = 0;
 
         std::vector<Correction> corrections;
 
@@ -96,24 +168,22 @@ namespace READS {
             strand = "";
             Q = "";
 
-            n = 0;
             fm = nullptr;
             am = nullptr;
 
         }
 
-        READ(std::string &line_head, std::string &line_seq, std::string &line_strand, std::string &line_Q) {
+        READ(const std::string &line_head, const std::string &line_seq, const std::string &line_strand, const std::string &line_Q) {
 
             head = line_head;
             seq = line_seq;
             strand = line_strand;
             Q = line_Q;
 
-            n = (size_t) line_seq.length();
-            fm = new int[n];
-            am = new int[n];
+            fm = new int[seq.length()];
+            am = new int[seq.length()];
 
-            for (size_t i = 0; i < n; i++) {
+            for (size_t i = 0; i < seq.length(); i++) {
                 fm[i] = 0;
                 am[i] = MAXIMAL_PHRED;
             }
@@ -136,13 +206,24 @@ namespace READS {
             right_status = seq.length() - temp;
         }
 
+        void only_reverse_seq() {
+            std::string rev = seq;
+            get_revcomp(seq, rev);
+            seq = rev;
+        }
 
-        READ(std::string &line_seq, std::string &line_Q) {
+        void only_reverse_seq_and_q() {
+            std::string rev = seq;
+            get_revcomp(seq, rev);
+            seq = rev;
+            std::reverse(Q.begin(), Q.end());
+        }
+
+
+        READ(const std::string &line_seq, const std::string &line_Q) {
 
             seq = line_seq;
             Q = line_Q;
-
-            n = (size_t) line_seq.length();
 
             rid = total_rid;
             total_rid += 1;
@@ -151,10 +232,9 @@ namespace READS {
             am = nullptr;
         }
 
-        READ(std::string &line_seq) {
+        READ(const std::string &line_seq) {
 
             seq = line_seq;
-            n = (size_t) line_seq.length();
 
             rid = total_rid;
             total_rid += 1;
@@ -164,7 +244,7 @@ namespace READS {
         }
 
         size_t length() {
-            return n;
+            return seq.length();
         }
 
         ~READ() {
@@ -219,9 +299,9 @@ namespace READS {
             bool correct_one = true;
 
             if (fm == nullptr) {
-                fm = new int[n];
+                fm = new int[seq.length()];
             }
-            for (size_t i = 0; i < n - Settings::K + 1; i++) {
+            for (size_t i = 0; i < seq.length() - Settings::K + 1; i++) {
                 std::string kmer = seq.substr(i, Settings::K);
                 fm[i] = kmers.get_freq(kmer);
                 if (fm[i] <= Settings::TRUE_ERRORS) {
@@ -229,7 +309,7 @@ namespace READS {
                 }
 
             }
-            for (size_t i = n - Settings::K + 1; i < n; i++) {
+            for (size_t i = seq.length() - Settings::K + 1; i < seq.length(); i++) {
                 fm[i] = 0;
             }
 
@@ -242,12 +322,12 @@ namespace READS {
              *   Convert Q to freqQ.
              */
             if (am == nullptr) {
-                am = new int[n];
+                am = new int[seq.length()];
             }
-            for (size_t i = 0; i < n - Settings::K + 1; i++) {
+            for (size_t i = 0; i < seq.length() - Settings::K + 1; i++) {
                 am[i] = std::min( (int)std::round(fm[i]/coverage), 9);
             }
-            for (size_t i = n - Settings::K + 1; i < n; i++) {
+            for (size_t i = seq.length() - Settings::K + 1; i < seq.length(); i++) {
                 am[i] = 0;
             }
         }
@@ -256,24 +336,21 @@ namespace READS {
             if (position == 0) {
                 Q = "";
                 seq = "";
-                n = 0;
                 return;
             }
             seq = seq.substr(0, position);
             if (Q.length()) Q = Q.substr(0, position);
-            n = (size_t) seq.length();
+
         }
 
         void cut_start_to(size_t position) {
-            if (position+1 >= n) {
+            if (position+1 >= seq.length()) {
                 Q = "";
                 seq = "";
-                n = 0;
                 return;
             }
             seq = seq.substr(position+1);
             if (Q.length()) Q = Q.substr(position+1);
-            n = (size_t) seq.length();
         }
 
         char at(size_t pos) {
@@ -285,6 +362,81 @@ namespace READS {
         }
     };
 
+    struct STUPID_READ {
+
+        int rid = 0;
+        std::string seq;
+        int status = 1000;
+        int start_position = 0;
+        int end_position = 0;
+        unsigned int position = 0;
+        size_t n = 0;
+
+        STUPID_READ() {
+            seq = "";
+        }
+
+        STUPID_READ(const std::string &line_seq) {
+            seq = line_seq;
+            rid = total_rid;
+            total_rid += 1;
+        }
+
+        void reverse() {
+            std::string rev = seq;
+            get_revcomp(seq, rev);
+            seq = rev;
+        }
+
+        size_t length() {
+            return seq.length();
+        }
+
+        ~STUPID_READ() {
+        }
+
+        void save_as_read(std::ofstream &fh) {
+            fh << seq << "\n";
+        }
+
+
+        bool set_fm(PHASH_MAP &kmers) {
+
+            for (size_t i = 0; i < seq.length() - Settings::K + 1; i++) {
+                std::string kmer = seq.substr(i, Settings::K);
+                if (kmers.get_freq(kmer) <= Settings::TRUE_ERRORS) {
+                    return false;
+                }
+
+            }
+            return true;
+        }
+
+
+        void cut_end_from(size_t position) {
+            if (position == 0) {
+                seq = "";
+                return;
+            }
+            seq = seq.substr(0, position);
+
+        }
+
+        void cut_start_to(size_t position) {
+            if (position+1 >= seq.length()) {
+                seq = "";
+                return;
+            }
+            seq = seq.substr(position+1);
+
+        }
+
+        char at(size_t pos) {
+            return seq[pos];
+        }
+
+    };
+
     struct SIMPLE_READ {
 
         int rid = 0;
@@ -294,11 +446,11 @@ namespace READS {
         SIMPLE_READ(std::string &line_seq) {
 
             bitdna = new dna_bitset(line_seq.c_str(), line_seq.length());
-            n = (size_t) line_seq.length();
+
         }
 
         size_t length() {
-            return n;
+            return bitdna->length();
         }
 
         ~SIMPLE_READ() {
@@ -324,26 +476,26 @@ namespace READS {
             if (position == 0) {
                 delete bitdna;
                 bitdna = new dna_bitset("\0", 0);
-                n = 0;
+
                 return;
             }
             std::string read = std::string(bitdna->to_string());
             read = read.substr(0, position);
-            n = (size_t) read.length();
-            bitdna = new dna_bitset(read.c_str(), n);
+
+            bitdna = new dna_bitset(read.c_str(), bitdna->length());
         }
 
         void cut_start_to(size_t position) {
-            if (position+1 >= n) {
+            if (position+1 >= bitdna->length()) {
                 delete bitdna;
                 bitdna = new dna_bitset("\0", 0);
-                n = 0;
+
                 return;
             }
             std::string read = std::string(bitdna->to_string());
             read = read.substr(position+1);
-            n = (size_t) read.length();
-            bitdna = new dna_bitset(read.c_str(), n);
+
+            bitdna = new dna_bitset(read.c_str(), bitdna->length());
         }
 
         std::string seq() {
@@ -356,7 +508,6 @@ namespace READS {
 
         int rid = 0;
         std::string seq;
-        size_t n = 0;
         int mi = 0;
         int ma = 0;
         int lmi = 0;
@@ -366,21 +517,21 @@ namespace READS {
 
         SPRING() {
             seq = "";
-            n = 0;
+
         }
 
         SPRING(std::string &line_seq) {
 
             seq = line_seq;
 
-            n = (size_t) line_seq.length();
+
             rid = total_rid;
             total_rid += 1;
 
         }
 
         size_t length() {
-            return n;
+            return seq.length();
         }
 
         ~SPRING() {
@@ -397,7 +548,6 @@ namespace READS {
 
         int rid = 0;
         std::string seq;
-        size_t n = 0;
         int mi = 0;
         int ma = 0;
         int lmi = 0;
@@ -407,14 +557,14 @@ namespace READS {
 
         SPRING_PAIR() {
             seq = "";
-            n = 0;
+
         }
 
         SPRING_PAIR(std::string &line_seq) {
 
             seq = line_seq;
 
-            n = (size_t) line_seq.length();
+
             rid = total_rid;
             total_rid += 1;
 
@@ -426,7 +576,6 @@ namespace READS {
         }
 
         SPRING_PAIR(READS::READ* read1, READS::READ* read2) {
-            n = read1->length() + read2->length();
             rid = total_rid;
             total_rid += 1;
 //            read1 = new READ(read1.seq);
@@ -434,7 +583,7 @@ namespace READS {
         }
 
         size_t length() {
-            return n;
+            return read1->length() + read2->length();
         }
 
         ~SPRING_PAIR() {
@@ -442,13 +591,13 @@ namespace READS {
         }
 
         void save_as_read(std::ofstream &fh) {
-            if (read1->n >= Settings::MINIMAL_READ_LENGTH) {
+            if (read1->length() >= Settings::MINIMAL_READ_LENGTH) {
                 fh << read1->seq;
             }
-            if (read1->n >= Settings::MINIMAL_READ_LENGTH && read2->n >= Settings::MINIMAL_READ_LENGTH) {
+            if (read1->length() >= Settings::MINIMAL_READ_LENGTH && read2->length() >= Settings::MINIMAL_READ_LENGTH) {
                 fh << "~";
             }
-            if (read2->n >= Settings::MINIMAL_READ_LENGTH) {
+            if (read2->length() >= Settings::MINIMAL_READ_LENGTH) {
                 fh << read2->seq;
             }
             fh << "\n";
@@ -457,19 +606,19 @@ namespace READS {
 
         void save_for_jellyfish(std::ofstream &fh) {
 
-            if (read1->n < Settings::MINIMAL_READ_LENGTH && read2->n < Settings::MINIMAL_READ_LENGTH) {
+            if (read1->length() < Settings::MINIMAL_READ_LENGTH && read2->length() < Settings::MINIMAL_READ_LENGTH) {
                 return;
             }
 
             fh << ">" << rid << "\n";
 
-            if (read1->n >= Settings::MINIMAL_READ_LENGTH) {
+            if (read1->length() >= Settings::MINIMAL_READ_LENGTH) {
                 fh << read1->seq;
             }
-            if (read1->n >= Settings::MINIMAL_READ_LENGTH && read2->n >= Settings::MINIMAL_READ_LENGTH) {
+            if (read1->length() >= Settings::MINIMAL_READ_LENGTH && read2->length() >= Settings::MINIMAL_READ_LENGTH) {
                 fh << "N";
             }
-            if (read2->n >= Settings::MINIMAL_READ_LENGTH) {
+            if (read2->length() >= Settings::MINIMAL_READ_LENGTH) {
                 fh << read2->seq;
             }
             fh << "\n";
@@ -478,16 +627,16 @@ namespace READS {
 
         void save_as_am(std::ofstream &fh) {
 
-            if (read1->n >= Settings::MINIMAL_READ_LENGTH) {
-                for (size_t i = 0; i < read1->n; i++) {
+            if (read1->length() >= Settings::MINIMAL_READ_LENGTH) {
+                for (size_t i = 0; i < read1->length(); i++) {
                     fh << read1->am[i];
                 }
             }
-            if (read1->n >= Settings::MINIMAL_READ_LENGTH && read2->n >= Settings::MINIMAL_READ_LENGTH) {
+            if (read1->length() >= Settings::MINIMAL_READ_LENGTH && read2->length() >= Settings::MINIMAL_READ_LENGTH) {
                 fh << "~";
             }
-            if (read2->n >= Settings::MINIMAL_READ_LENGTH) {
-                for (size_t i = 0; i < read2->n; i++) {
+            if (read2->length() >= Settings::MINIMAL_READ_LENGTH) {
+                for (size_t i = 0; i < read2->length(); i++) {
                     fh << read2->am[i];
                 }
             }
@@ -497,25 +646,25 @@ namespace READS {
         void save_as_fm(std::ofstream &fh) {
 
             int tf = 0;
-            if (read1->n >= Settings::MINIMAL_READ_LENGTH) {
-                for (size_t i = 0; i < read1->n; i++) {
+            if (read1->length() >= Settings::MINIMAL_READ_LENGTH) {
+                for (size_t i = 0; i < read1->length(); i++) {
                     tf = read1->fm[i];
                     fh << tf;
-                    if (i < read1->n-1) {
+                    if (i < read1->length()-1) {
                         fh << " ";
                     }
                 }
             }
 
 
-            if (read1->n >= Settings::MINIMAL_READ_LENGTH && read2->n >= Settings::MINIMAL_READ_LENGTH) {
+            if (read1->length() >= Settings::MINIMAL_READ_LENGTH && read2->length() >= Settings::MINIMAL_READ_LENGTH) {
                 fh << "~";
             }
-            if (read2->n >= Settings::MINIMAL_READ_LENGTH) {
-                for (size_t i = 0; i < read2->n; i++) {
+            if (read2->length() >= Settings::MINIMAL_READ_LENGTH) {
+                for (size_t i = 0; i < read2->length(); i++) {
                     tf = read2->fm[i];
                     fh << tf;
-                    if (i < read2->n-1) {
+                    if (i < read2->length()-1) {
                         fh << " ";
                     }
                 }
@@ -526,6 +675,50 @@ namespace READS {
 
     };
 
+    struct STUPID_SPRING_PAIR {
+
+        STUPID_READ *read1;
+        STUPID_READ *read2;
+
+        int rid = 0;
+
+        STUPID_SPRING_PAIR() {
+
+        }
+
+        STUPID_SPRING_PAIR(std::string &line_seq) {
+
+            rid = total_rid;
+            total_rid += 1;
+            int pos = line_seq.find('~', 0);
+            std::string seq1 = line_seq.substr(0, pos);
+            std::string seq2 = line_seq.substr(pos+1);
+            read1 = new STUPID_READ(seq1);
+            read2 = new STUPID_READ(seq2);
+        }
+
+        size_t length() {
+            return read1->length()+read2->length();
+        }
+
+        ~STUPID_SPRING_PAIR() {
+        }
+
+        void save_as_read(std::ofstream &fh) {
+            if (read1->length() >= Settings::MINIMAL_READ_LENGTH) {
+                fh << read1->seq;
+            }
+            if (read1->length() >= Settings::MINIMAL_READ_LENGTH && read2->length() >= Settings::MINIMAL_READ_LENGTH) {
+                fh << "~";
+            }
+            if (read2->length() >= Settings::MINIMAL_READ_LENGTH) {
+                fh << read2->seq;
+            }
+            fh << "\n";
+
+        }
+    };
+
     struct SIMPLE_SPRING_PAIR {
 
         SIMPLE_READ *read1;
@@ -533,17 +726,14 @@ namespace READS {
 
         int rid = 0;
         std::string seq;
-        size_t n = 0;
 
         SIMPLE_SPRING_PAIR() {
             seq = "";
-            n = 0;
         }
 
         SIMPLE_SPRING_PAIR(std::string &line_seq) {
 
             seq = line_seq;
-            n = (size_t) line_seq.length();
             rid = total_rid;
             total_rid += 1;
 
@@ -557,7 +747,7 @@ namespace READS {
 
 
         size_t length() {
-            return n;
+            return seq.length();
         }
 
         ~SIMPLE_SPRING_PAIR() {
@@ -565,13 +755,13 @@ namespace READS {
         }
 
         void save_as_read(std::ofstream &fh) {
-            if (read1->n >= Settings::MINIMAL_READ_LENGTH) {
+            if (read1->length() >= Settings::MINIMAL_READ_LENGTH) {
                 fh << read1->seq();
             }
-            if (read1->n >= Settings::MINIMAL_READ_LENGTH && read2->n >= Settings::MINIMAL_READ_LENGTH) {
+            if (read1->length() >= Settings::MINIMAL_READ_LENGTH && read2->length() >= Settings::MINIMAL_READ_LENGTH) {
                 fh << "~";
             }
-            if (read2->n >= Settings::MINIMAL_READ_LENGTH) {
+            if (read2->length() >= Settings::MINIMAL_READ_LENGTH) {
                 fh << read2->seq();
             }
             fh << "\n";
@@ -584,17 +774,65 @@ namespace READS {
 
         size_t n_reads = 0;
         size_t batch_size = 0;
+
         size_t *index = nullptr;
+        std::vector<std::vector<std::tuple<std::string,int,int>>> scenarios;
 
         const size_t BUFSIZE = 1024 * 1024;
 
-        int * result = nullptr;
+        size_t * result = nullptr;
+        size_t * size_t_result = nullptr;
+        ATOMIC_SIZE_T *atomic_result = nullptr;
 
         void init_int_result(size_t size) {
-            result = new int[n_reads*size]; // status1 start1 end1 status2 start2 end2
+            result = new size_t[n_reads*size]; // status1 start1 end1 status2 start2 end2
             for (size_t i=0; i<n_reads*size; ++i) {
                 result[i] = 0;
             }
+        }
+
+        void init_result(size_t size) {
+            result = new size_t[n_reads*size]; // status1 start1 end1 status2 start2 end2
+            for (size_t i=0; i<n_reads*size; ++i) {
+                result[i] = 0;
+            }
+            std::cout << "result array init done: " << n_reads*size << std::endl;
+        }
+
+        void init_atomic_result(size_t size) {
+            atomic_result = new ATOMIC_SIZE_T[n_reads*size]; // status1 start1 end1 status2 start2 end2
+            for (size_t i=0; i<n_reads*size; ++i) {
+                atomic_result[i] = 0;
+            }
+            std::cout << "result array init done: " << n_reads*size << std::endl;
+        }
+
+
+
+        void init_size_t_result(size_t size) {
+            size_t_result = new size_t[n_reads*size]; // status1 start1 end1 status2 start2 end2
+            for (size_t i=0; i<n_reads*size; ++i) {
+                size_t_result[i] = 0;
+            }
+        }
+
+        void init_scenarios() {
+            for (size_t i=0; i<n_reads; ++i) {
+                std::vector<std::tuple<std::string,int,int> > s;
+                scenarios.push_back(s);
+            }
+        }
+
+        void set_result(size_t pos, int reg, int val) {
+            result[n_reads*reg+pos] = val;
+        }
+
+        void set_atomic_result(int reg, size_t rid, size_t val) {
+            atomic_result[n_reads*reg + rid] = val;
+        }
+
+        void inc_atomic_result(size_t pos, int reg, int val) {
+            atomic_result[n_reads*reg+pos] += val;
         }
 
         void set_result(size_t pos, int val) {
@@ -602,13 +840,22 @@ namespace READS {
             result[pos] = val;
         }
 
-        int get_val(size_t pos) {
+        void set_result(size_t pos, size_t val) {
+
+            result[pos] = val;
+        }
+
+        size_t get_int_val(size_t pos) {
             return result[pos];
+        }
+
+        size_t get_atomic_val(int reg, size_t rid) {
+            return atomic_result[n_reads*reg+rid].load();
         }
 
         INDEXER(const INDEXER& that) = delete;
 
-
+        
         void save_index(std::string index_file) {
             emphf::logger() << "Saving index array..." << std::endl;
             std::ofstream fout(index_file, std::ios::out | std::ios::binary);
@@ -683,11 +930,10 @@ namespace READS {
                     ++p;
                     ++n_reads;
 
-                    if (n_reads && n_reads % 4000000 == 0) {
-                        emphf::logger() << "\tcomputed: " << n_reads << " or " << 100*BUFSIZE*readed/length << "%" << std::endl;
+                    if (n_reads && n_reads % 100000000 == 0) {
+                        emphf::logger() << "\tcomputed lines (first iteration): " << n_reads << " or " << 100*BUFSIZE*readed/length << "%" << std::endl;
                     }
                 }
-
                 readed += 1;
             }
             close(fp);
@@ -710,8 +956,8 @@ namespace READS {
                     if (read_n % 4 == 0) {
                         index[read_n/4] = prev_pos;
                     }
-                    if (read_n && read_n % 4000000 == 0) {
-                        emphf::logger() << "\tcomputed: " << read_n << " from " << n_reads * 4 << " or " <<
+                    if (read_n && read_n % 100000000 == 0) {
+                        emphf::logger() << "\tcomputed lines (second iteration): " << read_n << " from " << n_reads * 4 << " or " <<
                         100 * (read_n) / (n_reads * 4) << "%" << std::endl;
                     }
                     ++read_n;
@@ -724,7 +970,148 @@ namespace READS {
             return n_reads;
         }
 
-        size_t build_reads_index(std::string reads_file) {
+        size_t build_fastq_index_v2(std::string fastq_file1, size_t expected_n_reads) {
+
+            emphf::logger() << "\tComputing lines new way... " << std::endl;
+            n_reads = expected_n_reads;
+
+            int fp;
+            fp = open(fastq_file1.c_str(), O_RDONLY);
+            if (!fp) {
+                exit(12);
+            }
+
+            std::ifstream fout(fastq_file1, std::ios::in | std::ios::binary);
+            fout.seekg(0, std::ios::end);
+            // size_t length = fout.tellg();
+            fout.close();
+
+            char buf[BUFSIZE+1];
+            int bytes_read;
+            size_t readed = 0;
+
+            emphf::logger() << "\treads: " << n_reads << " reads" << std::endl;
+
+            index = new size_t[n_reads];
+            fp = open(fastq_file1.c_str(), O_RDONLY);
+
+            size_t total_reads = 0;
+            size_t read_n = 0;
+            size_t prev_pos = 0;
+            readed = 0;
+
+            while((bytes_read = read(fp, buf, BUFSIZE)) > 0){
+                char* p = buf;
+                while ((p = static_cast<char*>(memchr (p, '\n', (buf + bytes_read) - p)))) {
+                    ++p;
+                    if (read_n % 4 == 0) {
+                        index[read_n/4] = prev_pos;
+                        total_reads += 1;
+                    }
+                    if (read_n && read_n % 100000000 == 0) {
+                        emphf::logger() << "\tcomputed lines (second iteration): " << read_n << " from " << n_reads * 4 << " or " <<
+                                        100 * (read_n) / (n_reads * 4) << "%" << std::endl;
+                    }
+                    ++read_n;
+                    prev_pos = BUFSIZE*readed + p - buf;
+                }
+
+                readed += 1;
+            }
+            close(fp);
+            return total_reads;
+        }
+
+//        size_t build_fasta_index(std::string fai_file) {
+//
+//            emphf::logger() << "\tbuilding index from fai file... " << std::endl;
+//
+//            std::ifstream fia_file(fai_file);
+//
+//            std::string header = "";
+//            std::string line;
+//            std::vector
+//            while (std::getline(infile, line)) {
+//                if (line[0] == ">") {
+//
+//                } else {
+//
+//                }
+//            }
+//
+//
+//            size_t length, offset, linebases, linewidth;
+//            while (fia_file >> header >> offset >> linebases >> linewidth) {
+//
+//            }
+//
+//            fia_file.close();
+//
+//
+//
+//
+//            n_reads = 0;
+//
+//            int fp = open(fasta_file.c_str(), O_RDONLY);
+//
+//            if (!fp) {
+//                exit(12);
+//            }
+//
+//            std::ifstream fout(fasta_file, std::ios::in | std::ios::binary);
+//            fout.seekg(0, std::ios::end);
+//            size_t length = fout.tellg();
+//            fout.close();
+//
+//            char buf[BUFSIZE+1];
+//            int bytes_read;
+//            size_t readed = 0;
+//
+//            while((bytes_read = read(fp, buf, BUFSIZE)) > 0){
+//                char* p = buf;
+//                while ((p = static_cast<char*>(memchr (p, '\n', (buf + bytes_read) - p)))) {
+//                    ++p;
+//
+//                    if (buf[0] == '>') {
+//                        ++n_reads;
+//                    }
+//
+//                    if (n_reads && n_reads % 10000000 == 0) {
+//                        emphf::logger() << "\tcomputed: " << n_reads << " or " << 100*BUFSIZE*readed/length << "%" << std::endl;
+//                    }
+//                }
+//                readed += 1;
+//            }
+//            close(fp);
+//            emphf::logger() << n_reads << " sequences" << std::endl;
+//
+//            index = new size_t[n_reads];
+//            fp = open(reads_file.c_str(), O_RDONLY);
+//
+//            size_t read_n = 0;
+//            size_t prev_pos = 0;
+//            readed = 0;
+//
+//            while((bytes_read = read(fp, buf, BUFSIZE)) > 0){
+//                char* p = buf;
+//                while ((p = static_cast<char*>(memchr (p, '\n', (buf + bytes_read) - p)))) {
+//                    ++p;
+//                    index[read_n] = prev_pos;
+//                    if (read_n && read_n % 10000000 == 0) {
+//                        emphf::logger() << "\tcomputed: " << read_n << " from " << n_reads << " or " <<
+//                                        100 * (read_n) / (n_reads) << "%" << std::endl;
+//                    }
+//                    ++read_n;
+//                    prev_pos = BUFSIZE*readed + p - buf;
+//                }
+//
+//                readed += 1;
+//            }
+//            close(fp);
+//            return n_reads;
+//        }
+
+        size_t build_reads_index(const std::string& reads_file) {
 
             emphf::logger() << "\tComputing lines new way... " << std::endl;
             n_reads = 0;
@@ -783,6 +1170,25 @@ namespace READS {
             close(fp);
             return n_reads;
         }
+
+        // void save_fastq_to_file(std::ifstream &l_file,  size_t rid) {
+        //     std::string line_head = "";
+        //     std::string line_seq = "";
+        //     std::string line_strand = "";
+        //     std::string line_Q = "";
+
+        //     r_file.seekg(index[rid]);
+
+        //     std::getline(r_file, line_head);
+        //     std::getline(r_file, line_seq);
+        //     std::getline(r_file, line_strand);
+        //     std::getline(r_file, line_Q);
+
+        //     READS::READ * read = new READS::READ(line_head, line_seq, line_strand, line_Q);
+
+        //     return read;
+
+        // }
 
         READS::READ * get_fastq_reads(std::ifstream &r_file, size_t rid) {
             std::string line_head = "";
@@ -927,6 +1333,13 @@ namespace READS {
             if (result != nullptr) {
                 delete [] result;
             }
+            if (size_t_result != nullptr) {
+                delete [] size_t_result;
+            }
+
+            if (atomic_result != nullptr) {
+                delete [] atomic_result;
+            }
         }
     };
 
@@ -948,7 +1361,7 @@ namespace READS {
         }
 
         int save_as_fastq(std::ofstream &fh1, std::ofstream &fh2) {
-            if (read1->n >= Settings::MINIMAL_READ_LENGTH && read2->n >= Settings::MINIMAL_READ_LENGTH) {
+            if (read1->length() >= Settings::MINIMAL_READ_LENGTH && read2->length() >= Settings::MINIMAL_READ_LENGTH) {
                 read1->save_as_fastq(fh1);
                 read2->save_as_fastq(fh2);
                 return 1;
@@ -956,7 +1369,6 @@ namespace READS {
             return 0;
         }
     };
-
 
 
     void read_sreads(std::string file_name, std::vector<READ *> &reads);
@@ -973,7 +1385,12 @@ namespace READS {
 
     void read_spring_pairs(std::string file_name, std::vector<SPRING_PAIR *> &reads, size_t n_reads);
 
-    void read_simple_spring_pairs(std::string file_name, std::vector<SPRING_PAIR *> &reads, size_t nreads);
+//    size_t read_simple_stupid_spring_pairs(std::string file_name, std::vector<STUPID_SPRING_PAIR *> &reads);
+
+    template<typename T>
+    size_t read_simple_spring_pairs(std::string file_name, std::vector<T *> &reads);
+
+
 }
 
 #endif //STIRKA_READ_H
