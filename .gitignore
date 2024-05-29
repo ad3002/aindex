@@ -39,3 +39,4 @@ tests/reads.reads
 bin/*
 venv/*
 cmake-build-debug/*
+.vscode/*
