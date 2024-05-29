@@ -5,7 +5,9 @@ Perfect hash based index for text data.
 ## Installation
 
 ```
-cd external
+git clone https://github.com/ad3002/aindex.git
+cd aindex
+mkdir external
 git clone https://github.com/ot/emphf.git
 cd emphf
 cmake .
