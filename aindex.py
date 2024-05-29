@@ -6,15 +6,24 @@
 #@contact: ad3002@gmail.com
 
 import os, sys
+import os, sys
 import ctypes
 from ctypes import cdll
+from ctypes import *
 from ctypes import *
 
 import mmap
 from collections import defaultdict
+import mmap
+from collections import defaultdict
 from settings import dll_paths
 
+
 for dll_path in dll_paths:
+    if not "/" in dll_path:
+        dll_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), dll_path)
+    if os.path.isfile(dll_path):
+        print("Loading: %s (exists: %s)" % (dll_path, os.path.isfile(dll_path)))
     if not "/" in dll_path:
         dll_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), dll_path)
     if os.path.isfile(dll_path):
@@ -23,6 +32,9 @@ for dll_path in dll_paths:
         break
 else:
     raise Exception("Ariadna's dll was not found: %s" % str(dll_paths))
+
+
+from intervaltree import IntervalTree
 
 
 def get_revcomp(sequence):
@@ -73,6 +85,12 @@ lib.AindexWrapper_get_hash_size.restype = c_size_t
 lib.AindexWrapper_get_rid.argtypes = [c_void_p]
 lib.AindexWrapper_get_rid.restype = c_size_t
 
+lib.AindexWrapper_get_strand.argtypes = [c_void_p]
+lib.AindexWrapper_get_strand.restype = c_size_t
+
+
+
+
 lib.AindexWrapper_get_kmer.argtypes = [c_void_p, c_size_t, c_char_p, c_char_p]
 lib.AindexWrapper_get_kmer.restype = c_size_t
 
@@ -90,6 +108,9 @@ class AIndex(object):
     obj = None
     references = {}
 
+    obj = None
+    references = {}
+
     def __init__(self, index_prefix):
         ''' Init Aindex wrapper and load perfect hash.
         '''
@@ -99,18 +120,20 @@ class AIndex(object):
         self.references["index_prefix"] = index_prefix.encode('utf-8')
         lib.AindexWrapper_load(self.obj, index_prefix.encode('utf-8'))
 
-
     def __getitem__(self, kmer):
         ''' Return tf for kmer.
         '''
         return lib.AindexWrapper_get(self.obj, kmer.encode('utf-8'))
 
+    def get_strand(self, kmer):
+        ''' Return strand for kmer 0 NA or 1 - 2 +.
+        '''
+        return lib.AindexWrapper_get_strand(self.obj, kmer.encode('utf-8'))
+
     def get_kid_by_kmer(self, kmer):
         ''' Return kmer id for kmer
         '''
         return lib.AindexWrapper_get_kid_by_kmer(self.obj, kmer.encode('utf-8'))
-
-    
 
     def load(self, index_prefix, max_tf):
         ''' Load aindex. max_tf limits 
@@ -121,7 +144,13 @@ class AIndex(object):
         if not (os.path.isfile(index_prefix + ".pf") and os.path.isfile(index_prefix + ".tf.bin") and os.path.isfile(index_prefix + ".kmers.bin") and os.path.isfile(index_prefix + ".index.bin") and os.path.isfile(index_prefix + ".indices.bin") and os.path.isfile(index_prefix + ".pos.bin")):
             raise Exception("One of index files was not found: %s" % str(index_prefix))
 
+
+        if not (os.path.isfile(index_prefix + ".pf") and os.path.isfile(index_prefix + ".tf.bin") and os.path.isfile(index_prefix + ".kmers.bin") and os.path.isfile(index_prefix + ".index.bin") and os.path.isfile(index_prefix + ".indices.bin") and os.path.isfile(index_prefix + ".pos.bin")):
+            raise Exception("One of index files was not found: %s" % str(index_prefix))
+
         self.max_tf = max_tf
+
+        lib.AindexWrapper_load_index(self.obj, index_prefix.encode('utf-8'), c_uint32(max_tf))
 
         lib.AindexWrapper_load_index(self.obj, index_prefix.encode('utf-8'), c_uint32(max_tf))
 
@@ -131,10 +160,14 @@ class AIndex(object):
         if not os.path.isfile(reads_file):
             raise Exception("Reads files was not found: %s" % str(reads_file))
 
+        if not os.path.isfile(reads_file):
+            raise Exception("Reads files was not found: %s" % str(reads_file))
+
         print("Loadind reads with mmap: %s" % reads_file)
         with open(reads_file, "r+b") as f:
             self.reads = mmap.mmap(f.fileno(), 0)
             self.reads_size = self.reads.size()
+        lib.AindexWrapper_load_reads(self.obj, reads_file.encode('utf-8'))
         lib.AindexWrapper_load_reads(self.obj, reads_file.encode('utf-8'))
         print("\tloaded %s chars." % self.reads_size)
 
@@ -146,7 +179,6 @@ class AIndex(object):
             self.end_cheker = lambda x: self.reads[x] == "\n"
             self.python3 = False
 
-
     def iter_reads(self):
         ''' Iter over reads 
         and yield (start_pos, next_read_pos, read).
@@ -155,7 +187,9 @@ class AIndex(object):
         end = 0
         N = len(self.reads)
 
+
         while True:
+            while end < N and not self.end_cheker(end):
             while end < N and not self.end_cheker(end):
                 end += 1
             yield start, end+1, self.reads[start:end]
@@ -173,9 +207,12 @@ class AIndex(object):
         N = len(self.reads)
         rid = 0
 
+
         while True:
             while not self.end_cheker(end):
+            while not self.end_cheker(end):
                 end += 1
+            splited_reads = self.reads[start:end].split("~".encode("utf-8"))
             splited_reads = self.reads[start:end].split("~".encode("utf-8"))
             for i, subread in enumerate(splited_reads):
                 yield rid, start, i, subread
@@ -205,11 +242,19 @@ class AIndex(object):
         lib.AindexWrapper_get_kmer_by_kid(self.obj, c_size_t(kid), kmer)
         return kmer.value
 
-
     def get_kmer(self, pos, k=23):
         ''' Get kmer, revcomp kmer and corresondent tf 
         for given position in read file.
         '''
+
+        s = "N"*k
+
+        kmer = ctypes.c_char_p()
+        kmer.value = s.encode("utf-8")
+
+        rkmer = ctypes.c_char_p()
+        rkmer.value = s.encode("utf-8")
+
 
         s = "N"*k
 
@@ -229,9 +274,20 @@ class AIndex(object):
 
         # lib.AindexWrapper_get_positions.argtypes = (ctypes.c_void_p, ctypes.POINTER(ctypes.c_size_t), ctypes.c_char_p)
 
+
+        # lib.AindexWrapper_get_positions.argtypes = (ctypes.c_void_p, ctypes.POINTER(ctypes.c_size_t), ctypes.c_char_p)
+
         n = self.max_tf
 
+
         r = (ctypes.c_size_t*n)()
+
+        array_type = ctypes.c_size_t * n
+
+        kmer = str(kmer)
+
+        lib.AindexWrapper_get_positions(self.obj, pointer(r), kmer.encode('utf-8'))
+        
 
         array_type = ctypes.c_size_t * n
 
@@ -242,6 +298,7 @@ class AIndex(object):
         poses = []
         ids = []
         poses_array = []
+        for i in range(n):
         for i in range(n):
             if r[i] > 0:
                 poses_array.append(r[i]-1)
@@ -262,7 +319,102 @@ class AIndex(object):
 
         lib.AindexWrapper_set_positions(self.obj, pointer(r), kmer.encode('utf-8'))
 
+    def load_header(self, header_file):
+        ''' Load reads meta information.
+        '''
+        self.headers = {}
+        self.IT = IntervalTree()
+        self.chrm2start = {}
 
+        prev = None
+        prev_head = None
+        with open(header_file) as fh:
+            for line in fh:
+                head, pos = line.strip().split("\t")
+                pos = int(pos)
+                self.headers[pos] = head
+                chrm = head.split()[0].split(".")[0]
+                self.chrm2start[chrm] = pos
+                
+                if prev == None:
+                    prev = pos
+                    prev_head = head
+                    continue
+                self.IT.addi(prev, pos, prev_head)
+                prev = pos
+                prev_head = head
+        self.IT.addi(prev, prev+1000000000000, prev_head)
+
+    def get_header(self, pos):
+        ''' Get header information for position.
+        '''
+        return list(self.IT[pos])[0][2]
+
+        # chrm = list(head)[0][2].split()[0].split(".")[0]
+
+    def get_read_by_rid(self, rid, max_read_length=400):
+        ''' Get read sequence as string by rid.
+        '''
+        return self.reads[rid:rid+max_read_length].decode("utf8").split("\n")[0]
+
+    def get_rid2poses(self, kmer):
+        ''' Wrapper that handle case when two kmer hits in one read.
+        Return rid->poses_in_read dictionary for given kmer. 
+        In this case rid is the start position in reads file.
+        '''
+        poses = self.pos(kmer)
+        hits = defaultdict(list)
+        for pos in poses:
+            start = self.get_rid(pos)
+            hits[start].append(c_size_t(pos).value - start)
+        return hits
+
+    def get_reads_for_assemby_by_kmer(self, kmer, used_reads, compute_cov=True, k=23, mode=None):
+        ''' Get reads prepared for assembly-by-extension. 
+            Return sorted by pos list of (pos, read, rid, poses, cov)
+            Mode: left, right
+        '''    
+        to_assembly = []
+        for rid, poses in self.get_rid2poses(kmer).items():
+            if rid in used_reads:
+                continue
+            used_reads.add(rid)
+            read = self.get_read_by_rid(rid)
+
+            spring_pos = None
+            if mode:
+                spring_pos = read.find("~")
+
+            ori_poses = poses
+            if not read[poses[0]:poses[0]+k] == kmer:
+                read = get_revcomp(read)
+                poses = [x for x in map(lambda x: len(read)-x-k, poses)][::-1]
+
+            if mode == "left":
+                read = read.split("~")[0]
+                poses = [x for x in poses if x < spring_pos]
+            elif mode == "right":
+                read = read.split("~")[-1]
+                poses = [x for x in poses if x > spring_pos]
+
+            if not poses:
+                continue
+
+            cov = None
+            if compute_cov:
+                cov = [self[read[i:i+k]] for i in range(len(read)-k+1)]
+            to_assembly.append((poses[0], read, rid, ori_poses, cov))
+        to_assembly.sort(reverse=True)
+        return to_assembly
+
+    def print_sequence_coverage(self, seq, cutoff=0):
+        '''
+        '''
+        for i in range(len(seq)-self.k+1):
+            kmer = seq[i:i+23]
+            tf = self[kmer]
+            if tf >= cutoff:
+                print(i, kmer, tf)
 
 
 def load_aindex(settings, prefix=None, reads=None, aindex_prefix=None, skip_reads=False, skip_aindex=False):
@@ -291,6 +443,7 @@ def load_aindex(settings, prefix=None, reads=None, aindex_prefix=None, skip_read
     
     kmer2tf = AIndex(prefix)
     kmer2tf.max_tf = settings["max_tf"]
+    kmer2tf.max_tf = settings["max_tf"]
     if not skip_reads:
         kmer2tf.load_reads(reads)
     if not skip_aindex:
@@ -298,17 +451,19 @@ def load_aindex(settings, prefix=None, reads=None, aindex_prefix=None, skip_read
     return kmer2tf
 
 
-def get_rid2poses(kmer, kmer2tf):
-    ''' Wrapper that handle case when two kmer hits in one read.
-    Return rid->poses_in_read dictionary for given kmer. 
-    In this case rid is the start position in reads file.
+def get_srandness(kmer, kmer2tf, k=23):
+    ''' Wrapper that return number of + strand and - srand.
     '''
     poses = kmer2tf.pos(kmer)
-    hits = defaultdict(list)
+    plus = 0
+    minus = 0
     for pos in poses:
-        start = kmer2tf.get_rid(pos)
-        hits[start].append(c_size_t(pos).value - start)
-    return hits
+        _kmer = kmer2tf.reads[pos:pos+k]
+        if kmer == _kmer:
+            plus += 1
+        else:
+            minus += 1
+    return plus, minus, len(poses)
 
 
 def iter_reads_by_kmer(kmer, kmer2tf, used_reads=None, only_left=False, skip_multiple=True, k=23):
@@ -320,7 +475,7 @@ def iter_reads_by_kmer(kmer, kmer2tf, used_reads=None, only_left=False, skip_mul
 
     '''
 
-    rid2poses = get_rid2poses(kmer, kmer2tf)
+    rid2poses = kmer2tf.get_rid2poses(kmer)
 
     for rid in rid2poses:
         if used_reads and rid in used_reads:
@@ -333,9 +488,10 @@ def iter_reads_by_kmer(kmer, kmer2tf, used_reads=None, only_left=False, skip_mul
         end = rid
         while True:
             if kmer2tf.end_cheker(end):
+            if kmer2tf.end_cheker(end):
                 break
             end += 1
-        read = kmer2tf.reads[rid:end]
+        read = kmer2tf.reads[rid:end].decode("utf8")
 
         pos = poses[0]
         is_multiple_hit = len(poses) > 1
@@ -368,6 +524,7 @@ def iter_reads_by_sequence(sequence, kmer2tf, used_reads=None, only_left=False, 
 
     TODO: more effective implementation than if sequence in read
     '''
+    sequence = sequence.encode("utf-8")
     sequence = sequence.encode("utf-8")
     if len(sequence) >= k:
         kmer = sequence[:k]
@@ -414,13 +571,16 @@ def get_reads_se_by_kmer(kmer, kmer2tf, used_reads, k=23):
     '''
 
 
+
+
     result = []
-    hits = get_rid2poses(kmer, kmer2tf)
+    hits = kmer2tf.get_rid2poses(kmer)
     rkmer = get_revcomp(kmer)
 
     for hit in hits:
         end = hit
         while True:
+            if kmer2tf.end_cheker(end):
             if kmer2tf.end_cheker(end):
                 break
             end += 1
@@ -430,16 +590,19 @@ def get_reads_se_by_kmer(kmer, kmer2tf, used_reads, k=23):
 
         pos = poses[0]
         if read[pos:pos+k] != kmer.encode("utf-8"):
+        if read[pos:pos+k] != kmer.encode("utf-8"):
             read = get_revcomp(read)
             poses = [len(read) - x - k for x in poses]
             pos = poses[0]
             was_reversed = 1
+            if read[pos:pos+k] != kmer.encode("utf-8"):
             if read[pos:pos+k] != kmer.encode("utf-8"):
                 print("Critical error kmer and ref are not equal:")
                 print(read[pos:pos+k])
                 print(kmer)
                 continue
                 
+        spring_pos = read.find("~".encode("utf-8"))
         spring_pos = read.find("~".encode("utf-8"))
 
         if spring_pos == -1:
@@ -462,8 +625,7 @@ def get_reads_se_by_kmer(kmer, kmer2tf, used_reads, k=23):
     return result
 
 
-
-def get_left_right_distances(left_kmer, right_kmer, kmer2tf):
+def get_left_right_distances(left_kmer, right_kmer, kmer2tf, k=23):
     '''
     Return a list of (rid, left_kmer_pos, right_kmer_pos) tuples.
 
@@ -472,28 +634,36 @@ def get_left_right_distances(left_kmer, right_kmer, kmer2tf):
     '''
     hits = defaultdict(list)
     for pos in kmer2tf.pos(left_kmer):
-        start = kmer2tf.get_rid(pos)
-        hits[start].append((0,pos-start))
+        if kmer2tf.reads[pos:pos+k] == left_kmer.encode("utf-8"):
+            start = kmer2tf.get_rid(pos)
+            hits[start].append((0,pos))
 
     for pos in kmer2tf.pos(right_kmer):
-        start = kmer2tf.get_rid(pos)
-        hits[start].append((1,pos-start))
+        if kmer2tf.reads[pos:pos+k] == right_kmer.encode("utf-8"):
+            start = kmer2tf.get_rid(pos)
+            hits[start].append((1,pos))
 
     results = []
     for rid, hit in hits.items():
         if len(hit) == 1:
             continue
         both_kmers_found = set([x[0] for x in hit])
-        if both_kmers_found == 1:
+        if len(both_kmers_found) == 1:
             continue
         if len(hit) == 2:
-            if hit[0][0] == 0:
-                results.append((rid, hit[0][1], hit[1][1]))
+            left_hit = hit[0][1]
+            right_hit = hit[0][1]
+            frag = kmer2tf.reads[min(left_hit, right_hit):max(left_hit, right_hit):]
+
+            if "~" in frag:
+                results.append((rid, left_hit, right_hit, None))
             else:
-                results.append((rid, hit[1][1], hit[0][1]))
-        for left_pos in [x[1] for x in hit if x[0] == 0]:
-            for right_pos in [x[1] for x in hit if x[0] == 1]:
-                results.append((rid, left_pos, right_pos))
+                results.append((rid, left_hit, right_hit, right_hit-left_hit))
+        else:
+            results.append((rid, None, None, None))
+        # for left_pos in [x[1] for x in hit if x[0] == 0]:
+        #     for right_pos in [x[1] for x in hit if x[0] == 1]:
+        #         results.append((rid, left_pos, right_pos))
     return results
 
 
@@ -529,15 +699,15 @@ def get_layout_for_kmer(kmer, kmer2tf, used_reads=None, k=23):
             continue
         seen_rids.add(rid)
         pos = poses[0]
-        spring_pos = read.find("~".encode("utf-8"))
-        left, right = read.split("~".encode("utf-8"))
+        spring_pos = read.find("~")
+        left, right = read.split("~")
         if pos < spring_pos:
             lefts.append("")
             rights.append(right)
             read = left
         else:
-            lefts.append("")
-            rights.append(left)
+            lefts.append(left)
+            rights.append("")
             pos = pos - len(left) - 1
             read = right
         max_pos = max(max_pos,pos)
@@ -546,7 +716,7 @@ def get_layout_for_kmer(kmer, kmer2tf, used_reads=None, k=23):
         rids.append(rid)
     max_length = max([len(x)+max_pos-starts[i] for i,x in enumerate(reads)])
     for i,read in enumerate(reads):
-        separator = "N".encode("utf-8")
+        separator = "N"
         reads[i] = separator*(max_pos-starts[i]) + read + separator * (max_length-max_pos+starts[i]-len(read))
     return max_pos, reads, lefts, rights, rids, starts
 

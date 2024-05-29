@@ -32,5 +32,10 @@
 *.app
 *.hpp.gch-c94f3761
 *.pyc
-/.idea/
-/venv/
+
+.idea*
+tests/kmers.23*
+tests/reads.reads
+bin/*
+venv/*
+cmake-build-debug/*

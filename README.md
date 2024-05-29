@@ -1,5 +1,6 @@
 # aindex
-Perfect hash based Index for text data
+
+Perfect hash based index for text data.
 
 ## Installation
 
@@ -11,7 +12,7 @@ git clone https://github.com/ot/emphf.git
 cd emphf
 cmake .
 make
-cd ../..
+cd ..
 ```
 
 ```

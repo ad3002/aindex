@@ -17,8 +17,6 @@ if __name__ == "__main__":
 
     kmer2tf = aindex.load_aindex(settings, skip_aindex=False, skip_reads=False)
 
-    time.sleep(10)
-
     print("P1DONE")
 
     s = "TAAGTTATTATTTAGTTAATACTTTTAACAATATTATTAAGGTATTTAAAAAATACTATTATAGTATTTAACATAGTTAAATACCTTCCTTAATACTGTTA"
