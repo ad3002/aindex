@@ -21,12 +21,9 @@
 #include <cstring>
 #include <string_view>
 
+
 typedef std::atomic<uint8_t> ATOMIC_BOOL;
-// emphf::stl_string_adaptor str_adapter;
-// TODO: it is a really slow down, because inside of mphf we have std::string(s).c_str() conversion
 emphf::stl_string_adaptor str_adapter;
-
-
 
 class UsedReads {
 public:
@@ -72,7 +69,6 @@ private:
     ATOMIC_BOOL* used_reads;
 };
 
-
 struct Hit {
     size_t rid;
     size_t start;
@@ -82,7 +78,7 @@ struct Hit {
     bool rev;
 };
 
-class AindexWrapper{
+class AindexWrapper {
 
     size_t *positions = nullptr;
     size_t *indices = nullptr;
@@ -122,9 +118,7 @@ public:
         indices = nullptr;
         positions = nullptr;
         read_pos_cache = nullptr;
-
     }
-
 
     void load(std::string index_prefix, std::string tf_file){
 
@@ -141,7 +135,7 @@ public:
     }
 
     void load_hash_file(std::string hash_filename) {
-        std::cout << "Loading only hash..." << std::endl;
+        emphf::logger() << "Loading only hash..." << std::endl;
         load_only_hash(*hash_map, hash_filename);
     }
 
@@ -398,8 +392,47 @@ public:
         return std::string(read);
     }
 
+    std::string get_read_by_rid(uint32_t rid, int ori) {
+
+        size_t start = start_positions[rid];
+        size_t end = start;
+        size_t spring_pos = 0;
+
+        while (true) {
+            if (reads[end] == '\n') {
+                char rkmer[end-spring_pos];
+                std::memcpy(rkmer, &reads[spring_pos+1], end-spring_pos-1);
+                rkmer[end-spring_pos-1] = '\0';
+                return std::string(rkmer);
+            } else if (reads[end] == '~') {
+                if (ori == 0) {
+                    char lkmer[end-start+1];
+                    std::memcpy(lkmer, &reads[start], end-start);
+                    lkmer[end-start] = '\0';
+                    return std::string(lkmer);
+                } else {
+                    spring_pos = end;
+                }
+            }
+            end += 1;
+        }
+    }
+
     size_t get_n() {
         return hash_map->n;
+    }
+
+    size_t get_rid(size_t pos) {
+        // Get rid by position.
+        while (true){
+            if (reads[pos] == '\n') {
+                return pos+1;
+            }
+            if (pos == 0) {
+                return pos;
+            }
+            pos -= 1;
+        }
     }
 
     size_t get_start(size_t pos) {
@@ -411,10 +444,10 @@ public:
     size_t get_kid_by_kmer(std::string _kmer) {
         uint64_t kmer = get_dna23_bitset(_kmer);
         return hash_map->get_pfid_by_umer_safe(kmer);
-
     }
 
-    void get_positions(size_t* r, const std::string& kmer) {
+    
+    void get_positions(size_t* r, const std::string_view& kmer) {
         // Get read positions and save them to given r
         auto h1 = hash_map->get_pfid(kmer);
         size_t j = 0;
@@ -549,6 +582,26 @@ public:
         return hash_map->tf_values[ukmer];
     }
 
+    size_t get(std::string kmer) {
+        // Return tf for given kmer
+        uint64_t ukmer = get_dna23_bitset(kmer);
+        auto h1 = hash_map->hasher.lookup(kmer, str_adapter);
+        if (h1 >= hash_map->n || hash_map->checker[h1] != ukmer) {
+            std::string rev_kmer = "NNNNNNNNNNNNNNNNNNNNNNN";
+            uint64_t urev_kmer = reverseDNA(ukmer);
+            get_bitset_dna23(urev_kmer, rev_kmer);
+            auto h2 = hash_map->hasher.lookup(rev_kmer, str_adapter);
+            if (h2 >= hash_map->n || hash_map->checker[h2] != urev_kmer) {
+                return 0;
+            } else {
+                return hash_map->tf_values[h2];
+            }
+        } else {
+            return hash_map->tf_values[h1];
+        }
+        return 0;
+    }
+
     size_t get_hash_value(const std::string kmer) {
         // Return hash value for given kmer
         return hash_map->get_pfid(kmer);
@@ -614,6 +667,7 @@ public:
         get_bitset_dna23_c(urev_kmer, rkmer, 23);
         return hash_map->tf_values[p];
     }
+
 
     size_t get_hash_size() {
         return hash_map->n;
@@ -820,12 +874,12 @@ public:
         }
     }
 
+
     void freeme(char* ptr)
     {
         std::cout << "freeing address: " << ptr << std::endl;
         free(ptr);
     }
-
 };
 
 AindexWrapper load_aindex(
@@ -851,6 +905,49 @@ AindexWrapper load_index(
     std::string tf_file = tf_prefix + ".tf.bin";
     aindex.load(index_prefix, tf_file);
     return aindex;
+}
+
+extern "C" {
+
+    AindexWrapper* AindexWrapper_new(){ return new AindexWrapper(); }
+    void AindexWrapper_load(AindexWrapper* foo, char* index_prefix, char* tf_file){ foo->load(index_prefix, tf_file); }
+
+
+    void AindexWrapper_freeme(AindexWrapper* foo, char* ptr){ foo->freeme(ptr); }
+
+
+
+    void AindexWrapper_load_hash_file(AindexWrapper* foo, char* hash_filename, char* tf_file){ foo->load(hash_filename, tf_file); }
+
+    void AindexWrapper_load_reads(AindexWrapper* foo, char* reads_file){ foo->load_reads(reads_file); }
+
+    void AindexWrapper_load_index(AindexWrapper* foo, char* index_prefix, uint32_t max_tf){ foo->load_aindex(index_prefix, max_tf); }
+    
+    void AindexWrapper_increase(AindexWrapper* foo, char* kmer){ foo->increase(kmer); }
+    void AindexWrapper_decrease(AindexWrapper* foo, char* kmer){ foo->decrease(kmer); }
+
+    size_t AindexWrapper_get_kid_by_kmer(AindexWrapper* foo, char* kmer){ return foo->get_kid_by_kmer(kmer); }
+
+    void AindexWrapper_get_kmer_by_kid(AindexWrapper* foo, size_t kid, char* kmer){ foo->get_kmer_by_kid(kid, kmer); }
+
+    size_t AindexWrapper_get(AindexWrapper* foo, char* kmer){ return foo->get(kmer); }
+
+    size_t AindexWrapper_get_n(AindexWrapper* foo){ return foo->get_n(); }
+
+    size_t AindexWrapper_get_rid(AindexWrapper* foo, size_t pos){ return foo->get_rid(pos); }
+
+//    char* AindexWrapper_get_read(AindexWrapper* foo, size_t start, int ori){ return foo->get_read(pos, ori); }
+
+    void AindexWrapper_get_positions(AindexWrapper* foo, size_t* r, char* kmer){ foo->get_positions(r, kmer); }
+
+
+    void AindexWrapper_set_positions(AindexWrapper* foo, size_t* r, char* kmer){ foo->set_positions(r, kmer); }
+
+    size_t AindexWrapper_get_kmer(AindexWrapper* foo, size_t p, char* kmer, char* rkmer){ return foo->get_kmer(p, kmer, rkmer); }
+
+    size_t AindexWrapper_get_strand(AindexWrapper* foo, char* kmer){ return foo->get_strand(kmer); }
+
+    size_t AindexWrapper_get_hash_size(AindexWrapper* foo){ return foo->get_hash_size(); }
 }
 
 #endif
