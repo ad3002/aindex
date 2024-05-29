@@ -7,9 +7,9 @@ INCLUDES = $(SRC_DIR)/helpers.hpp $(SRC_DIR)/debrujin.hpp $(SRC_DIR)/read.hpp $(
 SOURCES = $(SRC_DIR)/helpers.cpp $(SRC_DIR)/debrujin.cpp $(SRC_DIR)/read.cpp $(SRC_DIR)/kmers.cpp $(SRC_DIR)/settings.cpp $(SRC_DIR)/hash.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
 BIN_DIR = bin
+PACKAGE_DIR = aindex/core
 
-all: $(BIN_DIR) $(BIN_DIR)/compute_index.exe $(BIN_DIR)/compute_aindex.exe $(BIN_DIR)/compute_reads.exe $(BIN_DIR)/python_wrapper.so
-# all: $(BIN_DIR) $(BIN_DIR)/compute_index.exe $(BIN_DIR)/compute_aindex.exe $(BIN_DIR)/compute_reads.exe python_wrapper_linux.so python_wrapper_mac.so
+all: external $(BIN_DIR) $(BIN_DIR)/compute_index.exe $(BIN_DIR)/compute_aindex.exe $(BIN_DIR)/compute_reads.exe $(PACKAGE_DIR)/python_wrapper.so
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
@@ -26,17 +26,23 @@ $(BIN_DIR)/compute_reads.exe: $(SRC_DIR)/Compute_reads.cpp $(OBJECTS) | $(BIN_DI
 $(SRC_DIR)/python_wrapper.o: $(SRC_DIR)/python_wrapper.cpp $(INCLUDES)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(BIN_DIR)/python_wrapper.so: $(SRC_DIR)/python_wrapper.o $(OBJECTS) | $(BIN_DIR)
+$(PACKAGE_DIR)/python_wrapper.so: $(SRC_DIR)/python_wrapper.o $(OBJECTS) | $(PACKAGE_DIR)
 	$(CXX) $(CXXFLAGS) -shared -Wl,-soname,python_wrapper.so -o $@ $^
 
-# Uncomment this if macOS support is needed in the future
-# python_wrapper_mac.so: $(SRC_DIR)/python_wrapper.o $(OBJECTS)
-# 	$(CXX) $(CXXFLAGS) -shared -Wl,-install_name,python_wrapper.so -o $@ $^
+external:
+	mkdir -p external
+	cd external && git clone https://github.com/ad3002/emphf.git
+	cd external/emphf && cmake .
+	cd external/emphf && make
+	cp external/emphf/compute_mphf_seq $(BIN_DIR)
 
-$(SRC_DIR)/%.o: $(SRC_DIR)/%.cpp $(INCLUDES)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+install: all
+	mkdir -p $(PACKAGE_DIR)
+	cp aindex.py $(PACKAGE_DIR)
+	cp bin/python_wrapper.so $(PACKAGE_DIR)
 
 clean:
-	rm -f $(OBJECTS) $(SRC_DIR)/*.so $(SRC_DIR)/*.o $(BIN_DIR)/*.exe $(BIN_DIR)/python_wrapper.so # python_wrapper_mac.so
+	rm -f $(OBJECTS) $(SRC_DIR)/*.so $(SRC_DIR)/*.o $(BIN_DIR)/*.exe $(PACKAGE_DIR)/python_wrapper.so
+	rm -rf external
 
-.PHONY: all clean
+.PHONY: all clean external install

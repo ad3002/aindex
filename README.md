@@ -7,20 +7,9 @@ Perfect hash based index for text data.
 ```
 git clone https://github.com/ad3002/aindex.git
 cd aindex
-mkdir external
-git clone https://github.com/ad3002/emphf.git
-cd emphf
-cmake .
 make
-cd ..
-```
-
-## Compilation
-
-To compile the project, simply run:
-
-```
-make
+pip install build installer
+python -m build && python -m installer dist/aindex-1.0.0-py3-none-any.whl
 ```
 
 This will create the necessary executables in the `bin` directory.
@@ -61,7 +50,7 @@ g++ -c -std=c++11 -fPIC python_wrapper.cpp -o python_wrapper.o && g++ -c -std=c+
 
 ### Mac Compilation Command
 
-If you need to compile the Python wrapper on Mac:
+Currently unsupported in Makefile. But you can try to compile the Python wrapper on MacOs manually with the following command:
 
 ```
 g++ -c -std=c++11 -fPIC python_wrapper.cpp -o python_wrapper.o && g++ -c -std=c++11 -fPIC kmers.cpp kmers.hpp debrujin.cpp debrujin.hpp hash.cpp hash.hpp read.cpp read.hpp settings.hpp settings.cpp && g++ -shared -Wl,-install_name,python_wrapper.so -o python_wrapper.so python_wrapper.o kmers.o debrujin.o hash.o read.o settings.o
