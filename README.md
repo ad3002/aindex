@@ -25,27 +25,11 @@ make clean
 Compute all binary arrays:
 
 ```bash
-FASTQ1=raw_reads.101bp.IS350bp25_1.fastq
-FASTQ2=raw_reads.101bp.IS350bp25_2.fastq
+FASTQ1=tests/raw_reads.101bp.IS350bp25_1.fastq
+FASTQ2=tests/raw_reads.101bp.IS350bp25_2.fastq
+OUTPUT_PREFIX=tests/raw_reads.101bp.IS350bp25
 
-jellyfish count -m 23 -s 2G -t 4 -C -o kmers.23.jf2 $FASTQ1 $FASTQ2
-jellyfish dump -c -t -o kmers.23.dat kmers.23.jf2
-cut -f1 kmers.23.dat > kmer.23.kmers
-../external/emphf/compute_mphf_seq kmer.23.kmers kmer.23.pf
-
-../bin/compute_index.exe kmers.23.dat kmers.23.pf kmers.23 4 0
-
-../bin/compute_reads.exe raw_reads.101bp.IS350bp25_1.fastq raw_reads.101bp.IS350bp25_2.fastq fastq reads.reads
-
-../bin/compute_aindex.exe reads.reads kmers.23.pf kmers.23 kmers.23 40 23 kmers.23.tf.bin 
-```
-
-### Linux Compilation Command
-
-If you need to compile the Python wrapper on Linux:
-
-```
-g++ -c -std=c++11 -fPIC python_wrapper.cpp -o python_wrapper.o && g++ -c -std=c++11 -fPIC kmers.cpp kmers.hpp debrujin.cpp debrujin.hpp hash.cpp hash.hpp read.cpp read.hpp settings.hpp settings.cpp && g++ -shared -Wl,-soname,python_wrapper.so -o python_wrapper.so python_wrapper.o kmers.o debrujin.o hash.o read.o settings.o
+time python ~/Dropbox/workspace/aindex/scripts/compute_aindex.py -i $FASTQ1,$FASTQ2 -t fastq -o $OUTPUT_PREFIX --lu 2 -P 30
 ```
 
 ### Mac Compilation Command
@@ -64,9 +48,9 @@ You can simply run **demo.py** or:
 from aindex import *
 
 settings = {
-  "index_prefix": "tests/kmers.23",
-  "aindex_prefix": "tests/kmers.23",
-  "reads_file": "tests/reads.reads",
+  "index_prefix": "tests/raw_reads.101bp.IS350bp25.23",
+  "aindex_prefix": "tests/raw_reads.101bp.IS350bp25.23",
+  "reads_file": "tests/raw_reads.101bp.IS350bp25.reads",
 }
 
 index = load_aindex(settings)
