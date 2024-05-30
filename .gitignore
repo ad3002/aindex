@@ -36,6 +36,11 @@
 .idea*
 tests/kmers.23*
 tests/reads.reads
-bin/*
+bin
 venv/*
 cmake-build-debug/*
+.vscode
+external/*
+build
+aindex.egg-info
+dist

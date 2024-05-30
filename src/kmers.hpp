@@ -7,7 +7,7 @@
 
 #include <stdint.h>
 #include <string>
-
+#include <string_view>
 
 #define BASE_MASK 0x3 /* binary: 11 */
 
@@ -27,14 +27,16 @@ void get_bitset_dna13(uint32_t x, std::string &res, int k=13);
 void get_bitset_dna13_c(uint32_t x, char *res, int k);
 std::string get_bitset_dna13(uint32_t x);
 
-uint64_t get_dna23_bitset(std::string dna_str);
+uint64_t get_dna23_bitset(const std::string& dna_str);
+uint64_t get_dna23_bitset(const std::string_view& dna_str);
 uint64_t get_dna23_bitset(char* dna_str);
 
-uint32_t get_dna13_bitset(std::string dna_str);
+uint32_t get_dna13_bitset(const std::string dna_str);
 uint32_t get_dna13_bitset(char* dna_str);
 
-void get_revcomp(std::string &input, std::string &output);
-std::string get_revcomp(std::string &input);
+void get_revcomp(const std::string &input, std::string &output);
+std::string get_revcomp(const std::string &input);
+std::string get_revcomp(std::string_view input);
 
 uint64_t reverseDNA(uint64_t num);
 uint32_t reverseDNA(uint32_t num);

@@ -4,7 +4,9 @@
 
 #include <string>
 #include <iostream>
+#include <cstring>
 #include "kmers.hpp"
+
 
 #ifndef STIRKA_DNA_BITSEQ_HPP
 #define STIRKA_DNA_BITSEQ_HPP
@@ -16,9 +18,12 @@ public:
      * @param dna_str a string containing a DNA sequence
      * @param dna_len length of the DNA sequence
      */
+
     dna_bitset (const char* dna_str, size_t dna_len)
     {
         m_len = dna_len;
+
+
 
         /* bytes necessary to store dna_str as a bitset */
         size_t dna_bytes = (dna_len / 4) + (dna_len % 4 != 0);
@@ -53,6 +58,10 @@ public:
 
             shift = (shift == 0) ? 6 : shift-2;
         }
+    }
+
+    size_t length() {
+        return m_len;
     }
 
     void kmer(size_t pos, int k, char* dna_str) {

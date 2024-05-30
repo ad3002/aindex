@@ -20,8 +20,11 @@ namespace Settings {
 
     extern unsigned int MINIMAL_READ_LENGTH;
     extern unsigned int TRUE_ERRORS;
+    extern unsigned int TRUE_NOT_ERRORS;
+    extern unsigned int TRUE_REF_ERRORS;
     extern unsigned int PRE_ERRORS;
     extern unsigned int K;
+    extern unsigned int JFK;
     extern unsigned int MIN_Q;
     extern unsigned int MIN_MI;
     extern unsigned int MIN_MI_N;
@@ -29,6 +32,11 @@ namespace Settings {
     extern unsigned int TRIM_LOW_COV_TOLERANCE;
     extern unsigned int STIRKA_FILL_OVERLAP;
     extern unsigned int STIRKA_RESOLVE_SNP;
+    extern unsigned int VERBOSE;
+    extern unsigned int CORRECTION_LEVEL;
+    extern unsigned int COVERAGE;
+    extern unsigned int MERGE;
+    extern unsigned int INDEX_SIZE;
 
 }
 #endif //STIRKA_SETTINGS_H

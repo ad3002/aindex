@@ -5,16 +5,16 @@
 #include <string>
 #include <limits.h>
 #include <iostream>
-#include "settings.hpp"
+#include <string_view>
 
 /// CONVERTERS to uint 23-mers and 13-mers from strings and char*
 
-uint64_t get_dna23_bitset(std::string dna_str) {
+uint64_t get_dna23_bitset(const std::string& dna_str) {
     /*
      * Convert 23-mer to bit 23-mer.
      */
     uint64_t num = 0;
-    for (int8_t n=0; n<Settings::K; n++) {
+    for (int8_t n=0; n<23; n++) {
         num = num << 2;
         if (dna_str[n] == 'A') num += 0;
         if (dna_str[n] == 'C') num += 1;
@@ -24,7 +24,22 @@ uint64_t get_dna23_bitset(std::string dna_str) {
     return num;
 }
 
-uint32_t get_dna13_bitset(std::string dna_str) {
+uint64_t get_dna23_bitset(const std::string_view& dna_str) {
+    /*
+     * Convert 23-mer to bit 23-mer.
+     */
+    uint64_t num = 0;
+    for (int8_t n=0; n<23; n++) {
+        num = num << 2;
+        if (dna_str[n] == 'A') num += 0;
+        if (dna_str[n] == 'C') num += 1;
+        if (dna_str[n] == 'G') num += 2;
+        if (dna_str[n] == 'T') num += 3;
+    }
+    return num;
+}
+
+uint32_t get_dna13_bitset(const std::string& dna_str) {
     /*
      * Convert 13-mer to bit 13-mer.
      */
@@ -44,7 +59,7 @@ uint64_t get_dna23_bitset(char* dna_str) {
      * Convert 23-mer to bit 23-mer.
      */
     uint64_t num = 0;
-    for (int8_t n=0; n<Settings::K; n++) {
+    for (int8_t n=0; n<23; ++n) {
         num = num << 2;
         if (dna_str[n] == 'A') num += 0;
         if (dna_str[n] == 'C') num += 1;
@@ -270,7 +285,7 @@ std::string get_bitset_dna13(uint32_t x) {
 //}
 
 
-void get_revcomp(std::string &input, std::string &output) {
+void get_revcomp(const std::string &input, std::string &output) {
     /*
      * Revcomp for string.
      */
@@ -292,7 +307,7 @@ void get_revcomp(std::string &input, std::string &output) {
     }
 }
 
-std::string get_revcomp(std::string &input) {
+std::string get_revcomp(const std::string &input) {
     /*
      * Revcomp for  string.
      */
@@ -313,6 +328,29 @@ std::string get_revcomp(std::string &input) {
     }
     return output;
 }
+
+std::string get_revcomp(std::string_view input) {
+    /*
+     * Revcomp for  string.
+     */
+    size_t n = input.length();
+    std::string output(n, 'N');
+    for(int y = n-1; y >= 0; y--) {
+        if (input[y] == 'A') {
+            output[n-1-y] = 'T';
+        } else if (input[y] == 'C') {
+            output[n-1-y] = 'G';
+        } else if (input[y] == 'G') {
+            output[n-1-y] = 'C';
+        } else if (input[y] == 'T') {
+            output[n-1-y] = 'A';
+        } else {
+            output[n-1-y] = 'N';
+        }
+    }
+    return output;
+}
+
 
 uint64_t _reversePairs(uint64_t num) {
     /*

@@ -5,7 +5,6 @@
 #ifndef STIRKA_HASH_H
 #define STIRKA_HASH_H
 
-#include <stdint.h>
 #include <unordered_map>
 #include <string>
 #include "emphf/common.hpp"
@@ -80,7 +79,6 @@ struct Stats {
 };
 
 
-
 struct PHASH_MAP {
 
     HASHER hasher;
@@ -88,6 +86,7 @@ struct PHASH_MAP {
     ATOMIC_LONG *left_qtf_values;
     ATOMIC_LONG *right_qtf_values;
     uint64_t *checker;
+    std::vector<std::string> checker_string;
     size_t n = 0;
 
     Stats stats;
@@ -100,9 +99,14 @@ struct PHASH_MAP {
         right_qtf_values = nullptr;
         checker = nullptr;
         n = 0;
+
     }
 
     size_t get_n() {
+        return n;
+    }
+
+    size_t size() {
         return n;
     }
 
@@ -114,7 +118,6 @@ struct PHASH_MAP {
         if (left_qtf_values != nullptr) delete [] left_qtf_values;
         if (right_qtf_values != nullptr) delete [] right_qtf_values;
         if (checker != nullptr) delete [] checker;
-
     }
 
     inline unsigned int get_freq(uint64_t kmer) {
@@ -136,12 +139,15 @@ struct PHASH_MAP {
         return 0;
     }
 
-
-    inline size_t get_index_unsafe(std::string kmer) {
+    inline size_t get_hash_value(std::string_view kmer) {
         return hasher.lookup(kmer, str_adapter);
     }
 
-    inline size_t get_pfid(std::string &_kmer) {
+    inline size_t get_index_unsafe(std::string_view kmer) {
+        return hasher.lookup(kmer, str_adapter);
+    }
+
+    inline size_t get_pfid(std::string_view _kmer) {
         uint64_t kmer = get_dna23_bitset(_kmer);
         std::string _rev_kmer = "NNNNNNNNNNNNNNNNNNNNNNN";
         uint64_t rev_kmer = reverseDNA(kmer);
@@ -203,6 +209,12 @@ struct PHASH_MAP {
         return checker[p];
     }
 
+    inline std::string get_kmer_string(size_t p) {
+        std::string _kmer = "NNNNNNNNNNNNNNNNNNNNNNN";
+        get_bitset_dna23(checker[p], _kmer, Settings::K);
+        return _kmer;
+    }
+
     inline ATOMIC& get_atomic(uint64_t kmer) {
         std::string _kmer = "NNNNNNNNNNNNNNNNNNNNNNN";
         get_bitset_dna23(kmer, _kmer);
@@ -246,7 +258,7 @@ struct PHASH_MAP {
         }
     }
 
-    void save_values(std::string &file_name) {
+    void save_values(std::string &file_name, bool SKIP_ZEROS) {
         std::ofstream fh(file_name);
 
         if (!fh) {
@@ -254,12 +266,25 @@ struct PHASH_MAP {
             exit(12);
         }
 
+        size_t zeros = 0;
+        size_t ones = 0;
+        size_t other = 0;
         for (size_t i=0; i < n; i++) {
             std::string kmer = "NNNNNNNNNNNNNNNNNNNNNNN";
             get_bitset_dna23(checker[i], kmer);
-            fh << kmer << "\t" << tf_values[i].load() << "\n";
+            size_t tf = tf_values[i].load();
+            if (tf == 1) ones += 1;
+            if (tf == 0) zeros += 1;
+            if (tf > 1) other += 1;
+            if (tf > 0 || !SKIP_ZEROS) {
+                fh << kmer << "\t" << tf << "\n";
+            }
         }
         fh.close();
+
+        std::cout << "\tZeros: " << zeros << std::endl;
+        std::cout << "\tOnes: " << ones << std::endl;
+        std::cout << "\tOther: " << other << std::endl;
 
     }
 
@@ -341,7 +366,7 @@ struct AIndexCompressed {
 
     AIndexCompressed(PHASH_MAP &hash_map) {
 
-        std::cout << "Allocate indices" << std::endl;
+        emphf::logger() << "...Allocate indices..." << std::endl;
         indices = new size_t[hash_map.n+1];
         if (indices == nullptr) {
             emphf::logger() << "Failed to allocate memory for positions: " << hash_map.n+1 << std::endl;
@@ -349,32 +374,31 @@ struct AIndexCompressed {
         }
         indices[0] = 0;
         for (size_t i=1; i<hash_map.n+1; ++i) {
-//            if (hash_map.tf_values[i-1] > 1)
-//                std::cout << indices[i-1] + hash_map.tf_values[i-1] << " " << hash_map.tf_values[i-1] << std::endl;
             indices[i] = indices[i-1] + hash_map.tf_values[i-1];
             total_size += hash_map.tf_values[i-1];
             max_tf = std::max(max_tf, (size_t)hash_map.tf_values[i-1]);
         }
-
         std::cout << "\tmax_tf: " << max_tf << std::endl;
         std::cout << "\ttotal_size: " << total_size << std::endl;
+        emphf::logger() << "...Done." << std::endl;
 
-        std::cout << "Allocate ppositions" << std::endl;
+        std::cout << "...Allocate ppositions..." << std::endl;
         ppositions = new ATOMIC64[hash_map.n];
         if (ppositions == nullptr) {
             emphf::logger() << "Failed to allocate memory for positions: " << hash_map.n << std::endl;
             exit(10);
         }
         memset(ppositions, 0, hash_map.n * sizeof(ATOMIC64));
-
-        std::cout << "Allocate positions" << std::endl;
+        emphf::logger() << "...Done." << std::endl;
+        std::cout << "...Allocate positions..." << std::endl;
         positions = new ATOMIC64[total_size];
         if (positions == nullptr) {
             emphf::logger() << "Failed to allocate memory for positions: " << total_size << std::endl;
             exit(10);
         }
         memset(positions, 0, total_size * sizeof(ATOMIC64));
-
+        emphf::logger() << "...Done." << std::endl;
+        emphf::logger() << "Done." << std::endl;
     }
 
     ~AIndexCompressed() {
@@ -385,7 +409,7 @@ struct AIndexCompressed {
 
     void fill_index_from_reads(char *contents, size_t length, uint num_threads, PHASH_MAP &hash_map) {
 
-        emphf::logger() << "Building index..." << std::endl;
+        emphf::logger() << "Building index..." << " " << length << " " <<  num_threads << " " << Settings::K << std::endl;
 
         size_t batch_size = (length / num_threads) + 1;
         std::vector<std::thread> t;
@@ -487,12 +511,14 @@ struct AtomicCounter {
 };
 
 extern void load_hash(PHASH_MAP &hash_map, std::string &output_prefix, std::string &tf_file, std::string &hash_filename);
-extern void load_hash_with_empty_tf(PHASH_MAP &hash_map, std::string &output_prefix, std::string &hash_filename);
 extern void load_only_hash(PHASH_MAP &hash_map, std::string &hash_filename);
 void construct_hash_unordered_hash_illumina(std::string data_file, HASH_MAP13 &kmers);
 void load_hash_for_qkmer(PHASH_MAP &hash_map, size_t n, std::string &data_filename, std::string &hash_filename);
 void index_hash(PHASH_MAP &hash_map, std::string &dat_filename, std::string &hash_filename);
 void index_hash_pp(PHASH_MAP &hash_map, std::string &dat_filename, std::string &hash_filename, int num_threads, int mock_dat=0);
+void load_hash_only_pf(PHASH_MAP &hash_map, std::string &output_prefix, std::string &hash_filename, bool load_checker=true);
 void load_full_hash(PHASH_MAP &hash_map, std::string &hash_filename, int k, size_t n);
 void load_hash_full_tf(PHASH_MAP &hash_map, std::string &output_prefix, std::string &tf_file, std::string &hash_filename);
+
+
 #endif //STIRKA_HASH_H

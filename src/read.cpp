@@ -13,7 +13,6 @@
 #include <algorithm>
 #include <math.h>
 #include "emphf/common.hpp"
-#include "settings.h"
 
 namespace READS {
 
@@ -144,9 +143,6 @@ namespace READS {
         delete[] contents;
     }
 
-
-
-
     char* sgets(char *s, int n, char **strp){
         if (**strp == '\0') return NULL;
         int i;
@@ -218,7 +214,8 @@ namespace READS {
         delete[] contents0;
     }
 
-    void read_simple_spring_pairs(std::string file_name, std::vector<SPRING_PAIR *> &reads, size_t n_reads) {
+    template<typename T>
+    size_t read_simple_spring_pairs(std::string file_name, std::vector<T *> &reads) {
 
 
         barrier.lock();
@@ -253,33 +250,86 @@ namespace READS {
         size_t loaded = 0;
         while(NULL != sgets(buff, sizeof(buff), p)) {
             line_seq = std::string(buff);
-            SPRING_PAIR *read = new SPRING_PAIR(line_seq);
+            T *read = new T(line_seq);
             loaded += 1;
             if (loaded && loaded % 1000000 == 0 ) {
                 barrier.lock();
-                emphf::logger() << "Loaded " << loaded << " reads (" << n_reads << ")" << std::endl;
+                emphf::logger() << "Loaded " << loaded << " reads (?)" << std::endl;
                 barrier.unlock();
             }
             reads.push_back(read);
-            if (loaded == n_reads) {
-                break;
-            }
+//            if (loaded == n_reads) {
+//                break;
+//            }
         }
         barrier.lock();
         emphf::logger() << "Read: " << reads.size() << std::endl;
         barrier.unlock();
         delete[] contents0;
 
+        return loaded;
+
     }
+
+//    size_t read_simple_stupid_spring_pairs(std::string file_name, std::vector<STUPID_SPRING_PAIR *> &reads) {
+//        barrier.lock();
+//        emphf::logger() << "Starting load springs..." << std::endl;
+//        barrier.unlock();
+//
+//        std::ifstream infile(file_name, std::ios_base::binary);
+//        infile.seekg(0, std::ios::end);
+//        size_t length = infile.tellg();
+//
+//        emphf::logger() << "Trying allocate (GB): " << (sizeof(char) * (length+1ll)) /(1024ll*1024*1024*8)  << std::endl;
+//
+//        char *contents = new char[length + 1], *contents0 = contents;
+//        if (contents == nullptr) {
+//            emphf::logger() << "Failed to allocate memory for file content (char): " << length+1 << std::endl;
+//            exit(10);
+//        }
+//        emphf::logger() << "Done." << std::endl;
+//
+//        emphf::logger() << "Load reads into memory..."  << std::endl;
+//        infile.seekg(0, std::ios::beg);
+//        infile.read(contents, length);
+//        infile.close();
+//        contents[length] = '\n';
+//        emphf::logger() << "Done read." << std::endl;
+//
+//        std::string line_seq = "";
+//
+//        char buff[1000];
+//        char **p = &contents;
+//
+//        size_t loaded = 0;
+//        emphf::logger() << "Convert strings into read objects..."  << std::endl;
+//        while(NULL != sgets(buff, sizeof(buff), p)) {
+//            line_seq = std::string(buff);
+//            STUPID_SPRING_PAIR *read = new STUPID_SPRING_PAIR(line_seq);
+//            loaded += 1;
+//            if (loaded && loaded % 1000000 == 0 ) {
+//                barrier.lock();
+//                emphf::logger() << "Loaded " << loaded << " reads (?)" << std::endl;
+//                barrier.unlock();
+//            }
+//            reads.push_back(read);
+////            if (loaded == n_reads) {
+////                break;
+////            }
+//        }
+//        barrier.lock();
+//        emphf::logger() << "Read: " << reads.size() << std::endl;
+//        barrier.unlock();
+//        delete[] contents0;
+//        return loaded;
+//        emphf::logger() << "Done." << std::endl;
+//    }
 
     void read_pair_reads(std::string file_name1, std::string file_name2, std::vector<READ_PAIR *> &read_pairs) {
 
         barrier.lock();
         emphf::logger() << "Starting load read pairs..." << std::endl;
         barrier.unlock();
-
-
-
 
         std::string line_head1 = "";
         std::string line_seq1 = "";
@@ -371,7 +421,7 @@ namespace READS {
             std::cout << " " << it->type << " ";
             std::cout << " " << it->start_position << " ";
             std::cout << " " << it->stop_point << " ";
-            std::cout << " " << it->end_postition << " ";
+            std::cout << " " << it->end_position << " ";
             std::cout << " " << it->status << std::endl;
         }
     }

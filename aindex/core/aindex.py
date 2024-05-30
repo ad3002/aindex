@@ -5,36 +5,62 @@
 #@author: Aleksey Komissarov
 #@contact: ad3002@gmail.com
 
-import os, sys
-import os, sys
+import os
 import ctypes
 from ctypes import cdll
 from ctypes import *
-from ctypes import *
-
-import mmap
-from collections import defaultdict
-import mmap
-from collections import defaultdict
-from settings import dll_paths
-
-
-for dll_path in dll_paths:
-    if not "/" in dll_path:
-        dll_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), dll_path)
-    if os.path.isfile(dll_path):
-        print("Loading: %s (exists: %s)" % (dll_path, os.path.isfile(dll_path)))
-    if not "/" in dll_path:
-        dll_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), dll_path)
-    if os.path.isfile(dll_path):
-        print("Loading: %s (exists: %s)" % (dll_path, os.path.isfile(dll_path)))
-        lib = cdll.LoadLibrary(dll_path)
-        break
-else:
-    raise Exception("Ariadna's dll was not found: %s" % str(dll_paths))
-
-
 from intervaltree import IntervalTree
+import mmap
+from collections import defaultdict
+import importlib.resources as pkg_resources
+
+
+with pkg_resources.path('aindex.core', 'python_wrapper.so') as dll_path:
+    dll_path = str(dll_path)
+
+if not os.path.exists(dll_path):
+    raise Exception(f"aindex's dll was not found: {dll_path}")
+
+lib = cdll.LoadLibrary(dll_path)
+
+lib.AindexWrapper_new.argtypes = []
+lib.AindexWrapper_new.restype = c_void_p
+
+lib.AindexWrapper_load.argtypes = [c_void_p, c_char_p, c_char_p]
+lib.AindexWrapper_load.restype = None
+
+lib.AindexWrapper_get.argtypes = [c_void_p, c_char_p, c_char_p]
+lib.AindexWrapper_get.restype = c_size_t
+
+lib.AindexWrapper_get_kid_by_kmer.argtypes = [c_void_p, c_char_p]
+lib.AindexWrapper_get_kid_by_kmer.restype = c_size_t
+
+lib.AindexWrapper_get_kmer_by_kid.argtypes = [c_void_p, c_size_t, c_char_p]
+lib.AindexWrapper_get_kmer_by_kid.restype = None
+
+lib.AindexWrapper_load_index.argtypes = [c_void_p, c_char_p, c_uint32]
+lib.AindexWrapper_load_index.restype = None
+
+lib.AindexWrapper_load_reads.argtypes = [c_void_p, c_char_p]
+lib.AindexWrapper_load_reads.restype = None
+
+lib.AindexWrapper_get_hash_size.argtypes = [c_void_p]
+lib.AindexWrapper_get_hash_size.restype = c_size_t
+
+lib.AindexWrapper_get_rid.argtypes = [c_void_p]
+lib.AindexWrapper_get_rid.restype = c_size_t
+
+lib.AindexWrapper_get_strand.argtypes = [c_void_p]
+lib.AindexWrapper_get_strand.restype = c_size_t
+
+lib.AindexWrapper_get_kmer.argtypes = [c_void_p, c_size_t, c_char_p, c_char_p]
+lib.AindexWrapper_get_kmer.restype = c_size_t
+
+lib.AindexWrapper_get_positions.argtypes = [c_void_p, c_void_p, c_char_p]
+lib.AindexWrapper_get_positions.restype = None
+
+lib.AindexWrapper_set_positions.argtypes = [c_void_p, c_void_p, c_char_p]
+lib.AindexWrapper_set_positions.restype = None
 
 
 def get_revcomp(sequence):
@@ -53,52 +79,6 @@ def hamming_distance(s1, s2):
     """
     return sum(i != j for (i,j) in zip(s1, s2) if i != 'N' and j != 'N')
 
-
-
-lib.AindexWrapper_new.argtypes = []
-lib.AindexWrapper_new.restype = c_void_p
-
-lib.AindexWrapper_load.argtypes = [c_void_p, c_char_p]
-lib.AindexWrapper_load.restype = None
-
-lib.AindexWrapper_get.argtypes = [c_void_p, c_char_p]
-lib.AindexWrapper_get.restype = c_size_t
-
-lib.AindexWrapper_get_kid_by_kmer.argtypes = [c_void_p, c_char_p]
-lib.AindexWrapper_get_kid_by_kmer.restype = c_size_t
-
-lib.AindexWrapper_get_kmer_by_kid.argtypes = [c_void_p, c_size_t, c_char_p]
-lib.AindexWrapper_get_kmer_by_kid.restype = None
-
-
-lib.AindexWrapper_load_index.argtypes = [c_void_p, c_char_p, c_uint32]
-lib.AindexWrapper_load_index.restype = None
-
-lib.AindexWrapper_load_reads.argtypes = [c_void_p, c_char_p]
-lib.AindexWrapper_load_reads.restype = None
-
-lib.AindexWrapper_get_hash_size.argtypes = [c_void_p]
-lib.AindexWrapper_get_hash_size.restype = c_size_t
-
-
-
-lib.AindexWrapper_get_rid.argtypes = [c_void_p]
-lib.AindexWrapper_get_rid.restype = c_size_t
-
-lib.AindexWrapper_get_strand.argtypes = [c_void_p]
-lib.AindexWrapper_get_strand.restype = c_size_t
-
-
-
-
-lib.AindexWrapper_get_kmer.argtypes = [c_void_p, c_size_t, c_char_p, c_char_p]
-lib.AindexWrapper_get_kmer.restype = c_size_t
-
-lib.AindexWrapper_get_positions.argtypes = [c_void_p, c_void_p, c_char_p]
-lib.AindexWrapper_get_positions.restype = None
-
-lib.AindexWrapper_set_positions.argtypes = [c_void_p, c_void_p, c_char_p]
-lib.AindexWrapper_set_positions.restype = None
 
 
 class AIndex(object):
@@ -190,7 +170,6 @@ class AIndex(object):
 
         while True:
             while end < N and not self.end_cheker(end):
-            while end < N and not self.end_cheker(end):
                 end += 1
             yield start, end+1, self.reads[start:end]
             start = end+1
@@ -209,7 +188,6 @@ class AIndex(object):
 
 
         while True:
-            while not self.end_cheker(end):
             while not self.end_cheker(end):
                 end += 1
             splited_reads = self.reads[start:end].split("~".encode("utf-8"))
@@ -298,7 +276,6 @@ class AIndex(object):
         poses = []
         ids = []
         poses_array = []
-        for i in range(n):
         for i in range(n):
             if r[i] > 0:
                 poses_array.append(r[i]-1)
@@ -488,7 +465,6 @@ def iter_reads_by_kmer(kmer, kmer2tf, used_reads=None, only_left=False, skip_mul
         end = rid
         while True:
             if kmer2tf.end_cheker(end):
-            if kmer2tf.end_cheker(end):
                 break
             end += 1
         read = kmer2tf.reads[rid:end].decode("utf8")
@@ -581,7 +557,6 @@ def get_reads_se_by_kmer(kmer, kmer2tf, used_reads, k=23):
         end = hit
         while True:
             if kmer2tf.end_cheker(end):
-            if kmer2tf.end_cheker(end):
                 break
             end += 1
         poses = hits[hit]
@@ -590,12 +565,10 @@ def get_reads_se_by_kmer(kmer, kmer2tf, used_reads, k=23):
 
         pos = poses[0]
         if read[pos:pos+k] != kmer.encode("utf-8"):
-        if read[pos:pos+k] != kmer.encode("utf-8"):
             read = get_revcomp(read)
             poses = [len(read) - x - k for x in poses]
             pos = poses[0]
             was_reversed = 1
-            if read[pos:pos+k] != kmer.encode("utf-8"):
             if read[pos:pos+k] != kmer.encode("utf-8"):
                 print("Critical error kmer and ref are not equal:")
                 print(read[pos:pos+k])

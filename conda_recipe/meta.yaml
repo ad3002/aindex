@@ -1,0 +1,26 @@
+package:
+  name: aindex
+  version: 1.0.0
+
+source:
+  path: ..
+
+build:
+  number: 0
+  script: "bash build.sh"
+
+requirements:
+  build:
+    - python
+    - pip
+    - setuptools
+    - cmake
+    - gxx_linux-64  # Adjust according to your platform
+
+  run:
+    - python
+
+about:
+  home: https://github.com/ad3002/aindex
+  license: MIT
+  summary: Perfect hash based index for text data.

@@ -5,10 +5,7 @@
 #@author: Aleksey Komissarov
 #@contact: ad3002@gmail.com
 
-import sys
 import argparse
-# from trseeker.seqio.fasta_file import sc_iter_fasta
-
 
 def sc_iter_fasta_brute(file_name, inmem=False):
     """ Iter over fasta file."""
