@@ -1,127 +1,203 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-#@created: 01.01.2017
-#@author: Aleksey Komissarov
-#@contact: ad3002@gmail.com
+# @created: 01.01.2017
+# @author: Aleksey Komissarov
+# @contact: ad3002@gmail.com
 
 import argparse
-from PyExp import runner
-import os, sys
+import os
+import subprocess
 
 
-if __name__ == '__main__':
+def runner(commands):
+    for command in commands:
+        print(command)
+        subprocess.run(command, shell=True)
 
-    parser = argparse.ArgumentParser(description='Compute index.')
-    parser.add_argument('-i', help='Fasta, comma separated fastqs or reads', required=True)
-    parser.add_argument('-j', help='JF2 file if exists (None)', required=False, default=None)
-    parser.add_argument('-t', help='Reads type (reads|fasta|fastq)', required=False, default="reads")
-    parser.add_argument('--aindex', help='Build aindex after index', required=False, default=False)
-    parser.add_argument('-o', help='Output prefix', required=True)
-    parser.add_argument('-s', help='Sort dat file (None)', required=False, default=None)
-    parser.add_argument('--interactive', help='Interactive (False)', required=False, default=None)
-    parser.add_argument('-P', help='Threads (12)', required=False, default=12)
-    parser.add_argument('-M', help='JF2 memory in Gb (5)', required=False, default=5)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Compute index.")
+    parser.add_argument(
+        "-i", help="Fasta, comma separated fastqs or reads", required=True
+    )
+    parser.add_argument(
+        "-j", help="JF2 file if exists [None]", required=False, default=None
+    )
+    parser.add_argument(
+        "--index", help="Index prefix if exists [None]", required=False, default=None
+    )
+    parser.add_argument(
+        "-t",
+        help="Reads type reads, fasta, fastq, se [fastq]",
+        required=False,
+        default="fastq",
+    )
+    parser.add_argument("-o", help="Output prefix", required=True)
+    parser.add_argument(
+        "-H", help="Build header file for fasta", required=False, default=False
+    )
+    parser.add_argument("--lu", help="-L for jellyfish [0]", required=False, default=0)
+    parser.add_argument("--sort", help="Sort dat file [None]", required=False, default=None)
+    parser.add_argument(
+        "--interactive", help="Interactive [None]", required=False, default=None
+    )
+    parser.add_argument("-P", help="Threads [12]", required=False, default=12)
+    parser.add_argument("-M", help="JF2 memory in Gb [5]", required=False, default=5)
+    parser.add_argument(
+        "--onlyindex", help="Compute only index [False]", required=False, default=False
+    )
+    parser.add_argument(
+        "--unzip", help="Unzip files [False]", required=False, default=False
+    )
+    parser.add_argument(
+        "--kmers", help="Make kmers file [False]", required=False, default=False
+    )
+    parser.add_argument(
+        "--path_to_aindex",
+        help="Path to aindex folder inside Tools [../bin]",
+        required=False,
+        default=None,
+    )
 
     args = vars(parser.parse_args())
 
-    ### Checking installed tools:
-    ####### 1) jellyfish
-    ####### 2) compute_mphf_seq.exe
-    ####### 3) compute_index.exe
-    ####### 4) compute_aindex.exe
-    ####### 5) convert_reads_to_fasta.exe
-    ####### 5) convert_fasta_q_to_reads.exe
-
-
     reads_file = args["i"]
     prefix = args["o"]
-    reads_type = args["t"].lower()
-    build_aindex = bool(args["aindex"])
-
-    if not reads_type in ["reads","fastq","fasta"]:
-        print("Reads type not reds or fastq or fasta")
-        sys.exit(1)
-
+    reads_type = args["t"]
     threads = args["P"]
     jf2_file = args["j"]
-    sort_dat_file = args["s"]
+    sort_dat_file = args["sort"]
+    unzip = args["unzip"]
     memory = args["M"]
     interactive = args["interactive"]
+    only_index = args["onlyindex"]
+    index_prefix = args["index"]
+    path_to_aindex = args["path_to_aindex"]
 
-    if not jf2_file:
+    if path_to_aindex is None:
+        script_path = os.path.abspath(__file__)
+        script_dir = os.path.dirname(script_path)
+        parent_dir = os.path.dirname(script_dir)
+        path_to_aindex = os.path.join(parent_dir, "bin")
+
+    # Check if input required files exist
+    required_files = reads_file.split(",")
+    missing_files = [
+        file for file in required_files if file and not os.path.exists(file)
+    ]
+
+    if missing_files:
+        print("The following files are missing:")
+        for file in missing_files:
+            print(file)
+        exit(1)
+
+    make_kmers = bool(args["kmers"])
+
+    lu = args["lu"]
+
+    build_header = bool(args["H"])
+
+    if unzip:
+        local_files = reads_file.split(",")
+        for file_name in local_files:
+            command = "gzip -d %s" % file_name
+            runner(command)
+
+    if not jf2_file and not index_prefix:
         if reads_type == "reads":
-            print("Converting reads to fasta...")
             commands = [
-                "convert_reads_to_fasta.exe %s %s fasta" % (reads_file, prefix),
+                f"python {path_to_aindex}/reads_to_fasta.py -i {reads_file} -o {prefix}.fa",
+                f"jellyfish count -m 23 -t {threads} -s {memory}G -C -L {lu} -o {prefix}.23.jf2 {prefix}.fa",
             ]
-            runner.run(commands)
-            print("Computing jf2 file from fasta or fastq...")
-            commands = [
-                "jellyfish count -m 23 -t %s -s %sG -C -o %s.23.jf2 %s.fa" % (threads, memory, prefix, prefix),
-            ]
-            runner.run(commands)
+            runner(commands)
             if interactive:
-                raw_input("Continue?")
-        elif reads_type == "fasta" or reads_type == "fastq":
-            print("Computing jf2 file from fasta or fastq...")
+                input("Continue?")
+        elif reads_type == "fasta" or reads_type == "fastq" or reads_type == "se":
             commands = [
-                "jellyfish count -m 23 -t %s -s %sG -C -o %s.23.jf2 %s" % (threads, memory, prefix, reads_file.replace(",", " ")),
+                f"jellyfish count -m 23 -t %s -s %sG -C -L %s -o %s.23.jf2 %s"
+                % (threads, memory, lu, prefix, reads_file.replace(",", " ")),
             ]
-            runner.run(commands)
+            runner(commands)
             if interactive:
-                raw_input("Continue?")
-    if build_aindex and reads_type == "fasta":
-        print("Computing fasta to reads...")
+                input("Continue?")
+
+        jf2_file = "%s.23.jf2" % prefix
+
+        ### here we expect that jf2 file is created
+        if not os.path.exists(jf2_file):
+            print("JF2 file is missing, please, check jellyfish command")
+            exit(1)
+
+    commands = []
+
+    if not only_index:
+        if reads_type == "fasta":
+            if not build_header:
+                commands = [
+                    f"python {path_to_aindex}/fasta_to_reads.py -i {reads_file} -o {prefix}.reads",
+                ]
+            else:
+                commands = [
+                    f"python {path_to_aindex}/fasta_to_reads.py -i {reads_file} -o {prefix}.reads -H {prefix}.header",
+                ]
+        if reads_type == "fastq":
+            commands = [
+                f"{path_to_aindex}/V2_converter.exe {reads_file.replace(',', ' ')} fastq {prefix}.reads",
+            ]
+
+        if reads_type == "se":
+            commands = [
+                f"{path_to_aindex}/V2_converter.exe {reads_file.replace(',', ' ')} - se {prefix}.reads",
+            ]
+
+        runner(commands)
+
+        ### here we expect that reads file is created
+        if not os.path.exists("%s.reads" % prefix):
+            print("Reads file is missing, please, check conversion command")
+            exit(1)
+
+    if not index_prefix:
+        if lu:
+            commands = [
+                f"jellyfish dump -t -c -L {lu} -o {prefix}.23.dat {jf2_file}",
+            ]
+        else:
+            commands = [
+                f"jellyfish dump -t -c -o {prefix}.23.dat {jf2_file}",
+            ]
+
+        runner(commands)
+
+        if sort_dat_file:
+            commands = [
+                f"sort -k2nr {prefix}.23.dat > {prefix}.23.sdat",
+            ]
+            runner(commands)
+
         commands = [
-            "convert_fasta_q_to_reads.exe %s fasta %s.reads" % (reads_file, prefix),   
-        ]                
-        runner.run(commands)
-    if build_aindex and reads_type == "fastq":
-        print("Computing fastq to reads...")
-        commands = [
-            "convert_fasta_q_to_reads.exe %s fastq %s.reads" % (reads_file.replace(",", " "), prefix),   
+            f"jellyfish histo -o {prefix}.23.histo {jf2_file}",
+            f"cut -f1 {prefix}.23.dat > {prefix}.23.kmers",
+            f"{path_to_aindex}/compute_mphf_seq.exe {prefix}.23.kmers {prefix}.23.pf",
+            f"{path_to_aindex}/compute_index.exe {prefix}.23.dat {prefix}.23.pf {prefix}.23 {threads} 0",
         ]
-        runner.run(commands)
+        runner(commands)
 
-    commands = [
-        "jellyfish dump -t -c -o %s.23.dat %s.23.jf2" % (prefix, prefix),
-        "jellyfish histo -o %s.23.histo %s.23.jf2" % (prefix, prefix),
-        "cut -f1 %s.23.dat > %s.23.kmers" % (prefix, prefix),
-        "compute_mphf_seq.exe %s.23.kmers %s.23.pf" % (prefix, prefix),
-        "compute_index.exe %s.23.dat %s.23.pf %s.23 %s" % (prefix, prefix, prefix, threads),
-    ]
-    steps_info = [
-        "Compute dat file from jf2 database...",
-        "Compute histo file from jf2 database...",
-        "Compute kmers from dat file...",
-        "Compute mphf from kmers...",
-        "Compute build index...",
-        
-    ]
-    for i, command in commands:
-        print(steps_info[i])
-        runner.run([commands[i]])
-
-
-    if build_aindex:
+    if not only_index:
         commands = [
-            "compute_aindex.exe %s.reads %s.23.pf %s.23 %s.aindex %s 23 %s.23.tf.bin" % (prefix, prefix, prefix, prefix, threads, prefix),   
+            f"{path_to_aindex}/compute_aindex.exe {prefix}.reads {prefix}.23.pf {prefix}.23 {prefix}.23 {threads} 23 {prefix}.23.tf.bin",
         ]
-        print("Compute build aindex...")
-        runner.run(commands)
+        runner(commands)
 
-    commands = [
-        "rm %s.23.dat %s.23.kmers" % (prefix, prefix),
-    ]
-    print("Remove old files build aindex...")
-    runner.run(commands)
-
-    if sort_dat_file:
-        print("Sort dat file...")
+    if make_kmers:
         commands = [
-            "sort -k2nr %s.23.dat > %s.23.sdat" % (prefix, prefix),
+            f"rm {prefix}.23.dat {prefix}.23.jf2",
         ]
-        runner.run(commands)
-        
+    else:
+        commands = [
+            f"rm {prefix}.23.dat {prefix}.23.kmers {prefix}.23.jf2",
+        ]
 
+    runner(commands)
