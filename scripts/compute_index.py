@@ -58,7 +58,7 @@ if __name__ == "__main__":
 
     commands = [
         f"cut -f1 {prefix}.23.dat > {prefix}.23.kmers",
-        f"{path_to_aindex}/compute_mphf_seq.exe {prefix}.23.kmers {prefix}.23.pf",
+        f"{path_to_aindex}/compute_mphf_seq {prefix}.23.kmers {prefix}.23.pf",
         f"{path_to_aindex}/compute_index.exe {prefix}.23.dat {prefix}.23.pf {prefix}.23 {threads} 0",
         f"rm {prefix}.23.dat {prefix}.23.jf2",
     ]

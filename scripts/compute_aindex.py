@@ -106,12 +106,14 @@ if __name__ == "__main__":
             runner(command)
 
     if not jf2_file and not index_prefix:
+        # TODO: fix reads renaming if -t reads and different prefix
         if reads_type == "reads":
             commands = [
                 f"python {path_to_aindex}/reads_to_fasta.py -i {reads_file} -o {prefix}.fa",
                 f"jellyfish count -m 23 -t {threads} -s {memory}G -C -L {lu} -o {prefix}.23.jf2 {prefix}.fa",
             ]
             runner(commands)
+            
             if interactive:
                 input("Continue?")
         elif reads_type == "fasta" or reads_type == "fastq" or reads_type == "se":
@@ -144,12 +146,12 @@ if __name__ == "__main__":
                 ]
         if reads_type == "fastq":
             commands = [
-                f"{path_to_aindex}/V2_converter.exe {reads_file.replace(',', ' ')} fastq {prefix}.reads",
+                f"{path_to_aindex}/compute_reads.exe {reads_file.replace(',', ' ')} fastq {prefix}.reads",
             ]
 
         if reads_type == "se":
             commands = [
-                f"{path_to_aindex}/V2_converter.exe {reads_file.replace(',', ' ')} - se {prefix}.reads",
+                f"{path_to_aindex}/compute_reads.exe {reads_file.replace(',', ' ')} - se {prefix}.reads",
             ]
 
         runner(commands)
@@ -180,7 +182,7 @@ if __name__ == "__main__":
         commands = [
             f"jellyfish histo -o {prefix}.23.histo {jf2_file}",
             f"cut -f1 {prefix}.23.dat > {prefix}.23.kmers",
-            f"{path_to_aindex}/compute_mphf_seq.exe {prefix}.23.kmers {prefix}.23.pf",
+            f"{path_to_aindex}/compute_mphf_seq {prefix}.23.kmers {prefix}.23.pf",
             f"{path_to_aindex}/compute_index.exe {prefix}.23.dat {prefix}.23.pf {prefix}.23 {threads} 0",
         ]
         runner(commands)
