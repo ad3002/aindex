@@ -5,6 +5,7 @@
 #@author: Aleksey Komissarov
 #@contact: ad3002@gmail.com
 
+import os
 from aindex import *
 
 settings = {
@@ -13,6 +14,11 @@ settings = {
   "reads_file": "tests/test.reads",
   "sdat_file": "tests/test.23.sdat",
 }
+
+script_folder = os.path.dirname(os.path.abspath(__file__))
+command = f"python {script_folder}/compute_aindex.py -i {script_folder}/../tests/raw_reads.101bp.IS350bp25_1.fastq,{script_folder}/../tests/raw_reads.101bp.IS350bp25_2.fastq -t fastq -o {script_folder}/../tests/test --sort 1"
+print(command)
+os.system(command)
 
 index = load_aindex(settings)
 
