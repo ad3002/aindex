@@ -877,6 +877,9 @@ void index_hash_pp(PHASH_MAP &hash_map, std::string &dat_filename, std::string &
     barrier.unlock();
 }
 
+
+
+
 void load_hash_for_qkmer(PHASH_MAP &hash_map, size_t n, std::string &data_filename, std::string &hash_filename) {
 
     barrier.lock();

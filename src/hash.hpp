@@ -200,7 +200,7 @@ struct PHASH_MAP {
         return hasher.lookup(_kmer, str_adapter);
     }
 
-    inline unsigned int get_freq(std::string &kmer) {
+    inline unsigned int get_freq(std::string_view kmer) {
         uint64_t _kmer = get_dna23_bitset(kmer);
         return get_freq(_kmer);
     }
