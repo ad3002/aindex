@@ -150,9 +150,7 @@ class AIndex(object):
             self.reads = mmap.mmap(f.fileno(), 0)
             self.reads_size = self.reads.size()
         lib.AindexWrapper_load_reads(self.obj, reads_file.encode('utf-8'))
-        lib.AindexWrapper_load_reads(self.obj, reads_file.encode('utf-8'))
         print("\tloaded %s chars." % self.reads_size)
-
 
         if isinstance(self.reads[0], int):
             self.end_cheker = lambda x: chr(self.reads[x]) == "\n"
@@ -192,7 +190,6 @@ class AIndex(object):
         while True:
             while not self.end_cheker(end):
                 end += 1
-            splited_reads = self.reads[start:end].split("~".encode("utf-8"))
             splited_reads = self.reads[start:end].split("~".encode("utf-8"))
             for i, subread in enumerate(splited_reads):
                 yield rid, start, i, subread
@@ -422,7 +419,6 @@ def load_aindex(settings, prefix=None, reads=None, aindex_prefix=None, skip_read
     
     kmer2tf = AIndex(prefix)
     kmer2tf.max_tf = settings["max_tf"]
-    kmer2tf.max_tf = settings["max_tf"]
     if not skip_reads:
         kmer2tf.load_reads(reads)
     if not skip_aindex:
@@ -574,7 +570,6 @@ def get_reads_se_by_kmer(kmer, kmer2tf, used_reads, k=23):
                 continue
                 
         spring_pos = read.find("~")
-        spring_pos = read.find("~")
 
         if spring_pos == -1:
             result.append([hit, end+1, read, pos, -1, was_reversed, poses])
@@ -690,4 +685,3 @@ def get_layout_for_kmer(kmer, kmer2tf, used_reads=None, k=23):
         separator = "N"
         reads[i] = separator*(max_pos-starts[i]) + read + separator * (max_length-max_pos+starts[i]-len(read))
     return max_pos, reads, lefts, rights, rids, starts
-
