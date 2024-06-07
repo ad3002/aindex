@@ -9,7 +9,6 @@ import argparse
 import os
 import subprocess
 
-
 def runner(commands):
     for command in commands:
         print(command)
@@ -38,6 +37,7 @@ if __name__ == "__main__":
         "-H", help="Build header file for fasta", required=False, default=False
     )
     parser.add_argument("--lu", help="-L for jellyfish [0]", required=False, default=0)
+    parser.add_argument("--up", help="-U for jellyfish [10000000]", required=False, default=10000000)
     parser.add_argument("--sort", help="Sort dat file [None]", required=False, default=None)
     parser.add_argument(
         "--interactive", help="Interactive [None]", required=False, default=None
@@ -96,6 +96,7 @@ if __name__ == "__main__":
     make_kmers = bool(args["kmers"])
 
     lu = args["lu"]
+    up = args["up"]
 
     build_header = bool(args["H"])
 
@@ -110,7 +111,7 @@ if __name__ == "__main__":
         if reads_type == "reads":
             commands = [
                 f"python {path_to_aindex}/reads_to_fasta.py -i {reads_file} -o {prefix}.fa",
-                f"jellyfish count -m 23 -t {threads} -s {memory}G -C -L {lu} -o {prefix}.23.jf2 {prefix}.fa",
+                f"jellyfish count -m 23 -t {threads} -s {memory}G -C -L {lu} -U {up} -o {prefix}.23.jf2 {prefix}.fa",
             ]
             runner(commands)
             
@@ -118,8 +119,8 @@ if __name__ == "__main__":
                 input("Continue?")
         elif reads_type == "fasta" or reads_type == "fastq" or reads_type == "se":
             commands = [
-                f"jellyfish count -m 23 -t %s -s %sG -C -L %s -o %s.23.jf2 %s"
-                % (threads, memory, lu, prefix, reads_file.replace(",", " ")),
+                f"jellyfish count -m 23 -t %s -s %sG -C -L %s -U %s -o %s.23.jf2 %s"
+                % (threads, memory, lu, up, prefix, reads_file.replace(",", " ")),
             ]
             runner(commands)
             if interactive:
