@@ -13,7 +13,6 @@
 #include "hash.hpp"
 #include <string_view>
 #include "helpers.hpp"
-// #include "omp.h"
 #include <fcntl.h>
 #include <unistd.h>
 #include <unordered_map>

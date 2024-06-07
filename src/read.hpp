@@ -1,7 +1,6 @@
 //
 // Created by Aleksey Komissarov on 29/08/15.
-// akomissarov@dell:~/Dropbox/Ariadna/Stirka$ g++ -std=c++11 -pthread -static -Wl,--whole-archive -lpthread -Wl,--no-whole-archive Compute_forks.cpp kmers.cpp kmers.hpp debrujin.cpp debrujin.hpp hash.cpp hash.hpp correction.cpp correction.hpp read.cpp read.hpp statistics.hpp settings.hpp settings.cpp -o bin/V2_forks.exe -O3 -rdynamic
-
+//
 
 #ifndef STIRKA_READ_H
 #define STIRKA_READ_H
@@ -31,16 +30,6 @@ const int MINIMAL_PHRED = 33;
 const int MAXIMAL_PHRED = 125;
 
 typedef std::atomic<size_t> ATOMIC_SIZE_T;
-
-//bool has_ending(std::string const &fullString, std::string const &ending) {
-//    if (fullString.length() >= ending.length()) {
-//        return (0 == fullString.compare (fullString.length() - ending.length(), ending.length(), ending));
-//    } else {
-//        return false;
-//    }
-//}
-
-
 
 namespace READS {
 
@@ -1370,7 +1359,6 @@ namespace READS {
         }
     };
 
-
     void read_sreads(std::string file_name, std::vector<READ *> &reads);
 
     void read_springs(std::string file_name, std::vector<SPRING *> &reads);
@@ -1385,11 +1373,8 @@ namespace READS {
 
     void read_spring_pairs(std::string file_name, std::vector<SPRING_PAIR *> &reads, size_t n_reads);
 
-//    size_t read_simple_stupid_spring_pairs(std::string file_name, std::vector<STUPID_SPRING_PAIR *> &reads);
-
     template<typename T>
     size_t read_simple_spring_pairs(std::string file_name, std::vector<T *> &reads);
-
 
 }
 

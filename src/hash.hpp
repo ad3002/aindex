@@ -78,7 +78,6 @@ struct Stats {
     }
 };
 
-
 struct PHASH_MAP {
 
     HASHER hasher;
@@ -352,9 +351,7 @@ private:
 
 };
 
-
 void lu_compressed_worker(int worker_id, size_t start, size_t end, char *contents,  ATOMIC64 *positions, ATOMIC64 *ppositions, size_t* indices, PHASH_MAP &hash_map);
-
 
 struct AIndexCompressed {
 
@@ -491,7 +488,6 @@ struct AIndexCompressed {
 private:
 
 };
-
 
 struct AtomicCounter {
 
