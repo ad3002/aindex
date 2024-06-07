@@ -43,7 +43,6 @@ int main(int argc, char** argv) {
     std::string output_prefix = argv[4];
     static const uint num_threads = atoi(argv[5]);
     Settings::K = atoi(argv[6]);
-    std::string line;
 
     std::string tf_file = argv[7];
 
@@ -61,7 +60,7 @@ int main(int argc, char** argv) {
     emphf::logger() << "Opening read_file: " << read_file << std::endl;
 
     std::vector<size_t> start_positions;
-    std::map<size_t, uint32_t> start2rid;
+    std::unordered_map<size_t, uint32_t> start2rid;
 
     std::ifstream infile(read_file);
     if (!infile) {
@@ -81,7 +80,6 @@ int main(int argc, char** argv) {
     infile.read(contents, length);
     infile.close();
     contents[length] = 0;
-    std::string line_seq = "";
     uint32_t rid = 0;
     size_t pos = 0;
     start_positions.push_back(pos);

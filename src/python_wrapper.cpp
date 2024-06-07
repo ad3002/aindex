@@ -4,7 +4,6 @@
 #include <iostream>
 #include <fstream>
 #include <string>
-#include <map>
 #include <vector>
 #include <algorithm>
 #include <sys/mman.h>
@@ -14,7 +13,6 @@
 #include "hash.hpp"
 #include <string_view>
 #include "helpers.hpp"
-// #include "omp.h"
 #include <fcntl.h>
 #include <unistd.h>
 #include <unordered_map>
@@ -93,13 +91,13 @@ public:
     PHASH_MAP *hash_map;
     size_t n_reads = 0;
     size_t n_kmers = 0;
-    std::map<size_t, uint32_t> start2rid;
+    std::unordered_map<size_t, uint32_t> start2rid;
     std::vector<size_t> start_positions;
 
     size_t reads_length = 0;
     char *reads = nullptr;
 
-    std::map<size_t, size_t> start2end;
+    std::unordered_map<size_t, size_t> start2end;
 
     AindexWrapper() {
 
@@ -298,6 +296,74 @@ public:
         
         emphf::logger() << "\tDone" << std::endl;
 
+    }
+
+    void load_reads_in_memory(std::string reads_file) {
+        // Load reads into memory
+        emphf::logger() << "Loading reads file into memory..." << std::endl;
+        std::ifstream fin(reads_file, std::ios::in | std::ios::binary);
+        if (!fin) {
+            std::cerr << "Failed to open file" << std::endl;
+            exit(1);
+        }
+
+        fin.seekg(0, std::ios::end);
+        size_t length = fin.tellg();
+        fin.seekg(0, std::ios::beg);
+
+        reads = new char[length];
+        fin.read(reads, length);
+        fin.close();
+
+        if (!reads) {
+            std::cerr << "Failed to allocate memory for reads" << std::endl;
+            exit(10);
+        }
+
+        reads_length = length;
+        n_reads = 0;
+
+        for (size_t i = 0; i < length; ++i) {
+            if (reads[i] == '\n') n_reads += 1;
+        }
+        emphf::logger() << "\tloaded reads: " << n_reads << std::endl;
+
+        emphf::logger() << "\tbuilding start pos index over reads: " << std::endl;
+
+        size_t rid = 0;
+        size_t start = 0;
+        size_t total = 0;
+
+        uint16_t local_start = 0;
+        read_pos_cache = new uint32_t[reads_length];
+        for (size_t i = 0; i < length; ++i) {
+            if (i % 100000000 == 0) {
+                double progress = static_cast<double>(i + 1) / length;
+                printProgressBar(progress);
+            }
+            read_pos_cache[i] = local_start;
+            total++;
+            if (reads[i] == '\n') {
+                start2end.emplace(start, i);
+                start2rid[start] = rid;
+                start_positions.push_back(start);
+                start = i + 1;
+                rid += 1;
+                local_start = 0;
+            } else {
+                ++local_start;
+            }
+        }
+        printProgressBar(1.0);
+
+        if (start < length) {
+            start2end.emplace(start, total);
+            start2rid[start] = rid;
+            start_positions.push_back(start);
+        }
+
+        std::cout << std::endl;
+        emphf::logger() << "\tDone" << std::endl;
     }
 
     void load_aindex(std::string aindex_prefix, uint32_t _max_tf) {
@@ -517,13 +583,13 @@ public:
         }
     }
 
-    std::map<size_t, std::vector<size_t> > get_rid2poses(const std::string& kmer) {
+    std::unordered_map<size_t, std::vector<size_t> > get_rid2poses(const std::string& kmer) {
         // ''' Wrapper that handle case when two kmer hits in one read.
         // Return rid->poses_in_read dictionary for given kmer. 
         // In this case rid is the start position in reads file.
         // '''
         std::vector<size_t> poses = get_positions_vector(kmer);
-        std::map<size_t, std::vector<size_t> > result;
+        std::unordered_map<size_t, std::vector<size_t> > result;
 
         for (size_t pos: poses) {
             size_t start = get_start(pos);
@@ -887,12 +953,17 @@ AindexWrapper load_aindex(
                 const std::string tf_prefix,
                 const std::string input_reads_file,
                 const std::string aindex_prefix,
-                const size_t max_tf
+                const size_t max_tf,
+                bool in_memory = false
                 ) {
     AindexWrapper aindex = AindexWrapper();
     std::string tf_file = tf_prefix + ".tf.bin";
     aindex.load(index_prefix, tf_file);
-    aindex.load_reads(input_reads_file);
+    if (in_memory) {
+        aindex.load_reads_in_memory(input_reads_file);
+    } else {
+        aindex.load_reads(input_reads_file);
+    }
     aindex.load_aindex(aindex_prefix, max_tf);
     return aindex;
 }

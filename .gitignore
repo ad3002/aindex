@@ -36,6 +36,7 @@
 .idea*
 tests/kmers.23*
 tests/reads.reads
+tests/test*
 bin
 venv/*
 cmake-build-debug/*
