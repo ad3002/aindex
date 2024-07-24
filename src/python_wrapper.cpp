@@ -333,7 +333,7 @@ public:
         static std::string read_str;
         read_str = std::string(reads + start, end - start);
         if (rev > 0) {
-            return get_revcomp(read_str).c_str();
+            read_str = get_revcomp(read_str);
         }
         return read_str.c_str();
     }
