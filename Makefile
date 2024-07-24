@@ -39,7 +39,9 @@ external:
 	cd external/emphf && cmake .
 	cd external/emphf && make
 	cp external/emphf/compute_mphf_seq $(BIN_DIR)/
-	cp scripts/*py $(BIN_DIR)/
+	cp scripts/compute_aindex.py $(BIN_DIR)/
+	cp scripts/compute_index.py $(BIN_DIR)/
+	cp scripts/reads_to_fasta.py $(BIN_DIR)/
 
 install: all
 	mkdir -p ${BIN_DIR}

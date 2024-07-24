@@ -27,7 +27,7 @@ class CustomInstall(install):
 
 setup(
     name='aindex2',
-    version='1.0.4',
+    version='1.0.5',
     description='Perfect hash based index for genome data.',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
@@ -57,9 +57,6 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'compute_index_py=scripts.compute_index:main',
-            'compute_aindex_py=scripts.compute_aindex:main',
-            'reads_to_fasta=scripts.reads_to_fasta:main',
         ],
     },
 )
