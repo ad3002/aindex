@@ -13,4 +13,5 @@ before-all = """
   make
   cd ../../
   """
+archs = ["x86_64"]
 environment = { CIBW_BUILD = "cp3?-*-manylinux*"}

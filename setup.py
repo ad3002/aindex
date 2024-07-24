@@ -23,7 +23,7 @@ extensions = [
 
 setup(
     name='aindex2',
-    version='1.0.1',
+    version='1.0.2',
     description='Perfect hash based index for genome data.',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
@@ -38,8 +38,7 @@ setup(
     classifiers=[
         'Programming Language :: Python :: 3',
         'Programming Language :: C++',
-        'Programming Language :: Python',
         'License :: OSI Approved :: MIT License',
-        'Operating System :: OS Independent',
+        'Operating System :: POSIX :: Linux',
     ],
 )
