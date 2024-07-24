@@ -20,7 +20,7 @@ int main(int argc, char** argv) {
     if (argc < 5) {
         std::cerr << "Convert fasta or fastq reads to simple reads." << std::endl;
         std::cerr << "Expected arguments: " << argv[0]
-        << " <fastq_file1|fasta_file1> <fastq_file2|-> <fastq|fasta|se> <output_file>" << std::endl;
+        << " <fastq_file1|fasta_file1|reads_file> <fastq_file2|-> <fastq|fasta|se|reads> <output_file>" << std::endl;
         std::terminate();
     }
 
@@ -39,11 +39,9 @@ int main(int argc, char** argv) {
     std::string line1;
     std::string line2;
 
-    std::ofstream fout(output_file, std::ios::out);
-    std::ofstream fout_index(index_file, std::ios::out);
-
     if (read_type == "fastq") {
-
+        std::ofstream fout(output_file, std::ios::out);
+        std::ofstream fout_index(index_file, std::ios::out);
         std::ifstream fin1(file_name1, std::ios::in);
         std::ifstream fin2(file_name2, std::ios::in);
 
@@ -80,8 +78,12 @@ int main(int argc, char** argv) {
 
         fin1.close();
         fin2.close();
+        fout.close();
+        fout_index.close();
 
     } else if (read_type == "se") {
+        std::ofstream fout(output_file, std::ios::out);
+        std::ofstream fout_index(index_file, std::ios::out);
         std::ifstream fin1(file_name1, std::ios::in);
 
         size_t start_pos = 0;
@@ -107,8 +109,33 @@ int main(int argc, char** argv) {
         }
 
         fin1.close();
+        fout.close();
+        fout_index.close();
+
+    } else if (read_type == "reads") {
+        std::ifstream fin1(file_name1, std::ios::in);
+        std::ofstream fout_index(index_file, std::ios::out);
+        size_t start_pos = 0;
+        while (std::getline(fin1, line1)) {
+            
+            size_t end_pos = start_pos + line1.size();
+            fout_index << n_reads << "\t" << start_pos << "\t" << end_pos << "\n";
+
+            start_pos = end_pos + 1; // Adding 1 for the newline character
+
+            n_reads += 1;
+
+            if (n_reads % 1000000 == 0) {
+                emphf::logger() << "Completed: " << n_reads << std::endl;
+            }
+        }
+
+        fin1.close();
+        fout_index.close();
         
     } else if (read_type == "fasta") {
+        std::ofstream fout(output_file, std::ios::out);
+        std::ofstream fout_index(index_file, std::ios::out);
         std::ifstream fin1(file_name1, std::ios::in);
 
         std::ofstream fout_header(header_file, std::ios::out);
@@ -151,13 +178,14 @@ int main(int argc, char** argv) {
 
         fin1.close();
         fout_header.close();
+        fout.close();
+        fout_index.close();
     } else {
         emphf::logger() << "Unknown format." << std::endl;
         exit(2);
     }
 
-    fout.close();
-    fout_index.close();
+    
 
     return 0;
 }
