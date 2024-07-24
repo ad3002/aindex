@@ -1,6 +1,10 @@
-name: Build
+name: Build and Publish
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  release:
+    types: [published]
 
 jobs:
   build_wheels:
@@ -29,6 +33,14 @@ jobs:
             yum install -y cmake make gcc-c++
           CIBW_BEFORE_BUILD: |
             pip install cmake
+          CIBW_REPAIR_WHEEL_COMMAND: >
+            auditwheel repair -w {dest_dir} {wheel} &&
+            mkdir -p {wheel}.tmp &&
+            unzip -q {wheel} -d {wheel}.tmp &&
+            if [ -f {wheel}.tmp/aindex/core/python_wrapper*.so ]; then
+              mv {wheel}.tmp/aindex/core/python_wrapper*.so {wheel}.tmp/aindex/core/python_wrapper.so
+            fi &&
+            (cd {wheel}.tmp && zip -q -r ../{wheel} *)
         with:
           package-dir: .
           output-dir: wheelhouse
@@ -36,5 +48,53 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
+          name: cibw-wheels
           path: ./wheelhouse/*.whl
+
+  build_sdist:
+    name: Build source distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Build sdist
+        run: |
+          pip install setuptools wheel
+          python setup.py sdist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+  upload_pypi:
+    name: Upload to PyPI
+    needs: [build_wheels, build_sdist]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release' && github.event.action == 'published'
+    steps:
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cibw-wheels
+          path: dist
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@v1.8.10
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}

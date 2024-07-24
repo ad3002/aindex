@@ -1,8 +1,11 @@
-from setuptools import setup, Extension
+from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext as build_ext_orig
 import subprocess
 import os
 import shutil
+import glob
+from setuptools.command.install import install
+
 
 class build_ext(build_ext_orig):
     def run(self):
@@ -14,42 +17,44 @@ class build_ext(build_ext_orig):
         build_lib = self.build_lib
         package_dir = os.path.join(build_lib, 'aindex', 'core')
         os.makedirs(package_dir, exist_ok=True)
-        shutil.copy('aindex/core/python_wrapper.so', package_dir)
+        
+        # Find the .so file and rename it
+        so_file = glob.glob(os.path.join('aindex', 'core', 'python_wrapper*.so'))[0]
+        shutil.copy(so_file, os.path.join(package_dir, 'python_wrapper.so'))
 
-# Define your C++ extensions, but don't actually build them
-extensions = [
-    Extension(
-        'aindex.core.python_wrapper',
-        sources=[],  # Empty sources as we're not building it here
-    ),
-]
+class CustomInstall(install):
+    def run(self):
+        install.run(self)
+        # Ensure bin directory exists in the installation
+        bin_dir = os.path.join(self.install_scripts, 'bin')
+        os.makedirs(bin_dir, exist_ok=True)
+        
+        # Copy bin files
+        for file in glob.glob('bin/*'):
+            shutil.copy(file, bin_dir)
 
 setup(
     name='aindex2',
-    version='1.0.3',
+    version='1.0.4',
     description='Perfect hash based index for genome data.',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     author='Aleksey Komissarov',
     author_email='ad3002@gmail.com',
     url='https://github.com/ad3002/aindex',
-    packages=['aindex', 'aindex.core'],
-    ext_modules=extensions,
-    cmdclass={'build_ext': build_ext},
+    packages=find_packages(),
+    ext_modules=[Extension('aindex.core.python_wrapper', sources=[])],
+    cmdclass={
+        'build_ext': build_ext,
+        'install': CustomInstall,
+    },
     install_requires=open('requirements.txt').read().splitlines(),
     include_package_data=True,
     package_data={
         'aindex.core': ['*.so'],
     },
     data_files=[
-        ('bin', [
-            'bin/compute_index.exe', 
-            'bin/compute_aindex.exe', 
-            'bin/compute_reads.exe',
-            'bin/compute_aindex.py', 
-            'bin/compute_index.py', 
-            'bin/reads_to_fasta.py'
-        ]),
+        ('bin', glob.glob('bin/*')),
     ],
     classifiers=[
         'Programming Language :: Python :: 3',
@@ -59,8 +64,8 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'compute_index=scripts.compute_index:main',
-            'compute_aindex=scripts.compute_aindex:main',
+            'compute_index_py=scripts.compute_index:main',
+            'compute_aindex_py=scripts.compute_aindex:main',
             'reads_to_fasta=scripts.reads_to_fasta:main',
         ],
     },
