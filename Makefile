@@ -40,9 +40,9 @@ external:
 install: all
 	mkdir -p $(PACKAGE_DIR)
 	mkdir -p $(INSTALL_DIR)
-	cp bin/compute_index.exe $(INSTALL_DIR)
-	cp bin/compute_aindex.exe $(INSTALL_DIR)
-	cp bin/compute_reads.exe $(INSTALL_DIR)
+	cp bin/compute_index.exe $(INSTALL_DIR)/
+	cp bin/compute_aindex.exe $(INSTALL_DIR)/
+	cp bin/compute_reads.exe $(INSTALL_DIR)/
 
 clean:
 	rm -f $(OBJECTS) $(SRC_DIR)/*.so $(SRC_DIR)/*.o $(BIN_DIR)/*.exe $(PACKAGE_DIR)/python_wrapper.so
