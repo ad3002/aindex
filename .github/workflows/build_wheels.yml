@@ -35,19 +35,25 @@ jobs:
             pip install cmake
           CIBW_REPAIR_WHEEL_COMMAND: >
             auditwheel repair -w {dest_dir} {wheel} &&
-            mkdir -p {wheel}.tmp &&
-            unzip -q {wheel} -d {wheel}.tmp &&
-            for so_file in {wheel}.tmp/aindex/core/python_wrapper*.so; do
-              if [ -f "$so_file" ] && [ "$(basename "$so_file")" != "python_wrapper.so" ]; then
-                mv "$so_file" "{wheel}.tmp/aindex/core/python_wrapper.so"
-              fi
-            done &&
-            (cd {wheel}.tmp && zip -q -r ../{wheel} *)
+            python -c "
+            import os, zipfile, glob;
+            wheel_dir = '{wheel}.tmp';
+            os.makedirs(wheel_dir, exist_ok=True);
+            with zipfile.ZipFile('{wheel}', 'r') as zip_ref:
+                zip_ref.extractall(wheel_dir);
+            for so_file in glob.glob(os.path.join(wheel_dir, 'aindex', 'core', 'python_wrapper*.so')):
+                if os.path.basename(so_file) != 'python_wrapper.so':
+                    os.rename(so_file, os.path.join(os.path.dirname(so_file), 'python_wrapper.so'));
+            with zipfile.ZipFile('{wheel}', 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for root, _, files in os.walk(wheel_dir):
+                    for file in files:
+                        zipf.write(os.path.join(root, file), 
+                                    os.path.relpath(os.path.join(root, file), wheel_dir));
+            "
         with:
           package-dir: .
           output-dir: wheelhouse
           config-file: "{package}/pyproject.toml"
-
       - uses: actions/upload-artifact@v4
         with:
           name: cibw-wheels
