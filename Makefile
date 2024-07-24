@@ -1,7 +1,4 @@
-# Makefile for aindex project
-
 CXX = g++
-# CXXFLAGS = -std=c++17 -pthread -O3 -fPIC -Wall -Wextra -Wpedantic
 CXXFLAGS = -std=c++17 -pthread -O3 -fPIC -Wall -Wextra
 SRC_DIR = src
 INCLUDES = $(SRC_DIR)/helpers.hpp $(SRC_DIR)/debrujin.hpp $(SRC_DIR)/read.hpp $(SRC_DIR)/kmers.hpp $(SRC_DIR)/settings.hpp $(SRC_DIR)/hash.hpp
@@ -12,7 +9,7 @@ PACKAGE_DIR = aindex/core
 PREFIX = $(CONDA_PREFIX)
 INSTALL_DIR = $(PREFIX)/bin
 
-all: external $(BIN_DIR) $(BIN_DIR)/compute_index.exe $(BIN_DIR)/compute_aindex.exe $(BIN_DIR)/compute_reads.exe $(PACKAGE_DIR)/python_wrapper.so
+all: clean external $(BIN_DIR) $(BIN_DIR)/compute_index.exe $(BIN_DIR)/compute_aindex.exe $(BIN_DIR)/compute_reads.exe
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
