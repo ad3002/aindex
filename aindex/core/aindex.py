@@ -14,7 +14,6 @@ import mmap
 from collections import defaultdict
 import importlib.resources as pkg_resources
 
-
 with pkg_resources.path('aindex.core', 'python_wrapper.so') as dll_path:
     dll_path = str(dll_path)
 
@@ -44,11 +43,26 @@ lib.AindexWrapper_load_index.restype = None
 lib.AindexWrapper_load_reads.argtypes = [c_void_p, c_char_p]
 lib.AindexWrapper_load_reads.restype = None
 
+lib.AindexWrapper_load_reads_index.argtypes = [c_void_p, c_char_p]
+lib.AindexWrapper_load_reads_index.restype = None
+
 lib.AindexWrapper_get_hash_size.argtypes = [c_void_p]
 lib.AindexWrapper_get_hash_size.restype = c_size_t
 
-lib.AindexWrapper_get_rid.argtypes = [c_void_p]
+lib.AindexWrapper_get_reads_size.argtypes = [c_void_p]
+lib.AindexWrapper_get_reads_size.restype = c_size_t
+
+lib.AindexWrapper_get_read.argtypes = [c_size_t, c_size_t, c_uint]
+lib.AindexWrapper_get_read.restype = c_char_p
+
+lib.AindexWrapper_get_read_by_rid.argtypes = [c_size_t]
+lib.AindexWrapper_get_read_by_rid.restype = c_char_p
+
+lib.AindexWrapper_get_rid.argtypes = [c_size_t]
 lib.AindexWrapper_get_rid.restype = c_size_t
+
+lib.AindexWrapper_get_start.argtypes = [c_size_t]
+lib.AindexWrapper_get_start.restype = c_size_t
 
 lib.AindexWrapper_get_strand.argtypes = [c_void_p]
 lib.AindexWrapper_get_strand.restype = c_size_t
@@ -80,41 +94,23 @@ def hamming_distance(s1, s2):
     return sum(i != j for (i,j) in zip(s1, s2) if i != 'N' and j != 'N')
 
 
-
 class AIndex(object):
-    ''' Wrapper for working with cpp aindex implementation.
+    ''' Wrapper for cpp aindex implementation.
     '''
 
     obj = None
-    references = {}
-
-    obj = None
-    references = {}
-
+    loaded_header = False
+    loaded_intervals = False
+    loaded_reads = False
+    
     def __init__(self, index_prefix):
         ''' Init Aindex wrapper and load perfect hash.
         '''
         self.obj = lib.AindexWrapper_new()
         if not (os.path.isfile(index_prefix + ".pf") and os.path.isfile(index_prefix + ".tf.bin") and os.path.isfile(index_prefix + ".kmers.bin")):
             raise Exception("One of index files was not found: %s" % str(index_prefix))
-        self.references["index_prefix"] = index_prefix.encode('utf-8')
         tf_file = index_prefix + ".tf.bin"
         lib.AindexWrapper_load(self.obj, index_prefix.encode('utf-8'), tf_file.encode('utf-8'))
-
-    def __getitem__(self, kmer):
-        ''' Return tf for kmer.
-        '''
-        return lib.AindexWrapper_get(self.obj, kmer.encode('utf-8'))
-
-    def get_strand(self, kmer):
-        ''' Return strand for kmer 0 NA or 1 - 2 +.
-        '''
-        return lib.AindexWrapper_get_strand(self.obj, kmer.encode('utf-8'))
-
-    def get_kid_by_kmer(self, kmer):
-        ''' Return kmer id for kmer
-        '''
-        return lib.AindexWrapper_get_kid_by_kmer(self.obj, kmer.encode('utf-8'))
 
     def load(self, index_prefix, max_tf):
         ''' Load aindex. max_tf limits 
@@ -125,16 +121,46 @@ class AIndex(object):
         if not (os.path.isfile(index_prefix + ".pf") and os.path.isfile(index_prefix + ".tf.bin") and os.path.isfile(index_prefix + ".kmers.bin") and os.path.isfile(index_prefix + ".index.bin") and os.path.isfile(index_prefix + ".indices.bin") and os.path.isfile(index_prefix + ".pos.bin")):
             raise Exception("One of index files was not found: %s" % str(index_prefix))
 
-
-        if not (os.path.isfile(index_prefix + ".pf") and os.path.isfile(index_prefix + ".tf.bin") and os.path.isfile(index_prefix + ".kmers.bin") and os.path.isfile(index_prefix + ".index.bin") and os.path.isfile(index_prefix + ".indices.bin") and os.path.isfile(index_prefix + ".pos.bin")):
-            raise Exception("One of index files was not found: %s" % str(index_prefix))
-
         self.max_tf = max_tf
 
         tf_file = index_prefix + ".tf.bin"
 
         lib.AindexWrapper_load_index(self.obj, index_prefix.encode('utf-8'), c_uint32(max_tf), index_prefix.encode('utf-8'), tf_file.encode('utf-8'))
 
+    def load_local_reads(self, reads_file):
+        ''' Load reads with mmap and with aindex.
+        '''
+        print("Loading reads with mmap: %s" % reads_file)
+        with open(reads_file, "r+b") as f:
+            self.reads = mmap.mmap(f.fileno(), 0)
+            self.reads_size = self.reads.size()
+        self.loaded_reads = True
+
+    def load_reads_index(self, index_file, header_file=None):
+        print("Loading reads index: %s" % index_file)
+        self.rid2start = {}
+        self.IT = IntervalTree()
+        self.chrm2start = {}
+        self.headers = {}
+        with open(index_file) as fh:
+            for line in fh:
+                rid, start, end = line.strip().split("\t")
+                self.rid2start[int(rid)] = (int(start), int(end))
+                self.IT.addi(int(start), int(end), int(rid))
+        self.loaded_intervals = True
+
+        if header_file:
+            print("Loading headers: %s" % header_file)
+            with open(header_file) as fh:
+                for rid, line in enumerate(fh):
+                    head, start, length = line.strip().split("\t")
+                    start = int(start)
+                    length = int(length)
+                    self.headers[rid] = head
+                    chrm = head.split()[0].split(".")[0]
+                    self.chrm2start[chrm] = start
+                    self.IT.addi(start, start+length, head)
+            self.loaded_header = True
 
     def load_reads(self, reads_file):
         ''' Load reads with mmap and with aindex.
@@ -142,62 +168,10 @@ class AIndex(object):
         if not os.path.isfile(reads_file):
             raise Exception("Reads files was not found: %s" % str(reads_file))
 
-        if not os.path.isfile(reads_file):
-            raise Exception("Reads files was not found: %s" % str(reads_file))
-
-        print("Loadind reads with mmap: %s" % reads_file)
-        with open(reads_file, "r+b") as f:
-            self.reads = mmap.mmap(f.fileno(), 0)
-            self.reads_size = self.reads.size()
+        print("Loading reads with mmap: %s" % reads_file)
         lib.AindexWrapper_load_reads(self.obj, reads_file.encode('utf-8'))
-        print("\tloaded %s chars." % self.reads_size)
-
-        if isinstance(self.reads[0], int):
-            self.end_cheker = lambda x: chr(self.reads[x]) == "\n"
-            self.python3 = True
-        else:
-            self.end_cheker = lambda x: self.reads[x] == "\n"
-            self.python3 = False
-
-    def iter_reads(self):
-        ''' Iter over reads 
-        and yield (start_pos, next_read_pos, read).
-        '''
-        start = 0
-        end = 0
-        N = len(self.reads)
-
-
-        while True:
-            while end < N and not self.end_cheker(end):
-                end += 1
-            yield start, end+1, self.reads[start:end]
-            start = end+1
-            end = end+1
-            if end >= N:
-                break
-
-    def iter_reads_se(self):
-        ''' Iter over reads 
-        and yield (start_pos, next_read_pos, 0|1|..., read).
-        '''
-        start = 0
-        end = 0
-        N = len(self.reads)
-        rid = 0
-
-
-        while True:
-            while not self.end_cheker(end):
-                end += 1
-            splited_reads = self.reads[start:end].split("~".encode("utf-8"))
-            for i, subread in enumerate(splited_reads):
-                yield rid, start, i, subread
-            rid += 1
-            start = end+1
-            end = end+1
-            if end >= N:
-                break
+        self.reads_size = lib.AindexWrapper_get_reads_size(self.obj)
+        print(f"\tloaded {self.reads_size} chars.")
 
     def get_hash_size(self):
         ''' Get hash size.
@@ -205,11 +179,26 @@ class AIndex(object):
         return lib.AindexWrapper_get_hash_size(self.obj)
 
 
-    def get_rid(self, pos):
-        ''' Get read id by positions in read file.
-        '''
-        return c_size_t(lib.AindexWrapper_get_rid(self.obj, c_size_t(pos))).value
+    ### Getters for kmers
 
+    def __getitem__(self, kmer):
+        ''' Return tf for kmer.
+        '''
+        return lib.AindexWrapper_get(self.obj, kmer.encode('utf-8'))
+
+    def get_strand(self, kmer):
+        ''' Return strand for kmer:
+            1 - the same as given
+            2 - reverse complement
+            0 - not found
+        '''
+        return lib.AindexWrapper_get_strand(self.obj, kmer.encode('utf-8'))
+
+    def get_kid_by_kmer(self, kmer):
+        ''' Return kmer id for kmer
+        '''
+        return lib.AindexWrapper_get_kid_by_kmer(self.obj, kmer.encode('utf-8'))
+    
     def get_kmer_by_kid(self, kid, k=23):
         ''' Return kmer by kmer id 
         '''
@@ -219,9 +208,9 @@ class AIndex(object):
         lib.AindexWrapper_get_kmer_by_kid(self.obj, c_size_t(kid), kmer)
         return kmer.value
 
-    def get_kmer(self, pos, k=23):
+    def get_kmer_info_by_kid(self, kid, k=23):
         ''' Get kmer, revcomp kmer and corresondent tf 
-        for given position in read file.
+        for given kmer id.
         '''
 
         s = "N"*k
@@ -232,48 +221,61 @@ class AIndex(object):
         rkmer = ctypes.c_char_p()
         rkmer.value = s.encode("utf-8")
 
-
-        s = "N"*k
-
-        kmer = ctypes.c_char_p()
-        kmer.value = s.encode("utf-8")
-
-        rkmer = ctypes.c_char_p()
-        rkmer.value = s.encode("utf-8")
-
-        tf = lib.AindexWrapper_get_kmer(self.obj, pos, kmer, rkmer)
+        tf = lib.AindexWrapper_get_kmer(self.obj, kid, kmer, rkmer)
         return kmer.value, rkmer.value, tf
 
+    ### Getters for reads
+
+    def get_rid(self, pos):
+        ''' Get read id by positions in read file.
+        '''
+        return c_size_t(lib.AindexWrapper_get_rid(self.obj, c_size_t(pos))).value
+    
+    def get_start(self, pos):
+        ''' Get read id by positions in read file.
+        '''
+        return c_size_t(lib.AindexWrapper_get_start(self.obj, c_size_t(pos))).value
+    
+    def get_read_by_rid(self, rid):
+        ''' Get read sequence as string by rid.
+        '''
+        return lib.AindexWrapper_get_read_by_rid(self.obj, rid).decode("utf-8")
+
+    def get_read(self, start, end, revcomp=False):
+        ''' Get read by start and end positions.
+        '''
+        return lib.AindexWrapper_get_read(self.obj, start, end, revcomp).decode("utf-8")
+        
+    def iter_reads(self):
+        ''' Iter over reads 
+        and yield (start_pos, next_read_pos, read).
+        '''
+        if self.reads_size == 0:
+            raise Exception("Reads were not loaded.")
+        
+        for rid in range(self.reads_size):
+            yield rid, self.get_read_by_rid(rid)
+
+    def iter_reads_se(self):
+        ''' Iter over reads 
+        and yield (start_pos, next_read_pos, 0|1|..., read).
+        '''
+        if self.reads_size == 0:
+            raise Exception("Reads were not loaded.")
+        
+        for rid in range(self.reads_size):
+            read = self.get_read_by_rid(rid)
+            splited_reads = read.split("~")
+            for i, subread in enumerate(splited_reads):
+                yield rid, i, subread          
 
     def pos(self, kmer):
         ''' Return array of positions for given kmer.
         '''
-
-        # lib.AindexWrapper_get_positions.argtypes = (ctypes.c_void_p, ctypes.POINTER(ctypes.c_size_t), ctypes.c_char_p)
-
-
-        # lib.AindexWrapper_get_positions.argtypes = (ctypes.c_void_p, ctypes.POINTER(ctypes.c_size_t), ctypes.c_char_p)
-
         n = self.max_tf
-
-
         r = (ctypes.c_size_t*n)()
-
-        array_type = ctypes.c_size_t * n
-
         kmer = str(kmer)
-
         lib.AindexWrapper_get_positions(self.obj, pointer(r), kmer.encode('utf-8'))
-        
-
-        array_type = ctypes.c_size_t * n
-
-        kmer = str(kmer)
-
-        lib.AindexWrapper_get_positions(self.obj, pointer(r), kmer.encode('utf-8'))
-        
-        poses = []
-        ids = []
         poses_array = []
         for i in range(n):
             if r[i] > 0:
@@ -282,56 +284,38 @@ class AIndex(object):
                 break
         return poses_array
 
-
-    def set(self, poses_array, kmer, batch_size):
-        ''' Update kmer batch in case of fixed batches.
-        '''
-        print("WARNING: called a function with the fixed batch size.")
-        n = batch_size*2
-        r = (ctypes.c_size_t*n)()
-        for i, (rid,pos) in enumerate(poses_array):
-            r[i+batch_size] = ctypes.c_size_t(rid)
-            r[i] = ctypes.c_size_t(pos)
-
-        lib.AindexWrapper_set_positions(self.obj, pointer(r), kmer.encode('utf-8'))
-
-    def load_header(self, header_file):
-        ''' Load reads meta information.
-        '''
-        self.headers = {}
-        self.IT = IntervalTree()
-        self.chrm2start = {}
-
-        prev = None
-        prev_head = None
-        with open(header_file) as fh:
-            for line in fh:
-                head, pos = line.strip().split("\t")
-                pos = int(pos)
-                self.headers[pos] = head
-                chrm = head.split()[0].split(".")[0]
-                self.chrm2start[chrm] = pos
-                
-                if prev == None:
-                    prev = pos
-                    prev_head = head
-                    continue
-                self.IT.addi(prev, pos, prev_head)
-                prev = pos
-                prev_head = head
-        self.IT.addi(prev, prev+1000000000000, prev_head)
-
     def get_header(self, pos):
         ''' Get header information for position.
         '''
-        return list(self.IT[pos])[0][2]
-
-        # chrm = list(head)[0][2].split()[0].split(".")[0]
-
-    def get_read_by_rid(self, rid, max_read_length=400):
-        ''' Get read sequence as string by rid.
+        if not self.loaded_header:
+            return None
+        rid = list(self.IT[pos])[0][2]
+        return self.headers[rid]
+    
+    def iter_sequence_kmers(self, sequence):
+        ''' Iter over kmers in sequence.
         '''
-        return self.reads[rid:rid+max_read_length].decode("utf8").split("\n")[0]
+        for i in range(len(sequence)-23+1):
+            kmer = sequence[i:i+23]
+            yield kmer, self[kmer]
+
+    def get_sequence_coverage(self, seq, cutoff=0):
+        '''
+        '''
+        coverage = [0] * len(seq)
+        for i in range(len(seq)-self.k+1):
+            kmer = seq[i:i+23]
+            tf = self[kmer]
+            if tf >= cutoff:
+                coverage[i] = tf
+        return coverage
+                
+    def print_sequence_coverage(self, seq, cutoff=0):
+        '''
+        '''
+        for i, tf in enumerate(self.get_sequence_coverage(seq, cutoff)):
+            kmer = seq[i:i+23]
+            print(i, kmer, tf)
 
     def get_rid2poses(self, kmer):
         ''' Wrapper that handle case when two kmer hits in one read.
@@ -345,52 +329,54 @@ class AIndex(object):
             hits[start].append(c_size_t(pos).value - start)
         return hits
 
-    def get_reads_for_assemby_by_kmer(self, kmer, used_reads, compute_cov=True, k=23, mode=None):
-        ''' Get reads prepared for assembly-by-extension. 
-            Return sorted by pos list of (pos, read, rid, poses, cov)
-            Mode: left, right
-        '''    
-        to_assembly = []
-        for rid, poses in self.get_rid2poses(kmer).items():
-            if rid in used_reads:
-                continue
-            used_reads.add(rid)
-            read = self.get_read_by_rid(rid)
+    ### Aindex manipulation
 
-            spring_pos = None
-            if mode:
-                spring_pos = read.find("~")
-
-            ori_poses = poses
-            if not read[poses[0]:poses[0]+k] == kmer:
-                read = get_revcomp(read)
-                poses = [x for x in map(lambda x: len(read)-x-k, poses)][::-1]
-
-            if mode == "left":
-                read = read.split("~")[0]
-                poses = [x for x in poses if x < spring_pos]
-            elif mode == "right":
-                read = read.split("~")[-1]
-                poses = [x for x in poses if x > spring_pos]
-
-            if not poses:
-                continue
-
-            cov = None
-            if compute_cov:
-                cov = [self[read[i:i+k]] for i in range(len(read)-k+1)]
-            to_assembly.append((poses[0], read, rid, ori_poses, cov))
-        to_assembly.sort(reverse=True)
-        return to_assembly
-
-    def print_sequence_coverage(self, seq, cutoff=0):
+    def set(self, poses_array, kmer, batch_size):
+        ''' Update kmer batch in case of fixed batches.
         '''
-        '''
-        for i in range(len(seq)-self.k+1):
-            kmer = seq[i:i+23]
-            tf = self[kmer]
-            if tf >= cutoff:
-                print(i, kmer, tf)
+        print("WARNING: called a function with the fixed batch size.")
+        n = batch_size*2
+        r = (ctypes.c_size_t*n)()
+        for i, (rid,pos) in enumerate(poses_array):
+            r[i+batch_size] = ctypes.c_size_t(rid)
+            r[i] = ctypes.c_size_t(pos)
+
+        lib.AindexWrapper_set_positions(self.obj, pointer(r), kmer.encode('utf-8'))
+
+
+def get_aindex(prefix_path, skip_aindex=False, max_tf=1_000_000):
+    settings = {
+        "index_prefix": f"{prefix_path}.23",
+        "aindex_prefix": f"{prefix_path}.23",
+        "reads_file": f"{prefix_path}.reads",
+        "max_tf": max_tf,
+        }
+    if not os.path.isfile(prefix_path + ".23.pf"):
+      print("No file", prefix_path + ".23.pf")
+      return None
+    if not os.path.isfile(prefix_path + ".23.tf.bin"):
+      print("No file", prefix_path + ".23.tf.bin")
+      return None
+    if not os.path.isfile(prefix_path + ".23.kmers.bin"):
+      print("No file", prefix_path + ".23.kmers.bin")
+      return None
+    if not skip_aindex:
+        if not os.path.isfile(prefix_path + ".23.index.bin"):
+            print("No file", prefix_path + ".23.index.bin")
+            return None
+        if not os.path.isfile(prefix_path + ".23.indices.bin"):
+            print("No file", prefix_path + ".23.indeces.bin")
+            return None
+        if not os.path.isfile(prefix_path + ".23.pos.bin"):
+            print("No file", prefix_path + ".23.pos.bin")
+            return None
+        if not os.path.isfile(prefix_path + ".reads"):
+            print("No file", prefix_path + ".reads")
+            return None
+        if not os.path.isfile(prefix_path + ".ridx"):
+            print("No file", prefix_path + ".ridx")
+            return None
+    return load_aindex(settings, skip_reads=skip_aindex, skip_aindex=skip_aindex)
 
 
 def load_aindex(settings, prefix=None, reads=None, aindex_prefix=None, skip_reads=False, skip_aindex=False):
@@ -685,3 +671,43 @@ def get_layout_for_kmer(kmer, kmer2tf, used_reads=None, k=23):
         separator = "N"
         reads[i] = separator*(max_pos-starts[i]) + read + separator * (max_length-max_pos+starts[i]-len(read))
     return max_pos, reads, lefts, rights, rids, starts
+
+### Assembly-by-extension
+
+def get_reads_for_assemby_by_kmer(kmer2tf, kmer, used_reads, compute_cov=True, k=23, mode=None):
+    ''' Get reads prepared for assembly-by-extension. 
+        Return sorted by pos list of (pos, read, rid, poses, cov)
+        Mode: left, right
+    '''    
+    to_assembly = []
+    for rid, poses in kmer2tf.get_rid2poses(kmer).items():
+        if rid in used_reads:
+            continue
+        used_reads.add(rid)
+        read = kmer2tf.get_read_by_rid(rid)
+
+        spring_pos = None
+        if mode:
+            spring_pos = read.find("~")
+
+        ori_poses = poses
+        if not read[poses[0]:poses[0]+k] == kmer:
+            read = get_revcomp(read)
+            poses = [x for x in map(lambda x: len(read)-x-k, poses)][::-1]
+
+        if mode == "left":
+            read = read.split("~")[0]
+            poses = [x for x in poses if x < spring_pos]
+        elif mode == "right":
+            read = read.split("~")[-1]
+            poses = [x for x in poses if x > spring_pos]
+
+        if not poses:
+            continue
+
+        cov = None
+        if compute_cov:
+            cov = [kmer2tf[read[i:i+k]] for i in range(len(read)-k+1)]
+        to_assembly.append((poses[0], read, rid, ori_poses, cov))
+    to_assembly.sort(reverse=True)
+    return to_assembly

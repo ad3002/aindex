@@ -1,13 +1,16 @@
 # Makefile for aindex project
 
 CXX = g++
-CXXFLAGS = -std=c++17 -pthread -O3 -fPIC
+# CXXFLAGS = -std=c++17 -pthread -O3 -fPIC -Wall -Wextra -Wpedantic
+CXXFLAGS = -std=c++17 -pthread -O3 -fPIC -Wall
 SRC_DIR = src
 INCLUDES = $(SRC_DIR)/helpers.hpp $(SRC_DIR)/debrujin.hpp $(SRC_DIR)/read.hpp $(SRC_DIR)/kmers.hpp $(SRC_DIR)/settings.hpp $(SRC_DIR)/hash.hpp
 SOURCES = $(SRC_DIR)/helpers.cpp $(SRC_DIR)/debrujin.cpp $(SRC_DIR)/read.cpp $(SRC_DIR)/kmers.cpp $(SRC_DIR)/settings.cpp $(SRC_DIR)/hash.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
 BIN_DIR = bin
 PACKAGE_DIR = aindex/core
+PREFIX = $(CONDA_PREFIX)
+INSTALL_DIR = $(PREFIX)/bin
 
 all: external $(BIN_DIR) $(BIN_DIR)/compute_index.exe $(BIN_DIR)/compute_aindex.exe $(BIN_DIR)/compute_reads.exe $(PACKAGE_DIR)/python_wrapper.so
 
@@ -35,11 +38,14 @@ external:
 	cd external/emphf && cmake .
 	cd external/emphf && make
 	cp external/emphf/compute_mphf_seq $(BIN_DIR)
+	cp scripts/*py $(BIN_DIR)
 
 install: all
 	mkdir -p $(PACKAGE_DIR)
-	cp aindex.py $(PACKAGE_DIR)
-	cp bin/python_wrapper.so $(PACKAGE_DIR)
+	mkdir -p $(INSTALL_DIR)
+	cp bin/compute_index.exe $(INSTALL_DIR)
+	cp bin/compute_aindex.exe $(INSTALL_DIR)
+	cp bin/compute_reads.exe $(INSTALL_DIR)
 
 clean:
 	rm -f $(OBJECTS) $(SRC_DIR)/*.so $(SRC_DIR)/*.o $(BIN_DIR)/*.exe $(PACKAGE_DIR)/python_wrapper.so
