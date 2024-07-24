@@ -42,5 +42,5 @@ venv/*
 cmake-build-debug/*
 .vscode
 build
-aindex.egg-info
+aindex2.egg-info
 dist
