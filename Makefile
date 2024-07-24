@@ -30,6 +30,7 @@ $(PACKAGE_DIR)/python_wrapper.so: $(SRC_DIR)/python_wrapper.o $(OBJECTS) | $(PAC
 	$(CXX) $(CXXFLAGS) -shared -Wl,-soname,python_wrapper.so -o $@ $^
 
 external:
+	mkdir -p ${BIN_DIR}
 	mkdir -p external
 	mkdir -p $(PACKAGE_DIR)
 	mkdir -p $(INSTALL_DIR)
@@ -40,6 +41,7 @@ external:
 	cp scripts/*py $(BIN_DIR)
 
 install: all
+    mkdir -p ${BIN_DIR}
 	mkdir -p $(PACKAGE_DIR)
 	mkdir -p $(INSTALL_DIR)
 	cp bin/compute_index.exe $(INSTALL_DIR)/
