@@ -31,6 +31,8 @@ $(PACKAGE_DIR)/python_wrapper.so: $(SRC_DIR)/python_wrapper.o $(OBJECTS) | $(PAC
 
 external:
 	mkdir -p external
+	mkdir -p $(PACKAGE_DIR)
+	mkdir -p $(INSTALL_DIR)
 	cd external && git clone https://github.com/ad3002/emphf.git
 	cd external/emphf && cmake .
 	cd external/emphf && make
