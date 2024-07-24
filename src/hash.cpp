@@ -370,9 +370,8 @@ void load_hash(PHASH_MAP &hash_map, std::string &index_prefix, std::string &tf_f
     emphf::logger() << "Hash loading.." << std::endl;
     barrier.unlock();
 
-    HASHER hasher;
+    HASHER hasher = HASHER();
     std::ifstream is;
-    size_t n = 0;
     hash_map.hasher = hasher;
     is.open(hash_filename, std::ios::binary);
     if (!is) {
@@ -473,7 +472,7 @@ void load_hash_only_pf(PHASH_MAP &hash_map, std::string &output_prefix, std::str
         fout3.close();
     }
 
-    HASHER hasher;
+    HASHER hasher = HASHER();
     hash_map.hasher = hasher;
     is.open(hash_filename, std::ios::binary);
     if (!is) {
@@ -484,7 +483,7 @@ void load_hash_only_pf(PHASH_MAP &hash_map, std::string &output_prefix, std::str
     is.close();
 }
 
-void load_hash_full_tf(PHASH_MAP &hash_map, std::string &output_prefix, std::string &tf_file, std::string &hash_filename) {
+void load_hash_full_tf(PHASH_MAP &hash_map, std::string &tf_file, std::string &hash_filename) {
 
     barrier.lock();
     emphf::logger() << "Hash loading.." << std::endl;
@@ -532,19 +531,18 @@ void load_full_hash(PHASH_MAP &hash_map, std::string &hash_filename, int k, size
     }
     hash_map.n = n;
 
-    hash_map.tf_values = new ATOMIC[n];
+    hash_map.tf_values = new ATOMIC[n](); // Value-initialize the array
     if (hash_map.tf_values == nullptr) {
         emphf::logger() << "Failed to allocate tf array: " << n << std::endl;
         exit(10);
     }
     emphf::logger() << "Set all zeros for tf array with size: " << n <<  std::endl;
-    memset(hash_map.tf_values, 0, n * sizeof(ATOMIC));
 
     emphf::logger() << "Loading hash file: " << hash_filename << std::endl;
-    HASHER hasher;
+    HASHER hasher = HASHER();
     hash_map.hasher = hasher;
     std::ifstream is;
-    is.open (hash_filename, std::ios::binary);
+    is.open(hash_filename, std::ios::binary);
     if (!is) {
         emphf::logger() << "Failed to open hash file: " << hash_filename << std::endl;
         exit(10);
@@ -552,8 +550,8 @@ void load_full_hash(PHASH_MAP &hash_map, std::string &hash_filename, int k, size
     hash_map.hasher.load(is);
     is.close();
     emphf::logger() << "Done." << std::endl;
-
 }
+
 
 void index_hash(PHASH_MAP &hash_map, std::string &dat_filename, std::string &hash_filename) {
 
@@ -807,7 +805,7 @@ void index_hash_pp(PHASH_MAP &hash_map, std::string &dat_filename, std::string &
     emphf::logger() << "Loading mphf" << std::endl;
     barrier.unlock();
 
-    HASHER hasher;
+    HASHER hasher = HASHER();
     hash_map.hasher = hasher;
     std::ifstream is(hash_filename, std::ios::binary);
     if (!is) {
@@ -837,7 +835,7 @@ void index_hash_pp(PHASH_MAP &hash_map, std::string &dat_filename, std::string &
     std::vector<std::thread> t;
 
     emphf::logger() << "\t init result array..." << std::endl;
-    for (size_t i = 0; i < num_threads; ++i) {
+    for (int i = 0; i < num_threads; ++i) {
         size_t start = i * batch_size;
         size_t end = (i + 1) * batch_size;
 
@@ -868,7 +866,7 @@ void index_hash_pp(PHASH_MAP &hash_map, std::string &dat_filename, std::string &
 
     }
 
-    for (size_t i = 0; i < num_threads; ++i) {
+    for (int i = 0; i < num_threads; ++i) {
         t[i].join();
     }
 

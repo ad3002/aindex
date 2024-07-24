@@ -380,20 +380,19 @@ struct AIndexCompressed {
         emphf::logger() << "...Done." << std::endl;
 
         std::cout << "...Allocate ppositions..." << std::endl;
-        ppositions = new ATOMIC64[hash_map.n];
+        ppositions = new ATOMIC64[hash_map.n](); // Value-initialize the array
         if (ppositions == nullptr) {
             emphf::logger() << "Failed to allocate memory for positions: " << hash_map.n << std::endl;
             exit(10);
         }
-        memset(ppositions, 0, hash_map.n * sizeof(ATOMIC64));
         emphf::logger() << "...Done." << std::endl;
+
         std::cout << "...Allocate positions..." << std::endl;
-        positions = new ATOMIC64[total_size];
+        positions = new ATOMIC64[total_size](); // Value-initialize the array
         if (positions == nullptr) {
             emphf::logger() << "Failed to allocate memory for positions: " << total_size << std::endl;
             exit(10);
         }
-        memset(positions, 0, total_size * sizeof(ATOMIC64));
         emphf::logger() << "...Done." << std::endl;
         emphf::logger() << "Done." << std::endl;
     }
@@ -514,7 +513,7 @@ void index_hash(PHASH_MAP &hash_map, std::string &dat_filename, std::string &has
 void index_hash_pp(PHASH_MAP &hash_map, std::string &dat_filename, std::string &hash_filename, int num_threads, int mock_dat=0);
 void load_hash_only_pf(PHASH_MAP &hash_map, std::string &output_prefix, std::string &hash_filename, bool load_checker=true);
 void load_full_hash(PHASH_MAP &hash_map, std::string &hash_filename, int k, size_t n);
-void load_hash_full_tf(PHASH_MAP &hash_map, std::string &output_prefix, std::string &tf_file, std::string &hash_filename);
+void load_hash_full_tf(PHASH_MAP &hash_map, std::string &tf_file, std::string &hash_filename);
 
 
 #endif //STIRKA_HASH_H

@@ -440,12 +440,7 @@ public:
         return 0;
     }
 
-    size_t get_hash_value(const std::string& kmer) {
-        // Return hash value for given kmer
-        return hash_map->get_pfid(kmer);
-    }
-
-     size_t get_hash_value(std::string_view kmer) {
+    size_t get_hash_value(std::string_view kmer) {
         // Return hash value for given kmer
         return hash_map->get_pfid(kmer);
     }
@@ -518,64 +513,32 @@ public:
         return r;
     }
 
-    // Getters for reads by kmer
+    // Aindex manipulation
 
-    std::unordered_map<size_t, std::vector<size_t> > get_rid2poses(const std::string& kmer) {
-        // ''' Wrapper that handle case when two kmer hits in one read.
-        // Return rid->poses_in_read dictionary for given kmer. 
-        // In this case rid is the start position in reads file.
-        // '''
-        std::vector<size_t> poses = get_positions(kmer);
-        std::unordered_map<size_t, std::vector<size_t> > result;
-
-        for (size_t pos: poses) {
-            size_t start = get_start_by_pos(pos);
-            if (!result.count(start)) {
-                std::vector<size_t> hits;
-                result.emplace(start, hits);
-            }
-            result[start].push_back(pos - start);
-        }
-        return result;
+    void increase(char* ckmer) {
+        std::string kmer = std::string(ckmer);
+        hash_map->increase(kmer);
     }
 
-    // std::vector<Hit> get_reads_by_kmer(const std::string& kmer, UsedReads &used_reads, const size_t min_shift, const size_t max_shift) const {
-    //     uint k = 23;
-    //     std::vector<Hit> result;
-    //     auto h1 = hash_map->get_pfid(kmer);
-    //     for (size_t i=indices[h1]; i < indices[h1+1] && h1+1 < indices_length; ++i) {
-    //         size_t reads_pos = positions[i] - 1; // zero reserved for empty            
-    //         uint16_t shift = read_pos_to_start_cache[reads_pos];
-    //         if (shift > max_shift || shift < min_shift) {
-    //             continue;
-    //         }
-    //         size_t start = reads_pos - shift;
-    //         size_t rid = start2rid.at(start);
-    //         if (used_reads.used(rid)) {
-    //             continue;
-    //         }
-    //         std::string read = get_read_by_start(start);
-    //         std::string check_kmer = read.substr(shift, k);
-    //         bool rev = false;
-    //         if (kmer != check_kmer) {  
-    //             std::string rread = read;
-    //             get_revcomp(read, rread);
-    //             read = rread;
-    //             shift = read.size() - shift - k;
-    //             rev = true;
-    //         }
-    //         Hit hit;
-    //         hit.rid = rid;
-    //         hit.start = start;
-    //         hit.local_pos = shift;
-    //         hit.rev = rev;
-    //         hit.read = read;
-    //         result.emplace_back(hit);
-    //     }
-    //     return result;
-    // }
+    void decrease(char* ckmer) {
+        std::string kmer = std::string(ckmer);
+        hash_map->decrease(kmer);
+    }
 
-    void get_reads_se_by_kmer(std::string const kmer, size_t h1, bool* used_reads, std::vector<Hit> &hits) {
+    void set_positions(size_t* r, const std::string& kmer) {
+        // Set read positions
+        // TODO: check borders
+        auto h1 = hash_map->get_pfid(kmer);
+        size_t j = 0;
+        for (size_t i=indices[h1]; i < indices[h1+1]; ++i) {
+            positions[i] = r[j];
+            j += 1;
+        }
+    }
+
+    // Consistency checks
+
+    void check_get_reads_se_by_kmer(std::string const kmer, size_t h1, bool* used_reads, std::vector<Hit> &hits) {
 
         for (size_t i=indices[h1]; i < indices[h1+1]; ++i) {
 
@@ -638,7 +601,6 @@ public:
                     }
                     hit.read = rleft_read;
                     hit.rev = 1;
-//                    hit.ori = 1;
                 }
             } else {
 
@@ -664,18 +626,9 @@ public:
                     }
                     hit.read = rright_read;
                     hit.rev = 1;
-//                    hit.ori = 0;
                 }
 
             }
-
-//            if (reversed_reads[real_rid]) {
-//                if (hit.ori) {
-//                    hit.ori = 0;
-//                } else {
-//                    hit.ori = 1;
-//                }
-//            }
 
             if (used_reads[2*hit.rid+hit.ori]) {
                 continue;
@@ -684,31 +637,6 @@ public:
 
         }
     }
-
-    // Aindex manipulation
-
-    void increase(char* ckmer) {
-        std::string kmer = std::string(ckmer);
-        hash_map->increase(kmer);
-    }
-
-    void decrease(char* ckmer) {
-        std::string kmer = std::string(ckmer);
-        hash_map->decrease(kmer);
-    }
-
-    void set_positions(size_t* r, const std::string& kmer) {
-        // Set read positions
-        // TODO: check borders
-        auto h1 = hash_map->get_pfid(kmer);
-        size_t j = 0;
-        for (size_t i=indices[h1]; i < indices[h1+1]; ++i) {
-            positions[i] = r[j];
-            j += 1;
-        }
-    }
-
-    // Consistency checks
 
     void check_aindex() {
 
@@ -766,7 +694,7 @@ public:
             uint64_t h1_kmer = hash_map->checker[h1];
             std::string kmer = get_bitset_dna23(h1_kmer);
             hits.clear();
-            get_reads_se_by_kmer(kmer, h1, used_reads, hits);
+            check_get_reads_se_by_kmer(kmer, h1, used_reads, hits);
 
             size_t max_pos = 0;
 
@@ -865,6 +793,22 @@ extern "C" {
     size_t AindexWrapper_get_hash_size(AindexWrapper* foo){ return foo->get_hash_size(); }
 
     size_t AindexWrapper_get_reads_size(AindexWrapper* foo){ return foo->get_reads_size(); }
+
+    void AindexWrapper_load_reads_in_memory(AindexWrapper* foo, char* reads_file){ foo->load_reads_in_memory(reads_file); }
+
+    void AindexWrapper_load_aindex(AindexWrapper* foo, char* aindex_prefix, uint32_t max_tf){ foo->load_aindex(aindex_prefix, max_tf); }
+
+    size_t AindexWrapper_get_start_by_pos(AindexWrapper* foo, size_t pos) { return foo->get_start_by_pos(pos); }
+
+    size_t AindexWrapper_get_end_by_start(AindexWrapper* foo, size_t start) { return foo->get_end_by_start(start); }
+
+    const char* AindexWrapper_get_pointer_to_read_by_rid(AindexWrapper* foo, size_t rid) { return foo->get_pointer_to_read_by_rid(rid); }
+
+    size_t AindexWrapper_get_hash_value(AindexWrapper* foo, char* kmer) { return foo->get_hash_value(kmer); }
+
+    void AindexWrapper_check_aindex(AindexWrapper* foo) { foo->check_aindex(); }
+
+    void AindexWrapper_check_aindex_reads(AindexWrapper* foo) { foo->check_aindex_reads(); }
 }
 
 #endif

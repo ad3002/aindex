@@ -173,14 +173,14 @@ namespace DEBRUJIN {
         }
     }
 
-    void set_fm_for_read(READS::READ &read, PHASH_MAP &kmers, int from, size_t to) {
-        if (from < 0) {
+    void set_fm_for_read(READS::READ &read, PHASH_MAP &kmers, size_t from, size_t to) {
+        if (from > read.seq.length()) { // hot fix possible overflow
             from = 0;
         }
         if (to > read.seq.length()) {
             to = read.seq.length();
         }
-        for (int i = from; i < to; i++) {
+        for (size_t i = from; i < to; i++) {
             std::string_view kmer = read.seq.substr(i, Settings::K);
             read.fm[i] = kmers.get_freq(kmer);
         }

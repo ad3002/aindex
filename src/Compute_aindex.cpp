@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
     emphf::logger() << "Loading hash..." << std::endl;
 
     if (Settings::K == 13) {
-        load_hash_full_tf(hash_map, index_prefix, tf_file, hash_filename);
+        load_hash_full_tf(hash_map, tf_file, hash_filename);
     } else {
         load_hash(hash_map, index_prefix, tf_file, hash_filename);
     }

@@ -113,13 +113,13 @@ public:
 
     }
 
-    void cut_start(size_t pos) {
+    // void cut_start(size_t pos) {
+    //     std::runtime_error("not implemented");
+    // }
 
-    }
-
-    void cut_end(size_t pos) {
-
-    }
+    // void cut_end(size_t pos) {
+    //     std::runtime_error("not implemented");
+    // }
 
     uint64_t ukmer(size_t pos, int k) {
 

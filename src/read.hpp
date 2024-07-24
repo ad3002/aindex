@@ -252,7 +252,7 @@ namespace READS {
             fh << seq << "\n";
         }
 
-        void save_as_stats(std::ofstream &fh, int coverage, PHASH_MAP &kmers) {
+        void save_as_stats(std::ofstream &fh) {
 
             fh << "0 0 0 0 0 0 S" << status << " " << position << " " << left_status << " " << left_position << " " << meanq;
             if (adapters.size() > 0) {
@@ -446,12 +446,6 @@ namespace READS {
             delete bitdna;
         }
 
-        std::string kmer(size_t pos, int k=23) {
-            char* kmer = new char[k+1];
-            bitdna->kmer(20, k, kmer);
-            return std::string(kmer);
-        }
-
         char at(size_t pos) {
             return bitdna->at(pos);
         }
@@ -567,8 +561,8 @@ namespace READS {
         SPRING_PAIR(READS::READ* read1, READS::READ* read2) {
             rid = total_rid;
             total_rid += 1;
-//            read1 = new READ(read1.seq);
-//            read2 = new READ(read2.seq);
+            read1 = new READ(read1->seq);
+            read2 = new READ(read2->seq);
         }
 
         size_t length() {
@@ -1204,13 +1198,6 @@ namespace READS {
             std::getline(r_file, line_seq);
             READS::SPRING_PAIR *read = new SPRING_PAIR(line_seq);
             return read;
-        }
-
-
-        void worker_count_lines(std::string read_file, std::vector<size_t> *r, size_t start, size_t end, int i) {
-//            barrier.lock();
-//            emphf::logger() << "Started from " << start << " to " << end << std::endl;
-//            barrier.unlock();
         }
 
 //        size_t build_reads_index_pp(std::string reads_file, int num_threads) {
