@@ -10,4 +10,4 @@ $PYTHON -m pip install build installer
 
 $PYTHON -m build
 
-$PYTHON -m installer dist/aindex-{{ version }}-py3-none-any.whl
+$PYTHON -m installer dist/aindex2-{{ version }}-py3-none-any.whl

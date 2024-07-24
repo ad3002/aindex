@@ -1,7 +1,7 @@
 {% set version = "1.0.0" %}
 
 package:
-  name: aindex
+  name: aindex2
   version: {{ version }}
 
 source:
