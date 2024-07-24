@@ -292,11 +292,15 @@ class AIndex(object):
         rid = list(self.IT[pos])[0][2]
         return self.headers[rid]
     
-    def iter_sequence_kmers(self, sequence):
+    def iter_sequence_kmers(self, sequence, k=23):
         ''' Iter over kmers in sequence.
         '''
-        for i in range(len(sequence)-23+1):
-            kmer = sequence[i:i+23]
+        for i in range(len(sequence)-k+1):
+            if "\n" in sequence[i:i+k]:
+                continue
+            if "~" in sequence[i:i+k]:
+                continue
+            kmer = sequence[i:i+k]
             yield kmer, self[kmer]
 
     def get_sequence_coverage(self, seq, cutoff=0):

@@ -131,15 +131,15 @@ if __name__ == "__main__":
         
         if reads_type == "fasta":
             commands = [
-                f"{path_to_aindex}compute_reads.exe -i {reads_file} - -o {prefix}.reads",
+                f"{path_to_aindex}compute_reads.exe -i {reads_file} - -o {prefix}",
             ]
         if reads_type == "fastq":
             commands = [
-                f"{path_to_aindex}compute_reads.exe {reads_file.replace(',', ' ')} fastq {prefix}.reads",
+                f"{path_to_aindex}compute_reads.exe {reads_file.replace(',', ' ')} fastq {prefix}",
             ]
         if reads_type == "se":
             commands = [
-                f"{path_to_aindex}compute_reads.exe {reads_file.replace(',', ' ')} - se {prefix}.reads",
+                f"{path_to_aindex}compute_reads.exe {reads_file.replace(',', ' ')} - se {prefix}",
             ]
 
         runner(commands)

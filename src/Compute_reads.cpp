@@ -20,16 +20,17 @@ int main(int argc, char** argv) {
     if (argc < 5) {
         std::cerr << "Convert fasta or fastq reads to simple reads." << std::endl;
         std::cerr << "Expected arguments: " << argv[0]
-        << " <fastq_file1|fasta_file1|reads_file> <fastq_file2|-> <fastq|fasta|se|reads> <output_file>" << std::endl;
+        << " <fastq_file1|fasta_file1|reads_file> <fastq_file2|-> <fastq|fasta|se|reads> <output_prefix>" << std::endl;
         std::terminate();
     }
 
     std::string file_name1 = argv[1];
     std::string file_name2 = argv[2];
     std::string read_type = argv[3];
-    std::string output_file = argv[4];
-    std::string index_file = output_file + ".ridx";
-    std::string header_file = output_file + ".header";
+    std::string output_prefix = argv[4];
+    std::string index_file = output_prefix + ".ridx";
+    std::string header_file = output_prefix + ".header";
+    std::string output_file = output_prefix + ".reads";
 
     emphf::logger() << "Starting..." << std::endl;
 

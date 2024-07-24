@@ -8,6 +8,8 @@ Requirements:
 
 [jellyfish 2](https://github.com/gmarcais/Jellyfish)
 
+(easy to install with `apt install jellyfish` or with `conda install bioconda::jellyfish`)
+
 Installation with pip:
 
 ```bash
@@ -66,14 +68,14 @@ You can simply run **demo.py** or:
 import aindex
 
 prefix_path = "tests/raw_reads.101bp.IS350bp25"
-index = aindex.get_aindex(prefix_path)
+kmer2tf = aindex.get_aindex(prefix_path)
 
 kmer = "A"*23
 rkmer = "T"*23
 kid = kmer2tf.get_kid_by_kmer(kmer)
 print(kmer2tf.get_kmer_info_by_kid(kid))
 print(kmer2tf[kmer], kid, kmer2tf.get_kmer_by_kid(kid), len(kmer2tf.pos(kmer)), kmer2tf.get_strand(kmer), kmer2tf.get_strand(rkmer))
-
+kmer = kmer2tf.get_read(0, 23, 0)
 pos = kmer2tf.pos(kmer)[0]
 print(pos)
 
@@ -87,62 +89,45 @@ print(kmer2tf.get_read(0, 123, 1))
 
 
 k = 23
-for p in kmer2tf.pos("GCAGCTCAGCAGGACGGCCAACC"):
+for p in kmer2tf.pos(kmer):
   print(kmer2tf.get_read(p, p+k))
-  break
-
-
-print(kmer2tf["GCAGCTCAGCAGGACGGCCAACC"])
-
-sequence = kmer2tf.get_read(0, 1023, 0)
-
-for kmer, tf in kmer2tf.iter_sequence_kmers(sequence):
-  print(kmer, tf)
-  break
-
-
-k = 23
-sequence = "TAAGTTATTATTTAGTTAATACTTTTAACAATATTATTAAGGTATTTAAAAAATACTATTATAGTATTTAACATAGTTAAATACCTTCCTTAATACTGTTAAATTATATTCAATCAATACATATATAATATTATTAAAATACTTGATAAGTATTATTTAGATATTAGACAAATACTAATTTTATATTGCTTTAATACTTAATAAATACTACTTATGTATTAAGTAAATATTACTGTAATACTAATAACAATATTATTACAATATGCTAGAATAATATTGCTAGTATCAATAATTACTAATATAGTATTAGGAAAATACCATAATAATATTTCTACATAATACTAAGTTAATACTATGTGTAGAATAATAAATAATCAGATTAAAAAAATTTTATTTATCTGAAACATATTTAATCAATTGAACTGATTATTTTCAGCAGTAATAATTACATATGTACATAGTACATATGTAAAATATCATTAATTTCTGTTATATATAATAGTATCTATTTTAGAGAGTATTAATTATTACTATAATTAAGCATTTATGCTTAATTATAAGCTTTTTATGAACAAAATTATAGACATTTTAGTTCTTATAATAAATAATAGATATTAAAGAAAATAAAAAAATAGAAATAAATATCATAACCCTTGATAACCCAGAAATTAATACTTAATCAAAAATGAAAATATTAATTAATAAAAGTGAATTGAATAAAATTTTGAAAAAAATGAATAACGTTATTATTTCCAATAACAAAATAAAACCACATCATTCATATTTTTTAATAGAGGCAAAAGAAAAAGAAATAAACTTTTATGCTAACAATGAATACTTTTCTGTCAAATGTAATTTAAATAAAAATATTGATATTCTTGAACAAGGCTCCTTAATTGTTAAAGGAAAAATTTTTAACGATCTTATTAATGGCATAAAAGAAGAGATTATTACTATTCAAGAAAAAGATCAAACACTTTTGGTTAAAACAAAAAAAACAAGTATTAATTTAAACACAATTAATGTGAATGAATTTCCAAGAATAAGGTTTAATGAAAAAAACGATTTAAGTGAATTTAATCAATTCAAAATAAATTATTCACTTTTAGTAAAAGGCATTAAAAAAATTTTTCACTCAGTTTCAAATAATCGTGAAATATCTTCTAAATTTAATGGAGTAAATTTCAATGGATCCAATGGAAAAGAAATATTTTTAGAAGCTTCTGACACTTATAAACTATCTGTTTTTGAGATAAAGCAAGAAACAGAACCATTTGATTTCATTTTGGAGAGTAATTTACTTAGTTTCATTAATTCTTTTAATCCTGAAGAAGATAAATCTATTGTTTTTTATTACAGAAAAGATAATAAAGATAGCTTTAGTACAGAAATGTTGATTTCAATGGATAACTTTATGATTAGTTACACATCGGTTAATGAAAAATTTCCAGAGGTAAACTACTTTTTTGAATTTGAACCTGAAACTAAAATAGTTGTTCAAAAAAATGAATTAAAAGATGCACTTCAAAGAATTCAAACTTTGGCTCAAAATGAAAGAACTTTTTTATGCGATATGCAAATTAACAGTTCTGAATTAAAAATAAGAGCTATTGTTAATAATATCGGAAATTCTCTTGAGGAAATTTCTTGTCTTAAATTTGAAGGTTATAAACTTAATATTTCTTTTAACCCAAGTTCTCTATTAGATCACATAGAGTCTTTTGAATCAAATGAAATAAATTTTGATTTCCAAGGAAATAGTAAGTATTTTTTGATAACCTCTAAAAGTGAACCTGAACTTAAGCAAATATTGGTTCCTTCAAGATAATGAATCTTTACGATCTTTTAGAACTACCAACTACAGCATCAATAAAAGAAATAAAAATTGCTTATAAAAGATTAGCAAAGCGTTATCACCCTGATGTAAATAAATTAGGTTCGCAAACTTTTGTTGAAATTAATAATGCTTATTCAATATTAAGTGATCCTAACCAAAAGGAAAAATATGATTCAATGCTGAAAGTTAATGATTTTCAAAATCGCATCAAAAATTTAGATATTAGTGTTAGATGACATGAAAATTTCATGGAAGAACTCGAACTTCGTAAGAACTGAGAATTTGATTTTTTTTCATCTGATGAAGATTTCTTTTATTCTCCATTTACAAAAA"
-
+  
 test_kmer = "TAAGTTATTATTTAGTTAATACT"
 right_kmer = "AGTTAATACTTTTAACAATATTA"
 
-print "Task 1. Get kmer frequency"
-raw_input("\nReady?")
-for i in xrange(len(sequence)-k+1):
-    kmer = sequence[i:i+k]
-    print "Position %s kmer %s freq = %s" % (i, kmer, index[kmer])
+print(kmer2tf[kmer])
 
-print "Task 2. Iter read by read, print the first 20 reads"
-raw_input("\nReady?")
-for i, read in enumerate(index.iter_reads()):
-    if i == 20:
+sequence = kmer2tf.get_read(0, 1023, 0)
+
+print("Task 1. Get kmer frequency")
+for i, (kmer, tf) in enumerate(kmer2tf.iter_sequence_kmers(sequence)):
+    print(f"Position {i} kmer {kmer} freq = {tf}")
+  
+print("Task 2. Iter read by read, print the first 20 reads")
+for rid, read in kmer2tf.iter_reads():
+    if rid == 20:
         break
-    print i, read
+    print(rid, read)
 
-print "Task 3. Iter reads by kmer, returs (start, next_read_start, read, pos_if_uniq|None, all_poses)"
-raw_input("\nReady?")
-for read in iter_reads_by_kmer(test_kmer, index):
-    print read
+print("Task 3. Iter reads by kmer, returs (start, next_read_start, read, pos_if_uniq|None, all_poses)")
+# for read in aindex.iter_reads_by_kmer(test_kmer, kmer2tf):
+#     print(read)
 
-print "Task 4. Get distances in reads for two kmers, returns a list of (rid, left_kmer_pos, right_kmer_pos) tuples."
-raw_input("\nReady?")
-print get_left_right_distances(test_kmer, right_kmer, index)
+print("Task 4. Get distances in reads for two kmers, returns a list of (rid, left_kmer_pos, right_kmer_pos) tuples.")
+# print aindex.get_left_right_distances(test_kmer, right_kmer, kmer2tf)
 
-print "Task 5. Get layout for kmer, returns (max_pos, reads, lefts, rights, rids, starts), for details see source code"
-raw_input("\nReady?")
-max_pos, reads, lefts, rights, rids, starts = get_layout_for_kmer(right_kmer, index)
-print "Central layout:"
-for read in reads:
-    print read
-print "Left flanks:"
-print lefts
-print "Right flanks:"
-print rights
+print("Task 5. Get layout for kmer, returns (max_pos, reads, lefts, rights, rids, starts), for details see source code")
+# max_pos, reads, lefts, rights, rids, starts = get_layout_for_kmer(right_kmer, kmer2tf)
+print("Central layout:")
+# for read in reads:
+#     print(read)
+print("Left flanks:")
+# print(lefts)
+print("Right flanks:")
+# print(rights)
 
-print "Task 6. Iter reads by sequence, returns (start, next_read_start, read, pos_if_uniq|None, all_poses)"
-raw_input("\nReady?")
+print("Task 6. Iter reads by sequence, returns (start, next_read_start, read, pos_if_uniq|None, all_poses)")
 sequence = "AATATTATTAAGGTATTTAAAAAATACTATTATAGTATTTAACATA"
-for read in iter_reads_by_sequence(sequence, index):
-    print read
+# for read in iter_reads_by_sequence(sequence, kmer2tf):
+#     print(read)
 ```
