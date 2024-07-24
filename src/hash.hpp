@@ -20,6 +20,7 @@
 #include <functional>
 #include <vector>
 #include <algorithm>
+#include <string_view>
 
 typedef emphf::mphf<emphf::jenkins64_hasher> HASHER;
 typedef int *VAULT;
