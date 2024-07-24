@@ -52,7 +52,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--path_to_aindex",
-        help="Path to aindex folder inside Tools [../bin]",
+        help="Path to aindex folder including / ['']",
         required=False,
         default=None,
     )
@@ -73,10 +73,7 @@ if __name__ == "__main__":
     path_to_aindex = args["path_to_aindex"]
 
     if path_to_aindex is None:
-        script_path = os.path.abspath(__file__)
-        script_dir = os.path.dirname(script_path)
-        parent_dir = os.path.dirname(script_dir)
-        path_to_aindex = os.path.join(parent_dir, "bin")
+        path_to_aindex = ""
 
     # Check if input required files exist
     required_files = reads_file.split(",")
@@ -105,7 +102,7 @@ if __name__ == "__main__":
         # TODO: fix reads renaming if -t reads and different prefix
         if reads_type == "reads":
             commands = [
-                f"python {path_to_aindex}/reads_to_fasta.py -i {reads_file} -o {prefix}.fa",
+                f"{path_to_aindex}reads_to_fasta.py -i {reads_file} -o {prefix}.fa",
                 f"jellyfish count -m 23 -t {threads} -s {memory}G -C -L {lu} -U {up} -o {prefix}.23.jf2 {prefix}.fa",
             ]
             runner(commands)
@@ -134,15 +131,15 @@ if __name__ == "__main__":
         
         if reads_type == "fasta":
             commands = [
-                f"{path_to_aindex}/compute_reads.exe -i {reads_file} - -o {prefix}.reads",
+                f"{path_to_aindex}compute_reads.exe -i {reads_file} - -o {prefix}.reads",
             ]
         if reads_type == "fastq":
             commands = [
-                f"{path_to_aindex}/compute_reads.exe {reads_file.replace(',', ' ')} fastq {prefix}.reads",
+                f"{path_to_aindex}compute_reads.exe {reads_file.replace(',', ' ')} fastq {prefix}.reads",
             ]
         if reads_type == "se":
             commands = [
-                f"{path_to_aindex}/compute_reads.exe {reads_file.replace(',', ' ')} - se {prefix}.reads",
+                f"{path_to_aindex}compute_reads.exe {reads_file.replace(',', ' ')} - se {prefix}.reads",
             ]
 
         runner(commands)
@@ -173,14 +170,14 @@ if __name__ == "__main__":
         commands = [
             f"jellyfish histo -o {prefix}.23.histo {jf2_file}",
             f"cut -f1 {prefix}.23.dat > {prefix}.23.kmers",
-            f"{path_to_aindex}/compute_mphf_seq {prefix}.23.kmers {prefix}.23.pf",
-            f"{path_to_aindex}/compute_index.exe {prefix}.23.dat {prefix}.23.pf {prefix}.23 {threads} 0",
+            f"{path_to_aindex}compute_mphf_seq {prefix}.23.kmers {prefix}.23.pf",
+            f"{path_to_aindex}compute_index.exe {prefix}.23.dat {prefix}.23.pf {prefix}.23 {threads} 0",
         ]
         runner(commands)
 
     if not only_index:
         commands = [
-            f"{path_to_aindex}/compute_aindex.exe {prefix}.reads {prefix}.23.pf {prefix}.23 {prefix}.23 {threads} 23 {prefix}.23.tf.bin",
+            f"{path_to_aindex}compute_aindex.exe {prefix}.reads {prefix}.23.pf {prefix}.23 {prefix}.23 {threads} 23 {prefix}.23.tf.bin",
         ]
         runner(commands)
 

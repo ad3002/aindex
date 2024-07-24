@@ -24,7 +24,7 @@ if __name__ == "__main__":
     parser.add_argument("-M", help="JF2 memory in Gb (5)", required=False, default=1)
     parser.add_argument(
         "--path_to_aindex",
-        help="Path to aindex folder inside Tools [../bin]",
+        help="Path to aindex including / ['']",
         required=False,
         default=None,
     )
@@ -39,10 +39,7 @@ if __name__ == "__main__":
     path_to_aindex = args["path_to_aindex"]
 
     if path_to_aindex is None:
-        script_path = os.path.abspath(__file__)
-        script_dir = os.path.dirname(script_path)
-        parent_dir = os.path.dirname(script_dir)
-        path_to_aindex = os.path.join(parent_dir, "bin")
+        path_to_aindex = ""
 
     ### here we expect that jf2 file is created
     if not os.path.exists(jf2_file):
@@ -58,8 +55,8 @@ if __name__ == "__main__":
 
     commands = [
         f"cut -f1 {prefix}.23.dat > {prefix}.23.kmers",
-        f"{path_to_aindex}/compute_mphf_seq {prefix}.23.kmers {prefix}.23.pf",
-        f"{path_to_aindex}/compute_index.exe {prefix}.23.dat {prefix}.23.pf {prefix}.23 {threads} 0",
+        f"{path_to_aindex}compute_mphf_seq {prefix}.23.kmers {prefix}.23.pf",
+        f"{path_to_aindex}compute_index.exe {prefix}.23.dat {prefix}.23.pf {prefix}.23 {threads} 0",
         f"rm {prefix}.23.dat {prefix}.23.jf2",
     ]
     runner.run(commands)

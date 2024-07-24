@@ -4,7 +4,11 @@ Perfect hash based index for genomic data.
 
 ## Installation
 
-With pip:
+Requirements:
+
+[jellyfish 2](https://github.com/gmarcais/Jellyfish)
+
+Installation with pip:
 
 ```bash
 pip install aindex2
