@@ -37,11 +37,11 @@ external:
 	cd external && git clone https://github.com/ad3002/emphf.git
 	cd external/emphf && cmake .
 	cd external/emphf && make
-	cp external/emphf/compute_mphf_seq $(BIN_DIR)
-	cp scripts/*py $(BIN_DIR)
+	cp external/emphf/compute_mphf_seq $(BIN_DIR)/
+	cp scripts/*py $(BIN_DIR)/
 
 install: all
-    mkdir -p ${BIN_DIR}
+	mkdir -p ${BIN_DIR}
 	mkdir -p $(PACKAGE_DIR)
 	mkdir -p $(INSTALL_DIR)
 	cp bin/compute_index.exe $(INSTALL_DIR)/
