@@ -41,7 +41,6 @@ bin
 venv/*
 cmake-build-debug/*
 .vscode
-external/*
 build
 aindex.egg-info
 dist
