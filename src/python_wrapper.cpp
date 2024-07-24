@@ -18,13 +18,64 @@
 #include <unordered_map>
 #include <cstring>
 #include <string_view>
+#include <set>
+
+// Terminology that is used in this file:
+//     kmer - std::string
+//     ukmer - uint64_t
+//     ckmer - char*
+//     kid - kmer id, index of kmer in perfect hash
+//     pfid - perfect hash id, index of kmer in perfect hash
+//     read - sequence of nucleotides from reads file
+//     rid - read id is read index in reads file
+//     tf - term frequency, number of times kmer appears in reads
+//     pos - position in reads file
+//     start - start position of read in reads file
+//     end - end position of read in reads file
+//     local_start - start position of kmer in read
 
 
 typedef std::atomic<uint8_t> ATOMIC_BOOL;
 emphf::stl_string_adaptor str_adapter;
 
+
+// Define a structure for an interval
+struct Interval {
+    size_t rid;
+    size_t start;
+    size_t end;
+
+    bool operator<(const Interval& other) const {
+        return start < other.start;
+    }
+};
+
+// Class to manage intervals
+class IntervalTree {
+public:
+    void addInterval(size_t rid, size_t start, size_t end) {
+        intervals.insert({rid, start, end});
+    }
+
+    // Finds the interval that contains the position
+    const Interval* findInterval(size_t pos) const {
+        auto it = intervals.lower_bound({0, pos, pos});
+        if (it != intervals.begin()) {
+            --it;
+            if (it->start <= pos && pos <= it->end) {
+                return &(*it);
+            }
+        }
+        return nullptr;
+    }
+
+private:
+    std::set<Interval> intervals;
+};
+
 class UsedReads {
 public:
+
     UsedReads(size_t n_reads) {
         used_reads = new ATOMIC_BOOL[n_reads];
         for (size_t i=0; i < n_reads; ++i) {
@@ -36,26 +87,26 @@ public:
         delete[] used_reads;
     }
 
-    ATOMIC_BOOL get(size_t pos) {
-        return used_reads[pos].load();
+    ATOMIC_BOOL get(size_t rid) {
+        return used_reads[rid].load();
     }  
 
-    void set(size_t pos) {
-        ++used_reads[pos];
+    void set(size_t rid) {
+        used_reads[rid].store(true);
     }
 
-    bool used_or_use(size_t pos) {
-        auto status = get(pos); // 1 is used // atomic
+    bool used_or_use(size_t rid) {
+        auto status = get(rid); // 1 is used // atomic
         bool result = true;
         if (status == 0) {
-            set(pos);
+            set(rid);
             result = false;
         }
         return result;
     }
 
-    bool used(size_t pos) {
-        auto status = get(pos); // 1 is used // atomic
+    bool used(size_t rid) {
+        auto status = get(rid); // 1 is used // atomic
         bool result = true;
         if (status == 0) {
             result = false;
@@ -71,7 +122,7 @@ struct Hit {
     size_t rid;
     size_t start;
     std::string read;
-    size_t pos;
+    size_t local_pos;
     int ori;
     bool rev;
 };
@@ -80,7 +131,6 @@ class AindexWrapper {
 
     size_t *positions = nullptr;
     size_t *indices = nullptr;
-    uint32_t *read_pos_cache = nullptr;
     size_t n = 0;
     uint32_t max_tf = 0;
     size_t indices_length = 0;
@@ -91,14 +141,17 @@ public:
     PHASH_MAP *hash_map;
     size_t n_reads = 0;
     size_t n_kmers = 0;
-    std::unordered_map<size_t, uint32_t> start2rid;
-    std::vector<size_t> start_positions;
 
-    size_t reads_length = 0;
+    
+    size_t reads_size = 0;
     char *reads = nullptr;
 
+    std::unordered_map<size_t, uint32_t> start2rid;
     std::unordered_map<size_t, size_t> start2end;
+    std::vector<size_t> start_positions;
 
+    IntervalTree pos_intervalTree;
+    
     AindexWrapper() {
 
     }
@@ -107,15 +160,13 @@ public:
         // emphf::logger() << "NOTE: Calling aindex deconstructor..." << std::endl;
         if (positions != nullptr) munmap(positions, n*sizeof(size_t));
         if (indices != nullptr) munmap(indices, indices_length);
-        if (reads != nullptr) munmap(reads, reads_length);
-        if (read_pos_cache != nullptr) delete[] read_pos_cache;
+        if (reads != nullptr) munmap(reads, reads_size);
 
         delete hash_map;
 
         reads = nullptr;
         indices = nullptr;
         positions = nullptr;
-        read_pos_cache = nullptr;
     }
 
     void load(std::string index_prefix, std::string tf_file){
@@ -137,98 +188,24 @@ public:
         load_only_hash(*hash_map, hash_filename);
     }
 
-    void _load_reads(const std::string& reads_file) {
-        // Memory map reads
-        emphf::logger() << "Memory mapping reads file..." << std::endl;
-        std::ifstream fout(reads_file, std::ios::in | std::ios::binary);
-        fout.seekg(0, std::ios::end);
-        size_t length = fout.tellg();
-        fout.close();
-
-        int fd = open(reads_file.c_str(), O_RDONLY);
-        if (fd == -1) {
-            std::cerr << "Failed to open file" << std::endl;
-            exit(1);
-        }
-
-        char* reads = static_cast<char*>(mmap(nullptr, length, PROT_READ, MAP_PRIVATE, fd, 0));
-        close(fd);
-        if (reads == MAP_FAILED) {
-            std::cerr << "Failed to memory map file" << std::endl;
-            exit(2);
+    void load_reads_index(const std::string& index_file) {
+        std::ifstream fin(index_file, std::ios::in);
+        if (!fin.is_open()) {
+            std::cerr << "Error opening index file: " << index_file << std::endl;
+            std::terminate();
         }
 
         n_reads = 0;
-        reads_length = length;
-
-        // Count newlines in parallel
-        #pragma omp parallel for reduction(+:n_reads)
-        for (size_t i = 0; i < length; ++i) {
-            if (reads[i] == '\n') n_reads += 1;
-        }
-        emphf::logger() << "\tloaded reads: " << n_reads << std::endl;
-
-        emphf::logger() << "\tbuilding start pos index over reads: " << std::endl;
-
-        size_t rid = 0;
-        size_t start = 0;
-        size_t total = 0;
-
-        uint16_t local_start = 0;
-        read_pos_cache = new uint32_t[reads_length];
-
-        // Vector to store intermediate results from threads
-        std::vector<std::pair<size_t, size_t>> start_end_pairs;
-        std::vector<std::pair<size_t, size_t>> start_rid_pairs;
-        std::vector<size_t> local_starts(reads_length, 0);
-
-        #pragma omp parallel
-        {
-            std::vector<std::pair<size_t, size_t>> local_start_end_pairs;
-            std::vector<std::pair<size_t, size_t>> local_start_rid_pairs;
-
-            #pragma omp for
-            for (size_t i = 0; i < length; ++i) {
-                if (i % 100000000 == 0) {
-                    double progress = static_cast<double>(i + 1) / length;
-                    printProgressBar(progress);                
-                }
-                read_pos_cache[i] = local_start;
-                if (reads[i] == '\n') {
-                    local_start_end_pairs.emplace_back(start, i);
-                    local_start_rid_pairs.emplace_back(start, rid);
-                    start = i + 1;
-                    rid += 1;
-                    local_start = 0;
-                } else {
-                    ++local_start;
-                }
-            }
-
-            #pragma omp critical
-            {
-                start_end_pairs.insert(start_end_pairs.end(), local_start_end_pairs.begin(), local_start_end_pairs.end());
-                start_rid_pairs.insert(start_rid_pairs.end(), local_start_rid_pairs.begin(), local_start_rid_pairs.end());
-            }
+        size_t rid, start_pos, end_pos;
+        while (fin >> rid >> start_pos >> end_pos) {
+            pos_intervalTree.addInterval(rid, start_pos, end_pos+1);
+            start2rid[start_pos] = rid;
+            start_positions.push_back(start_pos);
+            start2end[start_pos] = end_pos;
+            n_reads++;
         }
 
-        printProgressBar(1.0);
-
-        if (start < length) {
-            start_end_pairs.emplace_back(start, total);
-            start_rid_pairs.emplace_back(start, rid);
-        }
-
-        // Populate maps
-        for (const auto& p : start_end_pairs) {
-            start2end.emplace(p.first, p.second);
-        }
-        for (const auto& p : start_rid_pairs) {
-            start2rid[p.first] = p.second;
-            start_positions.push_back(p.first);
-        }
-
-        emphf::logger() << "\tDone" << std::endl;
+        fin.close();
     }
 
     void load_reads(std::string reads_file) {
@@ -247,53 +224,11 @@ public:
         }
         fclose(in);
 
-        n_reads = 0;
-        reads_length = length;
-
-        for (size_t i=0; i < length; ++i) {
-            if (reads[i] == '\n') n_reads += 1;
-        }
-        emphf::logger() << "\tloaded reads: " << n_reads << std::endl;
+        reads_size = length;
 
         emphf::logger() << "\tbuilding start pos index over reads: " << std::endl;
-
-        size_t rid = 0;
-        size_t start = 0;
-        size_t total = 0;
-
-        uint16_t local_start = 0;
-        read_pos_cache = new uint32_t[reads_length];
-        for (size_t i=0; i < length; ++i) {
-            if (i % 100000000 == 0 ) {
-                double progress = static_cast<double>(i + 1) / length;
-                printProgressBar(progress);                
-            }
-            read_pos_cache[i] = local_start;
-            total++;
-            if (reads[i] == '\n') {
-                start2end.emplace(start, i);
-                start2rid[start] = rid;
-                start_positions.push_back(start);
-                start = i+1;
-                rid += 1;
-                local_start = 0;
-            } else {
-                ++local_start;
-            }
-        }
-        printProgressBar(1.0);
-
-        if (start < length) {
-            start2end.emplace(start, total);
-            start2rid[start] = rid;
-            start_positions.push_back(start);
-        }
-
-        // for (size_t i=0; i< 500; ++i) {
-        //     std::cout << read_pos_cache[i] << " ";
-        // }
-        std::cout << std::endl;
-        
+        std::string index_file = reads_file.substr(0, reads_file.find_last_of(".")) + ".ridx";
+        load_reads_index(index_file);
         emphf::logger() << "\tDone" << std::endl;
 
     }
@@ -320,56 +255,16 @@ public:
             exit(10);
         }
 
-        reads_length = length;
-        n_reads = 0;
-
-        for (size_t i = 0; i < length; ++i) {
-            if (reads[i] == '\n') n_reads += 1;
-        }
-        emphf::logger() << "\tloaded reads: " << n_reads << std::endl;
+        reads_size = length;
 
         emphf::logger() << "\tbuilding start pos index over reads: " << std::endl;
-
-        size_t rid = 0;
-        size_t start = 0;
-        size_t total = 0;
-
-        uint16_t local_start = 0;
-        read_pos_cache = new uint32_t[reads_length];
-        for (size_t i = 0; i < length; ++i) {
-            if (i % 100000000 == 0) {
-                double progress = static_cast<double>(i + 1) / length;
-                printProgressBar(progress);
-            }
-            read_pos_cache[i] = local_start;
-            total++;
-            if (reads[i] == '\n') {
-                start2end.emplace(start, i);
-                start2rid[start] = rid;
-                start_positions.push_back(start);
-                start = i + 1;
-                rid += 1;
-                local_start = 0;
-            } else {
-                ++local_start;
-            }
-        }
-        printProgressBar(1.0);
-
-        if (start < length) {
-            start2end.emplace(start, total);
-            start2rid[start] = rid;
-            start_positions.push_back(start);
-        }
-
-        std::cout << std::endl;
+        std::string index_file = reads_file.substr(0, reads_file.find_last_of(".")) + ".ridx";
+        load_reads_index(index_file);
         emphf::logger() << "\tDone" << std::endl;
     }
 
     void load_aindex(std::string aindex_prefix, uint32_t _max_tf) {
         // Load aindex.
-
-        // std::cout << "Inside load index: " << _max_tf << std::endl;
 
         n = hash_map->n;
         max_tf = _max_tf;
@@ -378,32 +273,12 @@ public:
         std::string index_file = aindex_prefix + ".index.bin";
         std::string indices_file = aindex_prefix + ".indices.bin";
 
-        // std::cout << "END" << std::endl;
-
-//        emphf::logger() << "Reading aindex.pos.bin array..." << std::endl;
-//
-//        size_t f = 0;
-//        size_t rid = 0;
-//        std::ifstream fout2(pos_file, std::ios::in | std::ios::binary);
-//        while(fout2.read(reinterpret_cast<char *>(&f), sizeof(f))) {
-//            start_positions.push_back(f);
-//            start2rid[f] = rid;
-//            rid += 1;
-//
-//        }
-//
-//        start_positions.pop_back();
-//        start_positions.pop_back();
-//        fout2.close();
-//        emphf::logger() << "\tDone" << std::endl;
-
         emphf::logger() << "Reading aindex.indices.bin array..." << std::endl;
 
-        size_t pos = 0;
-        std::ifstream fout5(indices_file, std::ios::in | std::ios::binary);
-        fout5.seekg(0, std::ios::end);
-        size_t length = fout5.tellg();
-        fout5.close();
+        std::ifstream fin_temp(indices_file, std::ios::in | std::ios::binary);
+        fin_temp.seekg(0, std::ios::end);
+        size_t length = fin_temp.tellg();
+        fin_temp.close();
 
         FILE* in1 = std::fopen(indices_file.c_str(), "rb");
         indices = (size_t*)mmap(NULL, length, PROT_READ|PROT_WRITE, MAP_PRIVATE, fileno(in1), 0);
@@ -418,7 +293,6 @@ public:
 
         emphf::logger() << "Reading aindex.index.bin array..." << std::endl;
 
-        pos = 0;
         std::ifstream fout6(index_file, std::ios::in | std::ios::binary);
         fout6.seekg(0, std::ios::end);
         length = fout6.tellg();
@@ -437,13 +311,60 @@ public:
 
     }
 
+    size_t get_reads_size() {
+        return reads_size;
+    }
+
+    size_t get_n() {
+        return hash_map->n;
+    }
+
+    size_t get_hash_size() {
+        return hash_map->n;
+    }
+
+    // Various getters for reads
+
+    const char* get_read(size_t start, size_t end, uint rev) {
+        // TODO: make it thread safe
+        if (start >= reads_size || end > reads_size || start >= end) {
+            return nullptr;  // Invalid range
+        }
+        static std::string read_str;
+        read_str = std::string(reads + start, end - start);
+        if (rev > 0) {
+            return get_revcomp(read_str).c_str();
+        }
+        return read_str.c_str();
+    }
+
     std::string get_read_by_rid(uint32_t rid) {
         size_t start = start_positions[rid];
-        return get_read_by_start(start);
+        size_t end = start2end.at(start);
+        return std::string(reads + start, end - start);
+    }
+
+    const char * get_pointer_to_read_by_rid(size_t rid) {
+        // TODO: make it thread safe
+        if (rid >= start_positions.size()) {
+            std::cerr << "Read id " << rid << " not found." << std::endl;
+            std::terminate();
+        }
+        size_t start = start_positions[rid];
+        size_t end = start2end.at(start);
+        static std::string read_str;
+        read_str = std::string(reads + start, end - start);
+        return read_str.c_str();
     }
 
     size_t get_start_by_pos(size_t pos) {
-        return pos - read_pos_cache[pos];
+        const Interval* interval = pos_intervalTree.findInterval(pos);
+        if (interval) {
+            return interval->start;
+        } else {
+            std::cerr << "Position " << pos << " not found in any interval." << std::endl;
+            std::terminate();
+        }
     }
 
     size_t get_end_by_start(size_t start) {
@@ -452,203 +373,34 @@ public:
 
     std::string get_read_by_start(size_t start) const {
         size_t end = start2end.at(start);
-        char read[end-start+1];
-        std::memcpy(read, &reads[start], end-start);
-        read[end-start] = '\0';
-        return std::string(read);
-    }
-
-    std::string get_read_by_rid(uint32_t rid, int ori) {
-
-        size_t start = start_positions[rid];
-        size_t end = start;
-        size_t spring_pos = 0;
-
-        while (true) {
-            if (reads[end] == '\n') {
-                char rkmer[end-spring_pos];
-                std::memcpy(rkmer, &reads[spring_pos+1], end-spring_pos-1);
-                rkmer[end-spring_pos-1] = '\0';
-                return std::string(rkmer);
-            } else if (reads[end] == '~') {
-                if (ori == 0) {
-                    char lkmer[end-start+1];
-                    std::memcpy(lkmer, &reads[start], end-start);
-                    lkmer[end-start] = '\0';
-                    return std::string(lkmer);
-                } else {
-                    spring_pos = end;
-                }
-            }
-            end += 1;
-        }
-    }
-
-    size_t get_n() {
-        return hash_map->n;
+        return std::string(reads + start, end - start);;
     }
 
     size_t get_rid(size_t pos) {
-        // Get rid by position.
-        while (true){
-            if (reads[pos] == '\n') {
-                return pos+1;
-            }
-            if (pos == 0) {
-                return pos;
-            }
-            pos -= 1;
+        const Interval* interval = pos_intervalTree.findInterval(pos);
+        if (!interval) {
+            std::cerr << "Position " << pos << " not found in any interval." << std::endl;
+            std::terminate();
         }
+        size_t start = interval->start;
+        return start2rid.at(start);
     }
 
-    size_t get_start(size_t pos) {
-        // Get rid by position.
-        uint16_t shift = read_pos_cache[pos];
-        return pos - shift;
-    }
-
-    size_t get_kid_by_kmer(std::string _kmer) {
-        uint64_t kmer = get_dna23_bitset(_kmer);
-        return hash_map->get_pfid_by_umer_safe(kmer);
-    }
-
-    
-    void get_positions(size_t* r, const std::string_view& kmer) {
-        // Get read positions and save them to given r
-        auto h1 = hash_map->get_pfid(kmer);
-        size_t j = 0;
-        for (size_t i=indices[h1]; i < indices[h1+1] && h1+1 < indices_length; ++i) {
-            if (j == max_tf - 1) {
-                break;
-            }
-            r[j] = positions[i];
-            j += 1;
-        }
-        r[j] = 0;
-    }
-
-    size_t get_positions(size_t* r, size_t hash) {
-        // Get read positions and save them to given r
-        size_t j = 0;
-        for (size_t i=indices[hash]; i < indices[hash+1] && hash+1 < indices_length; ++i) {
-            if (j == max_tf - 1) {
-                break;
-            }
-            if (positions[i] == 0) { // probably errorprone
-                break;
-            }
-            r[j] = positions[i]-1;
-            j += 1;
-        }
-        r[j] = 0;
-        return j;
-    }
-
-    std::vector<size_t> get_positions(const std::string& kmer) {
-        // Get read positions and save them to given r
-        std::vector<size_t> r;
-        auto h1 = hash_map->get_pfid(kmer);
-        for (size_t i=indices[h1]; i < indices[h1+1] && h1+1 < indices_length; ++i) {
-            r.push_back(positions[i]);
-        }
-        return r;
-    }
-
-    std::vector<size_t> get_positions_vector(const std::string& kmer) {
-        // Get read positions and save them to given r
-        std::vector<size_t> r;
-        auto h1 = hash_map->get_pfid(kmer);
-        for (size_t i=indices[h1]; i < indices[h1+1] && h1+1 < indices_length; ++i) {
-            size_t pos = positions[i];
-            if (pos > 0) {
-                r.push_back(pos-1);
-            }
-        }
-        return r;
-    }
-
-    void get_positions_vector_as_param(const std::string& kmer, std::vector<size_t>& r, size_t max_hits) {
-        // Get read positions and save them to given r
-        auto h1 = hash_map->get_pfid(kmer);
-        size_t total = 0;
-        for (size_t i=indices[h1]; i < indices[h1+1] && h1+1 < indices_length; ++i) {
-            size_t pos = positions[i];
-            if (pos > 0) {
-                r.push_back(pos-1);
-                total++;
-                if (total > max_hits) {
-                    break;
-                }
-            }
-        }
-    }
-
-    std::unordered_map<size_t, std::vector<size_t> > get_rid2poses(const std::string& kmer) {
-        // ''' Wrapper that handle case when two kmer hits in one read.
-        // Return rid->poses_in_read dictionary for given kmer. 
-        // In this case rid is the start position in reads file.
-        // '''
-        std::vector<size_t> poses = get_positions_vector(kmer);
-        std::unordered_map<size_t, std::vector<size_t> > result;
-
-        for (size_t pos: poses) {
-            size_t start = get_start(pos);
-            if (!result.count(start)) {
-                std::vector<size_t> hits;
-                result.emplace(start, hits);
-            }
-            result[start].push_back(pos - start);
-        }
-        return result;
-    }
-
-    std::vector<Hit> get_reads_by_kmer(const std::string& kmer, UsedReads &used_reads, const size_t min_shift, const size_t max_shift) const {
-        uint k = 23;
-        std::vector<Hit> result;
-        auto h1 = hash_map->get_pfid(kmer);
-        for (size_t i=indices[h1]; i < indices[h1+1] && h1+1 < indices_length; ++i) {
-            size_t reads_pos = positions[i] - 1;
-            uint16_t shift = read_pos_cache[reads_pos]; // zero reserved for empty            
-            if (shift > max_shift || shift < min_shift) {
-                continue;
-            }
-            size_t start = reads_pos - shift;
-            size_t rid = start2rid.at(start);
-            if (used_reads.used(rid)) {
-                continue;
-            }
-            std::string read = get_read_by_start(start);
-            std::string check_kmer = read.substr(shift, k);
-            bool rev = false;
-            if (kmer != check_kmer) {  
-                std::string rread = read;
-                get_revcomp(read, rread);
-                read = rread;
-                shift = read.size() - shift - k;
-                rev = true;
-            }
-            Hit hit;
-            hit.rid = rid;
-            hit.start = start;
-            hit.pos = shift;
-            hit.rev = rev;
-            hit.read = read;
-            result.emplace_back(hit);
-        }
-        return result;
-    }
+    // Varios getters for kmers
 
     size_t get(char* ckmer) {
         // Return tf for given char * kmer
-        std::string kmer = std::string(ckmer);
-        return get(kmer);
+        return get(std::string(ckmer));
     }
 
     size_t get(uint64_t ukmer) {
+        if (ukmer >= hash_map->n) {
+            return 0;
+        }
         return hash_map->tf_values[ukmer];
     }
 
-    size_t get(std::string kmer) {
+    size_t get(std::string& kmer) {
         // Return tf for given kmer
         uint64_t ukmer = get_dna23_bitset(kmer);
         auto h1 = hash_map->hasher.lookup(kmer, str_adapter);
@@ -666,16 +418,6 @@ public:
             return hash_map->tf_values[h1];
         }
         return 0;
-    }
-
-    size_t get_hash_value(const std::string kmer) {
-        // Return hash value for given kmer
-        return hash_map->get_pfid(kmer);
-    }
-
-     size_t get_hash_value(std::string_view kmer) {
-        // Return hash value for given kmer
-        return hash_map->get_pfid(kmer);
     }
 
     size_t get(std::string_view kmer) const {
@@ -698,6 +440,11 @@ public:
         return 0;
     }
 
+    size_t get_hash_value(std::string_view kmer) {
+        // Return hash value for given kmer
+        return hash_map->get_pfid(kmer);
+    }
+
     size_t get_strand(const std::string& kmer) {
         uint64_t ukmer = get_dna23_bitset(kmer);
         auto h1 = hash_map->hasher.lookup(kmer, str_adapter);
@@ -709,35 +456,64 @@ public:
             if (h2 >= hash_map->n || hash_map->checker[h2] != urev_kmer) {
                 return 0;
             } else {
-                return 1;
+                return 2;
             }
         } else {
-            return 2;
+            return 1;
         }
         return 0;
     }
 
     void get_kmer_by_kid(size_t r, char* kmer) {
-            // if (r >= hash_map->n) {
-            //     return;
-            // }
             uint64_t ukmer = hash_map->checker[r];
             get_bitset_dna23_c(ukmer, kmer, 23);            
     }
 
-    size_t get_kmer(size_t p, char* kmer, char* rkmer) {
+    size_t get_kmer(size_t kid, char* kmer, char* rkmer) {
         // Get tf, kmer and rev_kmer stored in given arrays.
-        uint64_t ukmer = hash_map->checker[p];
+        // TODO: fix this
+        uint64_t ukmer = hash_map->checker[kid];
         uint64_t urev_kmer = reverseDNA(ukmer);
         get_bitset_dna23_c(ukmer, kmer, 23);
         get_bitset_dna23_c(urev_kmer, rkmer, 23);
-        return hash_map->tf_values[p];
+        return hash_map->tf_values[kid];
     }
 
-
-    size_t get_hash_size() {
-        return hash_map->n;
+    size_t get_kid_by_kmer(std::string _kmer) {
+        uint64_t kmer = get_dna23_bitset(_kmer);
+        return hash_map->get_pfid_by_umer_safe(kmer);
     }
+    
+    // Getters for positions
+
+    void get_positions(size_t* r, const std::string_view& kmer) {
+        // Get read positions and save them to given r
+        auto h1 = hash_map->get_pfid(kmer);
+        size_t j = 0;
+        for (size_t i=indices[h1]; i < indices[h1+1] && h1+1 < indices_length; ++i) {
+            if (j == max_tf - 1) {
+                break;
+            }
+            r[j] = positions[i];
+            j += 1;
+        }
+        r[j] = 0;
+    }
+
+    std::vector<size_t> get_positions(const std::string& kmer) {
+        // Get read positions and save them to given r
+        std::vector<size_t> r;
+        auto h1 = hash_map->get_pfid(kmer);
+        for (size_t i=indices[h1]; i < indices[h1+1] && h1+1 < indices_length; ++i) {
+            if (positions[i] == 0) {
+                continue;
+            }
+            r.push_back(positions[i]-1);
+        }
+        return r;
+    }
+
+    // Aindex manipulation
 
     void increase(char* ckmer) {
         std::string kmer = std::string(ckmer);
@@ -751,11 +527,114 @@ public:
 
     void set_positions(size_t* r, const std::string& kmer) {
         // Set read positions
+        // TODO: check borders
         auto h1 = hash_map->get_pfid(kmer);
         size_t j = 0;
         for (size_t i=indices[h1]; i < indices[h1+1]; ++i) {
             positions[i] = r[j];
             j += 1;
+        }
+    }
+
+    // Consistency checks
+
+    void check_get_reads_se_by_kmer(std::string const kmer, size_t h1, bool* used_reads, std::vector<Hit> &hits) {
+
+        for (size_t i=indices[h1]; i < indices[h1+1]; ++i) {
+
+            if (positions[i] == 0) {
+                break;
+            }
+
+            size_t position = positions[i] - 1;
+            size_t start = get_start_by_pos(position);
+
+            size_t end = start;
+            size_t spring_pos = 0;
+
+            size_t pos = position - start;
+            std::string left_read;
+            std::string right_read;
+
+            while (true) {
+                if (reads[end] == '\n') {
+                    if (spring_pos > 0) {
+                        char rkmer[end-spring_pos];
+                        std::memcpy(rkmer, &reads[spring_pos+1], end-spring_pos-1);
+                        rkmer[end-spring_pos-1] = '\0';
+                        right_read = std::string(rkmer);
+                    }
+                    break;
+                } else if (reads[end] == '~') {
+                    char lkmer[end-start+1];
+                    std::memcpy(lkmer, &reads[start], end-start);
+                    lkmer[end-start] = '\0';
+                    left_read = std::string(lkmer);
+                    spring_pos = end;
+                }
+                end += 1;
+            }
+
+            size_t real_rid = start2rid[start];
+
+            Hit hit;
+            hit.rid = real_rid;
+            hit.start = start;
+            hit.local_pos = pos;
+            hit.rev = 0;
+            spring_pos = spring_pos - start;
+
+            if (pos < spring_pos) {
+                hit.read = left_read;
+                hit.ori = 0;
+
+                if (hit.read.substr(hit.local_pos, Settings::K) != kmer) {
+                    std::string rleft_read = hit.read;
+                    get_revcomp(hit.read, rleft_read);
+                    hit.local_pos = hit.read.length() - pos - Settings::K;
+                    if (rleft_read.substr(hit.local_pos, Settings::K) != kmer) {
+                        std::cout << rleft_read << std::endl;
+                        std::cout << left_read << std::endl;
+                        std::cout << right_read << std::endl;
+                        std::cout << kmer << " " << pos <<  std::endl;
+                        continue;
+                    }
+                    hit.read = rleft_read;
+                    hit.rev = 1;
+                }
+            } else {
+
+                if (hit.local_pos == spring_pos) {
+                    hit.local_pos = hit.local_pos - spring_pos;
+                    std::cout <<  left_read << std::endl;
+                    std::cout <<  right_read << std::endl;
+                    std::cout << kmer << std::endl;
+
+                } else {
+                    hit.local_pos = hit.local_pos - spring_pos - 1;
+                }
+
+                hit.read = right_read;
+                hit.ori = 1;
+
+                if (hit.read.substr(hit.local_pos, Settings::K) != kmer) {
+                    std::string rright_read = hit.read;
+                    get_revcomp(hit.read, rright_read);
+                    hit.local_pos = hit.read.length() - hit.local_pos - Settings::K;
+                    if (rright_read.substr(hit.local_pos, Settings::K) != kmer) {
+                        continue;
+                    }
+                    hit.read = rright_read;
+                    hit.rev = 1;
+                }
+
+            }
+
+            if (used_reads[2*hit.rid+hit.ori]) {
+                continue;
+            }
+            hits.push_back(hit);
+
         }
     }
 
@@ -815,131 +694,20 @@ public:
             uint64_t h1_kmer = hash_map->checker[h1];
             std::string kmer = get_bitset_dna23(h1_kmer);
             hits.clear();
-            get_reads_se_by_kmer(kmer, h1, used_reads, hits);
+            check_get_reads_se_by_kmer(kmer, h1, used_reads, hits);
 
             size_t max_pos = 0;
 
             for (auto hit: hits) {
-                std::max(max_pos, hit.pos);
-                std::string subkmer = hit.read.substr(hit.pos, Settings::K);
+                std::max(max_pos, hit.local_pos);
+                std::string subkmer = hit.read.substr(hit.local_pos, Settings::K);
                 assert(subkmer == kmer);
                 std::cout << kmer << " " << subkmer << " " << h1 << " " << hash_map->tf_values[h1] << std::endl;
             }
         }
     }
 
-
-    void get_reads_se_by_kmer(std::string const kmer, size_t h1, bool* used_reads, std::vector<Hit> &hits) {
-
-
-        for (size_t i=indices[h1]; i < indices[h1+1]; ++i) {
-
-            if (positions[i] == 0) {
-                break;
-            }
-
-            size_t position = positions[i] - 1;
-            size_t start = get_start(position);
-
-            size_t end = start;
-            size_t spring_pos = 0;
-
-            size_t pos = position - start;
-            std::string left_read;
-            std::string right_read;
-
-            while (true) {
-                if (reads[end] == '\n') {
-                    if (spring_pos > 0) {
-                        char rkmer[end-spring_pos];
-                        std::memcpy(rkmer, &reads[spring_pos+1], end-spring_pos-1);
-                        rkmer[end-spring_pos-1] = '\0';
-                        right_read = std::string(rkmer);
-                    }
-                    break;
-                } else if (reads[end] == '~') {
-                    char lkmer[end-start+1];
-                    std::memcpy(lkmer, &reads[start], end-start);
-                    lkmer[end-start] = '\0';
-                    left_read = std::string(lkmer);
-                    spring_pos = end;
-                }
-                end += 1;
-            }
-
-            size_t real_rid = start2rid[start];
-
-            Hit hit;
-            hit.rid = real_rid;
-            hit.start = start;
-            hit.pos = pos;
-            hit.rev = 0;
-            spring_pos = spring_pos - start;
-
-            if (pos < spring_pos) {
-                hit.read = left_read;
-                hit.ori = 0;
-
-                if (hit.read.substr(hit.pos, Settings::K) != kmer) {
-                    std::string rleft_read = hit.read;
-                    get_revcomp(hit.read, rleft_read);
-                    hit.pos = hit.read.length() - pos - Settings::K;
-                    if (rleft_read.substr(hit.pos, Settings::K) != kmer) {
-                        std::cout << rleft_read << std::endl;
-                        std::cout << left_read << std::endl;
-                        std::cout << right_read << std::endl;
-                        std::cout << kmer << " " << pos <<  std::endl;
-                        continue;
-                    }
-                    hit.read = rleft_read;
-                    hit.rev = 1;
-//                    hit.ori = 1;
-                }
-            } else {
-
-                if (hit.pos == spring_pos) {
-                    hit.pos = hit.pos - spring_pos;
-                    std::cout <<  left_read << std::endl;
-                    std::cout <<  right_read << std::endl;
-                    std::cout << kmer << std::endl;
-
-                } else {
-                    hit.pos = hit.pos - spring_pos - 1;
-                }
-
-                hit.read = right_read;
-                hit.ori = 1;
-
-                if (hit.read.substr(hit.pos, Settings::K) != kmer) {
-                    std::string rright_read = hit.read;
-                    get_revcomp(hit.read, rright_read);
-                    hit.pos = hit.read.length() - hit.pos - Settings::K;
-                    if (rright_read.substr(hit.pos, Settings::K) != kmer) {
-                        continue;
-                    }
-                    hit.read = rright_read;
-                    hit.rev = 1;
-//                    hit.ori = 0;
-                }
-
-            }
-
-//            if (reversed_reads[real_rid]) {
-//                if (hit.ori) {
-//                    hit.ori = 0;
-//                } else {
-//                    hit.ori = 1;
-//                }
-//            }
-
-            if (used_reads[2*hit.rid+hit.ori]) {
-                continue;
-            }
-            hits.push_back(hit);
-
-        }
-    }
-
+    // Deconstructors
 
     void freeme(char* ptr)
     {
@@ -981,20 +749,21 @@ AindexWrapper load_index(
 extern "C" {
 
     AindexWrapper* AindexWrapper_new(){ return new AindexWrapper(); }
+
     void AindexWrapper_load(AindexWrapper* foo, char* index_prefix, char* tf_file){ foo->load(index_prefix, tf_file); }
 
-
     void AindexWrapper_freeme(AindexWrapper* foo, char* ptr){ foo->freeme(ptr); }
-
-
 
     void AindexWrapper_load_hash_file(AindexWrapper* foo, char* hash_filename, char* tf_file){ foo->load(hash_filename, tf_file); }
 
     void AindexWrapper_load_reads(AindexWrapper* foo, char* reads_file){ foo->load_reads(reads_file); }
 
+    void AindexWrapper_load_reads_index(AindexWrapper* foo, char* index_file){ foo->load_reads_index(index_file); }
+
     void AindexWrapper_load_index(AindexWrapper* foo, char* index_prefix, uint32_t max_tf){ foo->load_aindex(index_prefix, max_tf); }
     
     void AindexWrapper_increase(AindexWrapper* foo, char* kmer){ foo->increase(kmer); }
+
     void AindexWrapper_decrease(AindexWrapper* foo, char* kmer){ foo->decrease(kmer); }
 
     size_t AindexWrapper_get_kid_by_kmer(AindexWrapper* foo, char* kmer){ return foo->get_kid_by_kmer(kmer); }
@@ -1007,10 +776,13 @@ extern "C" {
 
     size_t AindexWrapper_get_rid(AindexWrapper* foo, size_t pos){ return foo->get_rid(pos); }
 
-//    char* AindexWrapper_get_read(AindexWrapper* foo, size_t start, int ori){ return foo->get_read(pos, ori); }
+    size_t AindexWrapper_get_start(AindexWrapper* foo, size_t pos){ return foo->get_start_by_pos(pos); }
+
+    const char*  AindexWrapper_get_read(AindexWrapper* foo, size_t start, size_t end, uint rev){ return foo->get_read(start, end, rev); }
+
+    const char*  AindexWrapper_get_read_by_rid(AindexWrapper* foo, size_t rid){ return foo->get_pointer_to_read_by_rid(rid); }
 
     void AindexWrapper_get_positions(AindexWrapper* foo, size_t* r, char* kmer){ foo->get_positions(r, kmer); }
-
 
     void AindexWrapper_set_positions(AindexWrapper* foo, size_t* r, char* kmer){ foo->set_positions(r, kmer); }
 
@@ -1019,6 +791,24 @@ extern "C" {
     size_t AindexWrapper_get_strand(AindexWrapper* foo, char* kmer){ return foo->get_strand(kmer); }
 
     size_t AindexWrapper_get_hash_size(AindexWrapper* foo){ return foo->get_hash_size(); }
+
+    size_t AindexWrapper_get_reads_size(AindexWrapper* foo){ return foo->get_reads_size(); }
+
+    void AindexWrapper_load_reads_in_memory(AindexWrapper* foo, char* reads_file){ foo->load_reads_in_memory(reads_file); }
+
+    void AindexWrapper_load_aindex(AindexWrapper* foo, char* aindex_prefix, uint32_t max_tf){ foo->load_aindex(aindex_prefix, max_tf); }
+
+    size_t AindexWrapper_get_start_by_pos(AindexWrapper* foo, size_t pos) { return foo->get_start_by_pos(pos); }
+
+    size_t AindexWrapper_get_end_by_start(AindexWrapper* foo, size_t start) { return foo->get_end_by_start(start); }
+
+    const char* AindexWrapper_get_pointer_to_read_by_rid(AindexWrapper* foo, size_t rid) { return foo->get_pointer_to_read_by_rid(rid); }
+
+    size_t AindexWrapper_get_hash_value(AindexWrapper* foo, char* kmer) { return foo->get_hash_value(kmer); }
+
+    void AindexWrapper_check_aindex(AindexWrapper* foo) { foo->check_aindex(); }
+
+    void AindexWrapper_check_aindex_reads(AindexWrapper* foo) { foo->check_aindex_reads(); }
 }
 
 #endif

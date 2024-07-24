@@ -1,26 +1,26 @@
+{% set version = "1.0.1" %}
+
 package:
-  name: aindex
-  version: 1.0.0
+  name: aindex2
+  version: {{ version }}
 
 source:
   path: ..
 
 build:
   number: 0
-  script: "bash build.sh"
 
 requirements:
   build:
-    - python
+    - python >=3.6
     - pip
-    - setuptools
+    - setuptools >=40.8
     - cmake
-    - gxx_linux-64  # Adjust according to your platform
-
+    - gxx_linux-64
   run:
     - python
 
 about:
   home: https://github.com/ad3002/aindex
   license: MIT
-  summary: Perfect hash based index for text data.
+  summary: Perfect hash based index for genome data.

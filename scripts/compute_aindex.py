@@ -33,11 +33,8 @@ if __name__ == "__main__":
         default="fastq",
     )
     parser.add_argument("-o", help="Output prefix", required=True)
-    parser.add_argument(
-        "-H", help="Build header file for fasta", required=False, default=False
-    )
     parser.add_argument("--lu", help="-L for jellyfish [0]", required=False, default=0)
-    parser.add_argument("--up", help="-U for jellyfish [10000000]", required=False, default=10000000)
+    parser.add_argument("--up", help="-U for jellyfish [1000000000]", required=False, default=1000000000)
     parser.add_argument("--sort", help="Sort dat file [None]", required=False, default=None)
     parser.add_argument(
         "--interactive", help="Interactive [None]", required=False, default=None
@@ -98,8 +95,6 @@ if __name__ == "__main__":
     lu = args["lu"]
     up = args["up"]
 
-    build_header = bool(args["H"])
-
     if unzip:
         local_files = reads_file.split(",")
         for file_name in local_files:
@@ -136,20 +131,15 @@ if __name__ == "__main__":
     commands = []
 
     if not only_index:
+        
         if reads_type == "fasta":
-            if not build_header:
-                commands = [
-                    f"python {path_to_aindex}/fasta_to_reads.py -i {reads_file} -o {prefix}.reads",
-                ]
-            else:
-                commands = [
-                    f"python {path_to_aindex}/fasta_to_reads.py -i {reads_file} -o {prefix}.reads -H {prefix}.header",
-                ]
+            commands = [
+                f"{path_to_aindex}/compute_reads.exe -i {reads_file} - -o {prefix}.reads",
+            ]
         if reads_type == "fastq":
             commands = [
                 f"{path_to_aindex}/compute_reads.exe {reads_file.replace(',', ' ')} fastq {prefix}.reads",
             ]
-
         if reads_type == "se":
             commands = [
                 f"{path_to_aindex}/compute_reads.exe {reads_file.replace(',', ' ')} - se {prefix}.reads",

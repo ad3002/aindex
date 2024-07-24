@@ -1,0 +1,5 @@
+include README.md
+include LICENSE
+include requirements.txt
+recursive-include aindex/core *.cpp *.h
+recursive-include scripts *.py
