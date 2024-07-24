@@ -6,7 +6,6 @@
 # @contact: ad3002@gmail.com
 
 import argparse
-import sys
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Reads to fasta.")
