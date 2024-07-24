@@ -37,9 +37,11 @@ jobs:
             auditwheel repair -w {dest_dir} {wheel} &&
             mkdir -p {wheel}.tmp &&
             unzip -q {wheel} -d {wheel}.tmp &&
-            if [ -f {wheel}.tmp/aindex/core/python_wrapper*.so ]; then
-              mv {wheel}.tmp/aindex/core/python_wrapper*.so {wheel}.tmp/aindex/core/python_wrapper.so
-            fi &&
+            for so_file in {wheel}.tmp/aindex/core/python_wrapper*.so; do
+              if [ -f "$so_file" ] && [ "$(basename "$so_file")" != "python_wrapper.so" ]; then
+                mv "$so_file" "{wheel}.tmp/aindex/core/python_wrapper.so"
+              fi
+            done &&
             (cd {wheel}.tmp && zip -q -r ../{wheel} *)
         with:
           package-dir: .
