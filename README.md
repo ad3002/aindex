@@ -1,6 +1,6 @@
 # aindex
 
-Perfect hash based index for text data.
+Perfect hash based index for genomic data.
 
 ## Installation
 

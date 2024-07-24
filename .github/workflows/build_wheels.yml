@@ -35,21 +35,7 @@ jobs:
             pip install cmake
           CIBW_REPAIR_WHEEL_COMMAND: >
             auditwheel repair -w {dest_dir} {wheel} &&
-            python -c "
-            import os, zipfile, glob;
-            wheel_dir = '{wheel}.tmp';
-            os.makedirs(wheel_dir, exist_ok=True);
-            with zipfile.ZipFile('{wheel}', 'r') as zip_ref:
-                zip_ref.extractall(wheel_dir);
-            for so_file in glob.glob(os.path.join(wheel_dir, 'aindex', 'core', 'python_wrapper*.so')):
-                if os.path.basename(so_file) != 'python_wrapper.so':
-                    os.rename(so_file, os.path.join(os.path.dirname(so_file), 'python_wrapper.so'));
-            with zipfile.ZipFile('{wheel}', 'w', zipfile.ZIP_DEFLATED) as zipf:
-                for root, _, files in os.walk(wheel_dir):
-                    for file in files:
-                        zipf.write(os.path.join(root, file), 
-                                    os.path.relpath(os.path.join(root, file), wheel_dir));
-            "
+            python -c "import os,zipfile,glob;wheel_dir='{wheel}.tmp';os.makedirs(wheel_dir,exist_ok=True);zipfile.ZipFile('{wheel}','r').extractall(wheel_dir);[os.rename(f,os.path.join(os.path.dirname(f),'python_wrapper.so')) for f in glob.glob(os.path.join(wheel_dir,'aindex','core','python_wrapper*.so')) if os.path.basename(f)!='python_wrapper.so'];zipfile.ZipFile('{wheel}','w',zipfile.ZIP_DEFLATED).write=lambda n,a:None;[zipfile.ZipFile('{wheel}','a',zipfile.ZIP_DEFLATED).write(os.path.join(root,file),os.path.relpath(os.path.join(root,file),wheel_dir)) for root,_,files in os.walk(wheel_dir) for file in files]"
         with:
           package-dir: .
           output-dir: wheelhouse
