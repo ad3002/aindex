@@ -9,10 +9,12 @@ import os
 import ctypes
 from ctypes import cdll
 from ctypes import *
+from tracemalloc import start
 from intervaltree import IntervalTree
 import mmap
 from collections import defaultdict
 import importlib.resources as pkg_resources
+from editdistance import eval as edit_distance
 
 with pkg_resources.path('aindex.core', 'python_wrapper.so') as dll_path:
     dll_path = str(dll_path)
@@ -329,8 +331,9 @@ class AIndex(object):
         poses = self.pos(kmer)
         hits = defaultdict(list)
         for pos in poses:
-            start = self.get_rid(pos)
-            hits[start].append(c_size_t(pos).value - start)
+            rid = self.get_rid(pos)
+            start = self.get_start(pos)
+            hits[rid].append(c_size_t(pos).value - start)
         return hits
 
     ### Aindex manipulation
@@ -431,9 +434,9 @@ def get_srandness(kmer, kmer2tf, k=23):
     return plus, minus, len(poses)
 
 
-def iter_reads_by_kmer(kmer, kmer2tf, used_reads=None, only_left=False, skip_multiple=True, k=23):
+def iter_reads_by_kmer(kmer, kmer2tf, used_reads=None, skip_multiple=False, k=23):
     ''' Yield 
-        (start, next_read_start, read, pos_if_uniq|None, all_poses)
+        (rid, pos, read, all_poses)
 
     - only_left: return only left reads
     - skip_multiple: skip if more then one hit in read
@@ -443,65 +446,25 @@ def iter_reads_by_kmer(kmer, kmer2tf, used_reads=None, only_left=False, skip_mul
     rid2poses = kmer2tf.get_rid2poses(kmer)
 
     for rid in rid2poses:
-        if used_reads and rid in used_reads:
-            continue
+        if used_reads is not None:
+            if rid in used_reads:
+                continue
+            used_reads.add(rid)
         poses = rid2poses[rid]
         if skip_multiple:
             if len(poses) > 1:
                 continue
+        read = kmer2tf.get_read_by_rid(rid)
 
-        end = rid
-        while True:
-            if kmer2tf.end_cheker(end):
-                break
-            end += 1
-        read = kmer2tf.reads[rid:end].decode("utf8")
-
-        pos = poses[0]
-        is_multiple_hit = len(poses) > 1
-        print(read[pos:pos+k], kmer)
-        if read[pos:pos+k] != kmer:
-            read = get_revcomp(read)
-            poses = [len(read) - x - k for x in poses]
-            ori_pos = pos
-            pos = poses[0]
-            assert read[pos:pos+k] == kmer.encode("utf-8")
-                
-        if only_left:
-            spring_pos = read.find("~")
-            poses = [x for x in poses if x < spring_pos]
-            if len(poses) == 1:
-                yield [rid, end+1, read, poses[0], poses]
-            elif not poses:
-                continue
-            else:
-                yield [rid, end+1, read, None, poses]
-        else:
-            one_hit = None
-            if len(poses) == 1:
-                one_hit = poses[0]
-            yield [rid, end+1, read, one_hit, poses]
+        for pos in poses:
+            if not read[pos:pos+k] == kmer:
+                read = get_revcomp(read)
+                poses = [x for x in map(lambda x: len(read)-x-k, poses)][::-1]
+                pos = poses[0]
+                yield [rid, pos, read, poses]
 
 
-def iter_reads_by_sequence(sequence, kmer2tf, used_reads=None, only_left=False, skip_multiple=True, k=23):
-    ''' Yield reads containing sequence
-        (start, next_read_start, read, pos_if_uniq|None, all_poses)
-
-    TODO: more effective implementation than if sequence in read
-    '''
-    if len(sequence) >= k:
-        kmer = sequence[:k]
-        for data in iter_reads_by_kmer(kmer, kmer2tf, used_reads=used_reads, only_left=only_left, skip_multiple=skip_multiple, k=k):
-            all_poses = data[-1]
-            read = data[2]
-            for pos in all_poses:
-                if sequence in read:
-                    yield data            
-    else:
-        yield None
-
-
-def iter_reads_by_sequence_and_hamming(sequence, hd, kmer2tf, used_reads=None, only_left=False, skip_multiple=True, k=23):
+def iter_reads_by_sequence(sequence, kmer2tf, hd=None, ed=None, used_reads=None, skip_multiple=False, k=23):
     ''' Yield reads containing sequence
         (start, next_read_start, read, pos_if_uniq|None, all_poses)
 
@@ -510,18 +473,25 @@ def iter_reads_by_sequence_and_hamming(sequence, hd, kmer2tf, used_reads=None, o
     if len(sequence) >= k:
         kmer = sequence[:k]
         n = len(sequence)
-        for data in iter_reads_by_kmer(kmer, kmer2tf, used_reads=used_reads, only_left=only_left, skip_multiple=skip_multiple, k=k):
-            all_poses = data[-1]
-            read = data[2]
-            for pos in all_poses:
-                if len(read[pos:]) == n:
-                    if hamming_distance(read[pos:], sequence) <= hd:
-                        yield data            
+        for rid, pos, read, poses in iter_reads_by_kmer(kmer, kmer2tf, used_reads=used_reads, skip_multiple=skip_multiple, k=k):
+            for pos in poses:
+                if not hd and sequence in read:
+                    yield rid, pos, read, poses
+                elif hd:
+                    fragment = read[pos:pos+n]
+                    if len(fragment) == n:
+                        if hamming_distance(fragment, sequence) <= hd:
+                            yield rid, pos, read, poses, hd            
+                elif ed:
+                    fragment = read[pos:pos+n]
+                    if len(fragment) == n:
+                        if edit_distance(fragment, sequence) <= ed:
+                            yield rid, pos, read, poses, ed
     else:
         yield None
 
 
-def get_reads_se_by_kmer(kmer, kmer2tf, used_reads, k=23):
+def iter_reads_se_by_kmer(kmer, kmer2tf, used_reads=None, k=23):
     ''' Split springs and return subreads.
 
     The used_reads is a set of (start,spring_pos_type) tuples.
@@ -529,189 +499,151 @@ def get_reads_se_by_kmer(kmer, kmer2tf, used_reads, k=23):
     The spring_pos is equal to is_right in case of PE data.
 
     Return list of:
-    (start, next_read_start, subread, kmere_pos, -1|0|1 for spring_pos, was_reversed, poses_in_read)
+    (rid, pos, subread, -1|0|1 for spring_pos)
 
     '''
-
-    result = []
-    hits = kmer2tf.get_rid2poses(kmer)
-
-    for hit in hits:
-        end = hit
-        while True:
-            if kmer2tf.end_cheker(end):
-                break
-            end += 1
-        poses = hits[hit]
-        read = kmer2tf.reads[hit:end].decode("utf-8")
-        was_reversed = 0
-
-        pos = poses[0]
-        if read[pos:pos+k] != kmer:
-            read = get_revcomp(read)
-            poses = [len(read) - x - k for x in poses]
-            pos = poses[0]
-            was_reversed = 1
-            print(read[pos:pos+k], kmer)
-            if read[pos:pos+k] != kmer:
-                print("Critical error kmer and ref are not equal:")
-                print(read[pos:pos+k])
-                print(kmer)
-                continue
-                
+    for rid, pos, read, poses in iter_reads_by_kmer(kmer, kmer2tf, used_reads=used_reads, k=k):
         spring_pos = read.find("~")
-
         if spring_pos == -1:
-            result.append([hit, end+1, read, pos, -1, was_reversed, poses])
+            yield [rid, pos, read, -1]
             continue
-
-        left_poses = [x for x in poses if x < spring_pos]
-        right_poses = [x-spring_pos-1 for x in poses if x > spring_pos]
-
-        if len(left_poses) == 1:
-            pos = left_poses[0]
-            if (hit,0) in used_reads:
-                continue
-            result.append([hit, end+1, read[:spring_pos], pos, 0, was_reversed, left_poses])
-        if len(right_poses) == 1:
-            pos = right_poses[0]
-            if (hit,1) in used_reads:
-                continue
-            result.append([hit, end+1, read[spring_pos+1:], pos, 1, was_reversed, right_poses])
-    return result
+        left, right = read.split("~")
+        if pos < spring_pos:
+            read = left
+            pos = pos - len(left) - 1
+            yield [rid, pos, read, 0]
+        else:
+            read = right
+            pos = pos - spring_pos - 1
+            yield [rid, pos, read, 1]
 
 
 def get_left_right_distances(left_kmer, right_kmer, kmer2tf, k=23):
     '''
-    Return a list of (rid, left_kmer_pos, right_kmer_pos) tuples.
-
-    TODO: Handle cases: 1. distance in one subread; 2. distance in pair.
-    TODO: implement it more efficently.
+    Return a list of (rid, left_kmer_pos, right_kmer_pos, sequence, has_spring) tuples.
     '''
-    hits = defaultdict(list)
+    hits = {}
     for pos in kmer2tf.pos(left_kmer):
-        if kmer2tf.reads[pos:pos+k] == left_kmer.encode("utf-8"):
-            start = kmer2tf.get_rid(pos)
-            hits[start].append((0,pos))
-
+        rid = kmer2tf.get_rid(pos)
+        hits.setdefault(rid, [])
+        hits[rid].append((0, pos))
     for pos in kmer2tf.pos(right_kmer):
-        if kmer2tf.reads[pos:pos+k] == right_kmer.encode("utf-8"):
-            start = kmer2tf.get_rid(pos)
-            hits[start].append((1,pos))
-
-    results = []
+        rid = kmer2tf.get_rid(pos)
+        if rid in hits:
+          hits[rid].append((1, pos))
     for rid, hit in hits.items():
         if len(hit) == 1:
             continue
-        both_kmers_found = set([x[0] for x in hit])
-        if len(both_kmers_found) == 1:
-            continue
-        if len(hit) == 2:
-            left_hit = hit[0][1]
-            right_hit = hit[0][1]
-            frag = kmer2tf.reads[min(left_hit, right_hit):max(left_hit, right_hit):]
-
-            if b"~" in frag:
-                results.append((rid, left_hit, right_hit, None))
-            else:
-                results.append((rid, left_hit, right_hit, right_hit-left_hit))
+        if len(hit) > 2:
+          print(f"Repeat: {hit}")
+          continue
+        start = hit[0][1]
+        end = hit[1][1]
+        
+        reversed = False
+        if start < end:
+            fragment = kmer2tf.get_read(start, end+k, 0)
+            end = end + k
         else:
-            results.append((rid, None, None, None))
-        # for left_pos in [x[1] for x in hit if x[0] == 0]:
-        #     for right_pos in [x[1] for x in hit if x[0] == 1]:
-        #         results.append((rid, left_pos, right_pos))
-    return results
-
-
-def get_layout_for_kmer(kmer, kmer2tf, used_reads=None, k=23):
-    ''' Get flanked layout and left and right reads, or empty string if no read.
-
-    - skip rids from used_reads
-
-    seen_rids - track multiple hits from one spring.
-
-    Return:
-        - kmer start in reads
-        - center reads as layout
-        - left reads
-        - right reads
-        - rids list
-        - starts list
-    Or inline:
-        (start_pos, center_layout, lefts, rights, rids, starts)
-
-    '''
-    max_pos = 0
-    reads = []
-    if used_reads is None:
-        used_reads= set()
-    seen_rids = set()
-    lefts = []
-    rights = []
-    rids = []
-    starts = []
-    for (rid,nrid,read,pos,poses) in iter_reads_by_kmer(kmer, kmer2tf, used_reads, only_left=False, skip_multiple=False, k=k):
-        if rid in seen_rids:
-            continue
-        seen_rids.add(rid)
-        pos = poses[0]
-        spring_pos = read.find("~")
-        left, right = read.split("~")
-        if pos < spring_pos:
-            lefts.append("")
-            rights.append(right)
-            read = left
+            reversed = True
+            fragment = kmer2tf.get_read(end, start+k, 1)
+            start = end
+            end = start + k
+        if "~" in fragment:
+            yield rid, start, end, len(fragment), fragment, True, reversed
         else:
-            lefts.append(left)
-            rights.append("")
-            pos = pos - len(left) - 1
-            read = right
-        max_pos = max(max_pos,pos)
-        reads.append(read)
-        starts.append(pos)
-        rids.append(rid)
-    max_length = max([len(x)+max_pos-starts[i] for i,x in enumerate(reads)])
-    for i,read in enumerate(reads):
-        separator = "N"
-        reads[i] = separator*(max_pos-starts[i]) + read + separator * (max_length-max_pos+starts[i]-len(read))
-    return max_pos, reads, lefts, rights, rids, starts
+            yield rid, start, end, len(fragment), fragment, False, reversed
+
+
+# def get_layout_for_kmer(kmer, kmer2tf, used_reads=None, k=23):
+#     ''' Get flanked layout and left and right reads, or empty string if no read.
+
+#     - skip rids from used_reads
+
+#     seen_rids - track multiple hits from one spring.
+
+#     Return:
+#         - kmer start in reads
+#         - center reads as layout
+#         - left reads
+#         - right reads
+#         - rids list
+#         - starts list
+#     Or inline:
+#         (start_pos, center_layout, lefts, rights, rids, starts)
+
+#     '''
+#     max_pos = 0
+#     reads = []
+#     if used_reads is None:
+#         used_reads= set()
+#     seen_rids = set()
+#     lefts = []
+#     rights = []
+#     rids = []
+#     starts = []
+#     for (rid,nrid,read,pos,poses) in iter_reads_by_kmer(kmer, kmer2tf, used_reads, only_left=False, skip_multiple=False, k=k):
+#         if rid in seen_rids:
+#             continue
+#         seen_rids.add(rid)
+#         pos = poses[0]
+#         spring_pos = read.find("~")
+#         left, right = read.split("~")
+#         if pos < spring_pos:
+#             lefts.append("")
+#             rights.append(right)
+#             read = left
+#         else:
+#             lefts.append(left)
+#             rights.append("")
+#             pos = pos - len(left) - 1
+#             read = right
+#         max_pos = max(max_pos,pos)
+#         reads.append(read)
+#         starts.append(pos)
+#         rids.append(rid)
+#     max_length = max([len(x)+max_pos-starts[i] for i,x in enumerate(reads)])
+#     for i,read in enumerate(reads):
+#         separator = "N"
+#         reads[i] = separator*(max_pos-starts[i]) + read + separator * (max_length-max_pos+starts[i]-len(read))
+#     return max_pos, reads, lefts, rights, rids, starts
 
 ### Assembly-by-extension
 
-def get_reads_for_assemby_by_kmer(kmer2tf, kmer, used_reads, compute_cov=True, k=23, mode=None):
-    ''' Get reads prepared for assembly-by-extension. 
-        Return sorted by pos list of (pos, read, rid, poses, cov)
-        Mode: left, right
-    '''    
-    to_assembly = []
-    for rid, poses in kmer2tf.get_rid2poses(kmer).items():
-        if rid in used_reads:
-            continue
-        used_reads.add(rid)
-        read = kmer2tf.get_read_by_rid(rid)
+# def get_reads_for_assemby_by_kmer(kmer2tf, kmer, used_reads, compute_cov=True, k=23, mode=None):
+#     ''' Get reads prepared for assembly-by-extension. 
+#         Return sorted by pos list of (pos, read, rid, poses, cov)
+#         Mode: left, right
+#     '''    
+#     to_assembly = []
+#     for rid, poses in kmer2tf.get_rid2poses(kmer).items():
+#         if rid in used_reads:
+#             continue
+#         used_reads.add(rid)
+#         read = kmer2tf.get_read_by_rid(rid)
 
-        spring_pos = None
-        if mode:
-            spring_pos = read.find("~")
+#         spring_pos = None
+#         if mode:
+#             spring_pos = read.find("~")
 
-        ori_poses = poses
-        if not read[poses[0]:poses[0]+k] == kmer:
-            read = get_revcomp(read)
-            poses = [x for x in map(lambda x: len(read)-x-k, poses)][::-1]
+#         ori_poses = poses
+#         if not read[poses[0]:poses[0]+k] == kmer:
+#             read = get_revcomp(read)
+#             poses = [x for x in map(lambda x: len(read)-x-k, poses)][::-1]
 
-        if mode == "left":
-            read = read.split("~")[0]
-            poses = [x for x in poses if x < spring_pos]
-        elif mode == "right":
-            read = read.split("~")[-1]
-            poses = [x for x in poses if x > spring_pos]
+#         if mode == "left":
+#             read = read.split("~")[0]
+#             poses = [x for x in poses if x < spring_pos]
+#         elif mode == "right":
+#             read = read.split("~")[-1]
+#             poses = [x for x in poses if x > spring_pos]
 
-        if not poses:
-            continue
+#         if not poses:
+#             continue
 
-        cov = None
-        if compute_cov:
-            cov = [kmer2tf[read[i:i+k]] for i in range(len(read)-k+1)]
-        to_assembly.append((poses[0], read, rid, ori_poses, cov))
-    to_assembly.sort(reverse=True)
-    return to_assembly
+#         cov = None
+#         if compute_cov:
+#             cov = [kmer2tf[read[i:i+k]] for i in range(len(read)-k+1)]
+#         to_assembly.append((poses[0], read, rid, ori_poses, cov))
+#     to_assembly.sort(reverse=True)
+#     return to_assembly

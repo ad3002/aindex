@@ -109,14 +109,35 @@ for rid, read in kmer2tf.iter_reads():
         break
     print(rid, read)
 
-print("Task 3. Iter reads by kmer, returs (start, next_read_start, read, pos_if_uniq|None, all_poses)")
-# for read in aindex.iter_reads_by_kmer(test_kmer, kmer2tf):
-#     print(read)
+print("Task 3. Iter reads by kmer, returs (read id, position in read, read, all_positions)")
+for rid, pos, read, poses in aindex.iter_reads_by_kmer(test_kmer, kmer2tf):
+  print(read[pos:pos+k])
 
-print("Task 4. Get distances in reads for two kmers, returns a list of (rid, left_kmer_pos, right_kmer_pos) tuples.")
-# print aindex.get_left_right_distances(test_kmer, right_kmer, kmer2tf)
 
-print("Task 5. Get layout for kmer, returns (max_pos, reads, lefts, rights, rids, starts), for details see source code")
+print("Task 4. Iter reads by sequence, returns (read, position in read, read, all_positions ")
+sequence = "AATATTATTAAGGTATTTAAAAAATACTATTATAGTATTTAACATA"
+for read in aindex.iter_reads_by_sequence(sequence, kmer2tf):
+    print(read)
+
+print("Task 5. Iter reads by sequence over hamming distance, returns (read, position in read, read, all_positions, hamming distance). Note that the first kmer used as seed.")
+sequence = "AATATTATTAAGGTATTTAAAAAATACTATTATAGTATTTAACATA"
+for read in aindex.iter_reads_by_sequence(sequence, kmer2tf, hd=10):
+    print(read)
+
+print("Task 6. Iter reads by sequence over hamming distance or edit distance, returns (read, position in read, read, all_positions, hamming distance). Note that the first kmer used as seed")
+sequence = "AATATTATTAAGGTATTTAAAAAATACTATTATAGTATTTAACATA"
+for read in aindex.iter_reads_by_sequence(sequence, kmer2tf, hd=10):
+    print(read)
+
+for read in aindex.iter_reads_by_sequence(sequence, kmer2tf, ed=10):
+    print(read)
+
+
+print("Task 7. Get distances in reads for two kmers, returns a list of (rid, left_kmer_pos, right_kmer_pos) tuples.")
+for rid, start, end, length, fragment, is_gapped, is_reversed in aindex.get_left_right_distances(test_kmer, right_kmer, kmer2tf):
+    print(rid, start, end, length, fragment, is_gapped, is_reversed)
+
+print("Task 8. Get layout for kmer, returns (max_pos, reads, lefts, rights, rids, starts), for details see source code")
 # max_pos, reads, lefts, rights, rids, starts = get_layout_for_kmer(right_kmer, kmer2tf)
 print("Central layout:")
 # for read in reads:
@@ -126,8 +147,4 @@ print("Left flanks:")
 print("Right flanks:")
 # print(rights)
 
-print("Task 6. Iter reads by sequence, returns (start, next_read_start, read, pos_if_uniq|None, all_poses)")
-sequence = "AATATTATTAAGGTATTTAAAAAATACTATTATAGTATTTAACATA"
-# for read in iter_reads_by_sequence(sequence, kmer2tf):
-#     print(read)
 ```
