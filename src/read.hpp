@@ -120,13 +120,13 @@ namespace READS {
 
     struct READ {
 
-        int rid = 0;
+        size_t rid = 0;
         std::string head;
         std::string seq;
         std::string strand;
         std::string Q;
-        int *fm;
-        int *am;
+        uint *fm;
+        uint *am;
         std::string cov = "";
         int status = 0;
         int position = 0;
@@ -169,8 +169,8 @@ namespace READS {
             strand = line_strand;
             Q = line_Q;
 
-            fm = new int[seq.length()];
-            am = new int[seq.length()];
+            fm = new uint[seq.length()];
+            am = new uint[seq.length()];
 
             for (size_t i = 0; i < seq.length(); i++) {
                 fm[i] = 0;
@@ -288,7 +288,7 @@ namespace READS {
             bool correct_one = true;
 
             if (fm == nullptr) {
-                fm = new int[seq.length()];
+                fm = new uint[seq.length()];
             }
             for (size_t i = 0; i < seq.length() - Settings::K + 1; i++) {
                 std::string kmer = seq.substr(i, Settings::K);
@@ -311,7 +311,7 @@ namespace READS {
              *   Convert Q to freqQ.
              */
             if (am == nullptr) {
-                am = new int[seq.length()];
+                am = new uint[seq.length()];
             }
             for (size_t i = 0; i < seq.length() - Settings::K + 1; i++) {
                 am[i] = std::min( (int)std::round(fm[i]/coverage), 9);

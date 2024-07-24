@@ -49,7 +49,7 @@ struct Stats {
         profile = nullptr;
     }
 
-    void init(int coverage) {
+    void init(size_t coverage) {
         zero = 0;
         unique = 0;
         distinct = 0;
@@ -293,11 +293,11 @@ struct PHASH_MAP {
         }
     }
 
-    void set_stats(int coverage) {
+    void set_stats(size_t coverage) {
 
         stats.init(coverage);
 
-        int max_coverage = coverage + coverage/2;
+        size_t max_coverage = coverage + coverage/2;
 
         for (size_t i=0; i < n; i++) {
             stats.total += tf_values[i];
@@ -332,14 +332,14 @@ struct PHASH_MAP {
 
     }
 
-    void print_stats_profile(int coverage) {
+    void print_stats_profile(size_t coverage) {
         for (size_t i=0; i<coverage+coverage/2;i++) {
             std::cout << i << ":" << stats.profile[i] << " ";
         }
         std::cout << std::endl;
     }
 
-    std::string print_and_set_coverage(int coverage) {
+    std::string print_and_set_coverage(size_t coverage) {
         set_stats(coverage);
         print_stats_profile(coverage);
         std::string res = "Z: " + std::to_string(stats.zero) + " U: " + std::to_string(stats.unique) + " D: " + std::to_string(stats.distinct) + " T: " + std::to_string(stats.total) + " C: " + std::to_string(stats.coverage) + " M: " + std::to_string(stats.max_count);
