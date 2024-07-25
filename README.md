@@ -62,7 +62,7 @@ Compute all binary arrays:
 ```bash
 FASTQ1=./tests/raw_reads.101bp.IS350bp25_1.fastq
 FASTQ2=./tests/raw_reads.101bp.IS350bp25_2.fastq
-OUTPUT_PREFIX=tests/raw_reads.101bp.IS350bp25
+OUTPUT_PREFIX=./tests/raw_reads.101bp.IS350bp25
 
 compute_aindex.py -i $FASTQ1,$FASTQ2 -t fastq -o $OUTPUT_PREFIX --lu 2 -P 30
 ```
