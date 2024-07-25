@@ -27,7 +27,7 @@ class CustomInstall(install):
 
 setup(
     name='aindex2',
-    version='1.1.1',
+    version='1.1.2',
     description='Perfect hash based index for genome data.',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',

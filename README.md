@@ -1,6 +1,11 @@
-# aindex
+# aindex: perfect hash based index for genomic data
 
-Perfect hash based index for genomic data.
+[![PyPI version](https://badge.fury.io/py/aindex2.svg)](https://badge.fury.io/py/aindex2)
+[![PyPI pyversions](https://img.shields.io/pypi/pyversions/aindex2.svg)](https://pypi.python.org/pypi/aindex2/)
+![PyPI - Wheel](https://img.shields.io/pypi/wheel/aindex2)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/ad3002/aindex/build_wheels.yml)
+[![PyPI license](https://img.shields.io/pypi/l/aindex2.svg)](https://pypi.python.org/pypi/aindex2/)
+
 
 ## Installation
 
