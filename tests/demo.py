@@ -27,7 +27,6 @@ print(kmer2tf.get_read(0, 123, 0))
 
 print(kmer2tf.get_read(0, 123, 1))
 
-
 k = 23
 for p in kmer2tf.pos(kmer):
   print(kmer2tf.get_read(p, p+k))
@@ -53,7 +52,6 @@ print("Task 3. Iter reads by kmer, returs (read id, position in read, read, all_
 for rid, pos, read, poses in aindex.iter_reads_by_kmer(test_kmer, kmer2tf):
   print(read[pos:pos+k])
 
-
 print("Task 4. Iter reads by sequence, returns (read, position in read, read, all_positions ")
 sequence = "AATATTATTAAGGTATTTAAAAAATACTATTATAGTATTTAACATA"
 for read in aindex.iter_reads_by_sequence(sequence, kmer2tf):
@@ -72,17 +70,16 @@ for read in aindex.iter_reads_by_sequence(sequence, kmer2tf, hd=10):
 for read in aindex.iter_reads_by_sequence(sequence, kmer2tf, ed=10):
     print(read)
 
-
 print("Task 7. Get distances in reads for two kmers, returns a list of (rid, left_kmer_pos, right_kmer_pos) tuples.")
 for rid, start, end, length, fragment, is_gapped, is_reversed in aindex.get_left_right_distances(test_kmer, right_kmer, kmer2tf):
     print(rid, start, end, length, fragment, is_gapped, is_reversed)
 
 print("Task 8. Get layout for kmer, returns (max_pos, reads, lefts, rights, rids, starts), for details see source code")
-# max_pos, reads, lefts, rights, rids, starts = get_layout_for_kmer(right_kmer, kmer2tf)
+max_pos, reads, lefts, rights, rids, starts = aindex.get_layout_from_reads(right_kmer, kmer2tf)
 print("Central layout:")
-# for read in reads:
-#     print(read)
+for read in reads:
+    print(read)
 print("Left flanks:")
-# print(lefts)
+print(lefts)
 print("Right flanks:")
-# print(rights)
+print(rights)

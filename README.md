@@ -138,13 +138,13 @@ for rid, start, end, length, fragment, is_gapped, is_reversed in aindex.get_left
     print(rid, start, end, length, fragment, is_gapped, is_reversed)
 
 print("Task 8. Get layout for kmer, returns (max_pos, reads, lefts, rights, rids, starts), for details see source code")
-# max_pos, reads, lefts, rights, rids, starts = get_layout_for_kmer(right_kmer, kmer2tf)
+max_pos, reads, lefts, rights, rids, starts = aindex.get_layout_from_reads(right_kmer, kmer2tf)
 print("Central layout:")
-# for read in reads:
-#     print(read)
+for read in reads:
+    print(read)
 print("Left flanks:")
-# print(lefts)
+print(lefts)
 print("Right flanks:")
-# print(rights)
+print(rights)
 
 ```

@@ -456,12 +456,12 @@ def iter_reads_by_kmer(kmer, kmer2tf, used_reads=None, skip_multiple=False, k=23
                 continue
         read = kmer2tf.get_read_by_rid(rid)
 
-        for pos in poses:
+        for i, pos in enumerate(poses):
             if not read[pos:pos+k] == kmer:
                 read = get_revcomp(read)
                 poses = [x for x in map(lambda x: len(read)-x-k, poses)][::-1]
-                pos = poses[0]
-                yield [rid, pos, read, poses]
+                pos = poses[i]
+            yield [rid, pos, read, poses]
 
 
 def iter_reads_by_sequence(sequence, kmer2tf, hd=None, ed=None, used_reads=None, skip_multiple=False, k=23):
@@ -555,58 +555,58 @@ def get_left_right_distances(left_kmer, right_kmer, kmer2tf, k=23):
             yield rid, start, end, len(fragment), fragment, False, reversed
 
 
-# def get_layout_for_kmer(kmer, kmer2tf, used_reads=None, k=23):
-#     ''' Get flanked layout and left and right reads, or empty string if no read.
+def get_layout_from_reads(kmer, kmer2tf, used_reads=None, k=23, space="N"):
+    ''' Get flanked layout and left and right reads, or empty string if no read.
 
-#     - skip rids from used_reads
+    - skip rids from used_reads
 
-#     seen_rids - track multiple hits from one spring.
+    seen_rids - track multiple hits from one spring.
 
-#     Return:
-#         - kmer start in reads
-#         - center reads as layout
-#         - left reads
-#         - right reads
-#         - rids list
-#         - starts list
-#     Or inline:
-#         (start_pos, center_layout, lefts, rights, rids, starts)
+    Return:
+        - kmer start in reads
+        - center reads as layout
+        - left reads
+        - right reads
+        - rids list
+        - starts list
+    Or inline:
+        (start_pos, center_layout, lefts, rights, rids, starts)
 
-#     '''
-#     max_pos = 0
-#     reads = []
-#     if used_reads is None:
-#         used_reads= set()
-#     seen_rids = set()
-#     lefts = []
-#     rights = []
-#     rids = []
-#     starts = []
-#     for (rid,nrid,read,pos,poses) in iter_reads_by_kmer(kmer, kmer2tf, used_reads, only_left=False, skip_multiple=False, k=k):
-#         if rid in seen_rids:
-#             continue
-#         seen_rids.add(rid)
-#         pos = poses[0]
-#         spring_pos = read.find("~")
-#         left, right = read.split("~")
-#         if pos < spring_pos:
-#             lefts.append("")
-#             rights.append(right)
-#             read = left
-#         else:
-#             lefts.append(left)
-#             rights.append("")
-#             pos = pos - len(left) - 1
-#             read = right
-#         max_pos = max(max_pos,pos)
-#         reads.append(read)
-#         starts.append(pos)
-#         rids.append(rid)
-#     max_length = max([len(x)+max_pos-starts[i] for i,x in enumerate(reads)])
-#     for i,read in enumerate(reads):
-#         separator = "N"
-#         reads[i] = separator*(max_pos-starts[i]) + read + separator * (max_length-max_pos+starts[i]-len(read))
-#     return max_pos, reads, lefts, rights, rids, starts
+    '''
+    max_pos = 0
+    reads = []
+    if used_reads is None:
+        used_reads= set()
+    seen_rids = set()
+    lefts = []
+    rights = []
+    rids = []
+    starts = []
+    for rid, pos, read, poses in iter_reads_by_kmer(kmer, kmer2tf, used_reads, skip_multiple=False, k=k):
+        if rid in seen_rids:
+            continue
+        seen_rids.add(rid)
+        spring_pos = read.find("~")
+        if spring_pos > -1:
+            left, right = read.split("~")
+            if pos < spring_pos:
+                lefts.append("")
+                rights.append(right)
+                read = left
+            else:
+                lefts.append(left)
+                rights.append("")
+                pos = pos - len(left) - 1
+                read = right
+
+        max_pos = max(max_pos,pos)
+        reads.append(read)
+        starts.append(pos)
+        rids.append(rid)
+    max_length = max([len(x)+max_pos-starts[i] for i,x in enumerate(reads)])
+    for i,read in enumerate(reads):
+        reads[i] = space*(max_pos-starts[i]) + read + space * (max_length-max_pos+starts[i]-len(read))
+    return max_pos, reads, lefts, rights, rids, starts
 
 ### Assembly-by-extension
 
