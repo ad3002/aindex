@@ -62,20 +62,9 @@ int main(int argc, char** argv) {
     fout3.close();
 
     std::ofstream fout4(output_prefix+".tf.bin", std::ios::out | std::ios::binary);
-    emphf::logger() << "TF array size: " << sizeof(unsigned int) * hash_map.n <<  std::endl;
-    fout4.write(reinterpret_cast<const char*> (hash_map.tf_values), sizeof(unsigned int) * hash_map.n);
+    emphf::logger() << "TF array size: " << sizeof(uint32_t) * hash_map.n <<  std::endl;
+    fout4.write(reinterpret_cast<const char*> (hash_map.tf_values), sizeof(uint32_t) * hash_map.n);
     fout4.close();
-
-//    std::cout << "Dumping kmers" << std::endl;
-
-//    std::ofstream fout5(output_prefix+".pf.kmers", std::ios::out);
-//    for (size_t pos=0; pos < hash_map.n; ++pos) {
-//        if (pos && pos % 1000000 == 0) {
-//            std::cout << pos << std::endl;
-//        }
-//        fout5 << get_bitset_dna23(hash_map.checker[pos]) << "\n";
-//    }
-//    fout5.close();
 
     emphf::logger() << "Done." << std::endl;
 

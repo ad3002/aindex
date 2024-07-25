@@ -6,23 +6,23 @@
 
 namespace Settings {
 
-    unsigned int MINIMAL_READ_LENGTH = 30;
-    unsigned int TRUE_ERRORS = 1;
-    unsigned int TRUE_NOT_ERRORS = 20;
-    unsigned int TRUE_REF_ERRORS = 1;
-    unsigned int PRE_ERRORS = 2;
-    unsigned int K = 23;
-    unsigned int JFK = 23;
-    unsigned int STIRKA_FILL_OVERLAP = 0;
-    unsigned int STIRKA_RESOLVE_SNP = 0;
-    unsigned int MIN_Q = 10;
-    unsigned int MIN_MI = 0;
-    unsigned int MIN_MI_N = 0;
-    unsigned int MIN_MA = 0;
-    unsigned int TRIM_LOW_COV_TOLERANCE = 20;
-    unsigned int VERBOSE = 0;
-    unsigned int COVERAGE = 0;
-    unsigned int MERGE = 0;
-    unsigned int CORRECTION_LEVEL = 0;
-    unsigned int INDEX_SIZE = 11;
+    uint32_t MINIMAL_READ_LENGTH = 30;
+    uint32_t TRUE_ERRORS = 1;
+    uint32_t TRUE_NOT_ERRORS = 20;
+    uint32_t TRUE_REF_ERRORS = 1;
+    uint32_t PRE_ERRORS = 2;
+    uint32_t K = 23;
+    uint32_t JFK = 23;
+    uint32_t STIRKA_FILL_OVERLAP = 0;
+    uint32_t STIRKA_RESOLVE_SNP = 0;
+    uint32_t MIN_Q = 10;
+    uint32_t MIN_MI = 0;
+    uint32_t MIN_MI_N = 0;
+    uint32_t MIN_MA = 0;
+    uint32_t TRIM_LOW_COV_TOLERANCE = 20;
+    uint32_t VERBOSE = 0;
+    uint32_t COVERAGE = 0;
+    uint32_t MERGE = 0;
+    uint32_t CORRECTION_LEVEL = 0;
+    uint32_t INDEX_SIZE = 11;
 }

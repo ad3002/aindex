@@ -31,12 +31,12 @@ lib.AindexWrapper_load.argtypes = [c_void_p, c_char_p, c_char_p]
 lib.AindexWrapper_load.restype = None
 
 lib.AindexWrapper_get.argtypes = [c_void_p, c_char_p]
-lib.AindexWrapper_get.restype = c_size_t
+lib.AindexWrapper_get.restype = c_uint64
 
 lib.AindexWrapper_get_kid_by_kmer.argtypes = [c_void_p, c_char_p]
-lib.AindexWrapper_get_kid_by_kmer.restype = c_size_t
+lib.AindexWrapper_get_kid_by_kmer.restype = c_uint64
 
-lib.AindexWrapper_get_kmer_by_kid.argtypes = [c_void_p, c_size_t, c_char_p]
+lib.AindexWrapper_get_kmer_by_kid.argtypes = [c_void_p, c_uint64, c_char_p]
 lib.AindexWrapper_get_kmer_by_kid.restype = None
 
 lib.AindexWrapper_load_index.argtypes = [c_void_p, c_char_p, c_uint32]
@@ -49,28 +49,28 @@ lib.AindexWrapper_load_reads_index.argtypes = [c_void_p, c_char_p]
 lib.AindexWrapper_load_reads_index.restype = None
 
 lib.AindexWrapper_get_hash_size.argtypes = [c_void_p]
-lib.AindexWrapper_get_hash_size.restype = c_size_t
+lib.AindexWrapper_get_hash_size.restype = c_uint64
 
 lib.AindexWrapper_get_reads_size.argtypes = [c_void_p]
-lib.AindexWrapper_get_reads_size.restype = c_size_t
+lib.AindexWrapper_get_reads_size.restype = c_uint64
 
-lib.AindexWrapper_get_read.argtypes = [c_size_t, c_size_t, c_uint]
+lib.AindexWrapper_get_read.argtypes = [c_uint64, c_uint64, c_uint]
 lib.AindexWrapper_get_read.restype = c_char_p
 
-lib.AindexWrapper_get_read_by_rid.argtypes = [c_size_t]
+lib.AindexWrapper_get_read_by_rid.argtypes = [c_uint64]
 lib.AindexWrapper_get_read_by_rid.restype = c_char_p
 
-lib.AindexWrapper_get_rid.argtypes = [c_size_t]
-lib.AindexWrapper_get_rid.restype = c_size_t
+lib.AindexWrapper_get_rid.argtypes = [c_uint64]
+lib.AindexWrapper_get_rid.restype = c_uint64
 
-lib.AindexWrapper_get_start.argtypes = [c_size_t]
-lib.AindexWrapper_get_start.restype = c_size_t
+lib.AindexWrapper_get_start.argtypes = [c_uint64]
+lib.AindexWrapper_get_start.restype = c_uint64
 
 lib.AindexWrapper_get_strand.argtypes = [c_void_p]
-lib.AindexWrapper_get_strand.restype = c_size_t
+lib.AindexWrapper_get_strand.restype = c_uint64
 
-lib.AindexWrapper_get_kmer.argtypes = [c_void_p, c_size_t, c_char_p, c_char_p]
-lib.AindexWrapper_get_kmer.restype = c_size_t
+lib.AindexWrapper_get_kmer.argtypes = [c_void_p, c_uint64, c_char_p, c_char_p]
+lib.AindexWrapper_get_kmer.restype = c_uint64
 
 lib.AindexWrapper_get_positions.argtypes = [c_void_p, c_void_p, c_char_p]
 lib.AindexWrapper_get_positions.restype = None
@@ -207,7 +207,7 @@ class AIndex(object):
         s = "N"*k
         kmer = ctypes.c_char_p()
         kmer.value = s.encode("utf-8")
-        lib.AindexWrapper_get_kmer_by_kid(self.obj, c_size_t(kid), kmer)
+        lib.AindexWrapper_get_kmer_by_kid(self.obj, c_uint64(kid), kmer)
         return kmer.value
 
     def get_kmer_info_by_kid(self, kid, k=23):
@@ -231,12 +231,12 @@ class AIndex(object):
     def get_rid(self, pos):
         ''' Get read id by positions in read file.
         '''
-        return c_size_t(lib.AindexWrapper_get_rid(self.obj, c_size_t(pos))).value
+        return c_uint64(lib.AindexWrapper_get_rid(self.obj, c_uint64(pos))).value
     
     def get_start(self, pos):
         ''' Get read id by positions in read file.
         '''
-        return c_size_t(lib.AindexWrapper_get_start(self.obj, c_size_t(pos))).value
+        return c_uint64(lib.AindexWrapper_get_start(self.obj, c_uint64(pos))).value
     
     def get_read_by_rid(self, rid):
         ''' Get read sequence as string by rid.
@@ -275,7 +275,7 @@ class AIndex(object):
         ''' Return array of positions for given kmer.
         '''
         n = self.max_tf
-        r = (ctypes.c_size_t*n)()
+        r = (ctypes.c_uint64*n)()
         kmer = str(kmer)
         lib.AindexWrapper_get_positions(self.obj, pointer(r), kmer.encode('utf-8'))
         poses_array = []
@@ -333,7 +333,7 @@ class AIndex(object):
         for pos in poses:
             rid = self.get_rid(pos)
             start = self.get_start(pos)
-            hits[rid].append(c_size_t(pos).value - start)
+            hits[rid].append(c_uint64(pos).value - start)
         return hits
 
     ### Aindex manipulation
@@ -343,10 +343,10 @@ class AIndex(object):
         '''
         print("WARNING: called a function with the fixed batch size.")
         n = batch_size*2
-        r = (ctypes.c_size_t*n)()
+        r = (ctypes.c_uint64*n)()
         for i, (rid,pos) in enumerate(poses_array):
-            r[i+batch_size] = ctypes.c_size_t(rid)
-            r[i] = ctypes.c_size_t(pos)
+            r[i+batch_size] = ctypes.c_uint64(rid)
+            r[i] = ctypes.c_uint64(pos)
 
         lib.AindexWrapper_set_positions(self.obj, pointer(r), kmer.encode('utf-8'))
 

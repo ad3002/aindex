@@ -50,7 +50,7 @@ void construct_hash_unordered_hash(std::string data_file, HASH_MAP &kmers) {
 
     std::ifstream infile(data_file);
     infile.seekg(0, std::ios::end);
-    size_t length = infile.tellg();
+    uint64_t length = infile.tellg();
     char *contents = new char[length+1];
     infile.seekg(0, std::ios::beg);
     infile.read(contents, length);
@@ -80,7 +80,7 @@ void construct_hash_unordered_hash(std::string data_file, HASH_MAP &kmers) {
 }
 
 
-HASHER construct_emphf(const char *values_filename, const char *keys_filename, const char* hash_filename, std::atomic<unsigned int> *tf_values, uint64_t *checker, size_t n) {
+HASHER construct_emphf(const char *values_filename, const char *keys_filename, const char* hash_filename, std::atomic<uint32_t> *tf_values, uint64_t *checker, uint64_t n) {
     // Read string steam to kmer2tf dictionary.
 
 
@@ -89,15 +89,15 @@ HASHER construct_emphf(const char *values_filename, const char *keys_filename, c
     barrier.unlock();
 
 
-    unsigned int *values = new unsigned int[n];
+    uint32_t *values = new uint32_t[n];
     {
         barrier.lock();
         emphf::logger() << "Loading values into the vault" << std::endl;
         barrier.unlock();
         emphf::file_lines lines(values_filename);
-        size_t i = 0;
+        uint64_t i = 0;
         for (auto& s: lines) {
-            values[i] = (unsigned int)atoi(s.data());
+            values[i] = (uint32_t)atoi(s.data());
             i += 1;
         }
     }
@@ -116,7 +116,7 @@ HASHER construct_emphf(const char *values_filename, const char *keys_filename, c
 
     emphf::file_lines lines(keys_filename);
 
-    size_t i = 0;
+    uint64_t i = 0;
     for (auto& kmer: lines) {
 
         emphf::stl_string_adaptor str_adapter;
@@ -140,7 +140,7 @@ HASHER construct_emphf(const char *values_filename, const char *keys_filename, c
 }
 
 
-HASHER construct_emphf_fast(const char *dat_filename, const char* hash_filename, std::atomic<unsigned int> *tf_values, uint64_t *checker, size_t n) {
+HASHER construct_emphf_fast(const char *dat_filename, const char* hash_filename, std::atomic<uint32_t> *tf_values, uint64_t *checker, uint64_t n) {
     // Read string steam to kmer2tf dictionary.
 
     barrier.lock();
@@ -158,7 +158,7 @@ HASHER construct_emphf_fast(const char *dat_filename, const char* hash_filename,
     barrier.unlock();
 
     infile.seekg(0, std::ios::end);
-    size_t length = infile.tellg();
+    uint64_t length = infile.tellg();
     char *contents = new char[length + 1];
     if (contents == nullptr) {
         emphf::logger() << "Failed to allocate memory for file content (char): " << length << std::endl;
@@ -190,13 +190,13 @@ HASHER construct_emphf_fast(const char *dat_filename, const char* hash_filename,
     emphf::logger() << "Processign data to indexes" << std::endl;
     barrier.unlock();
 
-    size_t i = 0;
+    uint64_t i = 0;
 
     emphf::stl_string_adaptor str_adapter;
 
     while (std::getline(ss_contents, line)) {
         std::string kmer = "";
-        unsigned int tf = 0;
+        uint32_t tf = 0;
         std::istringstream is(line);
         is >> kmer >> tf;
 
@@ -227,7 +227,7 @@ HASHER construct_emphf_fast(const char *dat_filename, const char* hash_filename,
     return hasher;
 }
 
-HASHER construct_emphf_for_qmers(const char *dat_filename, const char* hash_filename, uint64_t *checker, size_t n) {
+HASHER construct_emphf_for_qmers(const char *dat_filename, const char* hash_filename, uint64_t *checker, uint64_t n) {
     // Read string steam to kmer2tf dictionary.
 
     barrier.lock();
@@ -245,7 +245,7 @@ HASHER construct_emphf_for_qmers(const char *dat_filename, const char* hash_file
     barrier.unlock();
 
     infile.seekg(0, std::ios::end);
-    size_t length = infile.tellg();
+    uint64_t length = infile.tellg();
     char *contents = new char[length + 1];
     infile.seekg(0, std::ios::beg);
     infile.read(contents, length);
@@ -269,13 +269,13 @@ HASHER construct_emphf_for_qmers(const char *dat_filename, const char* hash_file
     emphf::logger() << "Processign data to indexes" << std::endl;
     barrier.unlock();
 
-    size_t i = 0;
+    uint64_t i = 0;
 
     emphf::stl_string_adaptor str_adapter;
 
     while (std::getline(ss_contents, line)) {
         std::string kmer = "";
-        unsigned int tf = 0;
+        uint32_t tf = 0;
         std::istringstream is(line);
         is >> kmer >> tf;
 
@@ -294,7 +294,7 @@ HASHER construct_emphf_for_qmers(const char *dat_filename, const char* hash_file
 }
 
 
-HASHER construct_emphf_fast_wo_kmers(const char *dat_filename, const char* hash_filename, std::atomic<unsigned int> *tf_values, size_t n) {
+HASHER construct_emphf_fast_wo_kmers(const char *dat_filename, const char* hash_filename, std::atomic<uint32_t> *tf_values, uint64_t n) {
     // Read string steam to kmer2tf dictionary.
 
     barrier.lock();
@@ -312,7 +312,7 @@ HASHER construct_emphf_fast_wo_kmers(const char *dat_filename, const char* hash_
     barrier.unlock();
 
     infile.seekg(0, std::ios::end);
-    size_t length = infile.tellg();
+    uint64_t length = infile.tellg();
     char *contents = new char[length + 1];
     infile.seekg(0, std::ios::beg);
     infile.read(contents, length);
@@ -336,13 +336,13 @@ HASHER construct_emphf_fast_wo_kmers(const char *dat_filename, const char* hash_
     emphf::logger() << "Processign data to indexes" << std::endl;
     barrier.unlock();
 
-    size_t i = 0;
+    uint64_t i = 0;
 
 
     emphf::stl_string_adaptor str_adapter;
 
     while (std::getline(ss_contents, line)) {
-        unsigned int tf = 0;
+        uint32_t tf = 0;
         std::string kmer = "";
 
         std::istringstream is(line);
@@ -382,13 +382,13 @@ void load_hash(PHASH_MAP &hash_map, std::string &index_prefix, std::string &tf_f
     is.close();
     emphf::logger() << "\tDone." << std::endl;
 
-    size_t pos = 0;
+    uint64_t pos = 0;
     if (Settings::K == 23) {
         is.open(index_prefix+".kmers.bin", std::ios::binary);
         is.seekg(0, std::ios::end);
-        size_t length = is.tellg();
+        uint64_t length = is.tellg();
         is.close();
-        size_t n = length / sizeof(uint64_t);
+        uint64_t n = length / sizeof(uint64_t);
 
         std::cout << "\tfile: " << index_prefix+".kmers.bin" << " size: " << length*sizeof(uint64_t) << " n=" << n << std::endl;
         hash_map.n = n;
@@ -425,7 +425,7 @@ void load_hash(PHASH_MAP &hash_map, std::string &index_prefix, std::string &tf_f
 
     emphf::logger() << "Loading tf to hash..." << std::endl;
     hash_map.tf_values = new ATOMIC[hash_map.n];
-    unsigned int f2 = 0;
+    uint32_t f2 = 0;
     pos = 0;
     std::ifstream fout4(tf_file, std::ios::in | std::ios::binary);
     emphf::logger() << "Kmer array size: " << hash_map.n <<  std::endl;
@@ -453,7 +453,7 @@ void load_hash_only_pf(PHASH_MAP &hash_map, std::string &output_prefix, std::str
     std::ifstream is;
     is.open(output_prefix+".kmers.bin", std::ios::binary);
     is.seekg(0, std::ios::end);
-    size_t length = is.tellg();
+    uint64_t length = is.tellg();
     is.close();
     std::cout << length << std::endl;
     hash_map.n = length / sizeof(uint64_t);
@@ -462,7 +462,7 @@ void load_hash_only_pf(PHASH_MAP &hash_map, std::string &output_prefix, std::str
 
         hash_map.checker = new uint64_t[hash_map.n];
         uint64_t f = 0;
-        size_t pos = 0;
+        uint64_t pos = 0;
         std::ifstream fout3(output_prefix + ".kmers.bin", std::ios::in | std::ios::binary);
         emphf::logger() << "Kmer array size: " << hash_map.n << std::endl;
         while (fout3.read(reinterpret_cast<char *>(&f), sizeof(f))) {
@@ -492,15 +492,15 @@ void load_hash_full_tf(PHASH_MAP &hash_map, std::string &tf_file, std::string &h
     std::ifstream is;
     is.open(tf_file, std::ios::binary);
     is.seekg (0, std::ios::end);
-    size_t length = is.tellg();
+    uint64_t length = is.tellg();
     is.close();
 
-    size_t n = length / sizeof(unsigned int);
+    uint64_t n = length / sizeof(uint32_t);
     hash_map.n = n;
 
     hash_map.tf_values = new ATOMIC[n];
-    unsigned int f2 = 0;
-    size_t pos = 0;
+    uint32_t f2 = 0;
+    uint64_t pos = 0;
     std::ifstream fout4(tf_file, std::ios::in | std::ios::binary);
     emphf::logger() << "Kmer array size: " << n <<  std::endl;
     while(fout4.read(reinterpret_cast<char *>(&f2), sizeof(f2))) {
@@ -520,7 +520,7 @@ void load_hash_full_tf(PHASH_MAP &hash_map, std::string &tf_file, std::string &h
     is.close();
 }
 
-void load_full_hash(PHASH_MAP &hash_map, std::string &hash_filename, int k, size_t n) {
+void load_full_hash(PHASH_MAP &hash_map, std::string &hash_filename, int k, uint64_t n) {
 
     barrier.lock();
     emphf::logger() << "Hash loading.." << std::endl;
@@ -560,11 +560,11 @@ void index_hash(PHASH_MAP &hash_map, std::string &dat_filename, std::string &has
     barrier.unlock();
 
     emphf::logger() << "Computing a number of kmers..." << std::endl;
-    size_t n = 0;
+    uint64_t n = 0;
     std::string line;
     std::ifstream myfile(dat_filename);
     myfile.seekg(0, std::ios::end);
-    size_t length = myfile.tellg();
+    uint64_t length = myfile.tellg();
     char *contents = new char[length + 1];
     myfile.seekg(0, std::ios::beg);
     myfile.read(contents, length);
@@ -594,7 +594,7 @@ void index_hash(PHASH_MAP &hash_map, std::string &dat_filename, std::string &has
     hash_map.n = n;
 
     emphf::logger() << "Init values..." << std::endl;
-    for (size_t i=0; i < n; i++) {
+    for (uint64_t i=0; i < n; i++) {
         hash_map.tf_values[i] = 0;
         hash_map.checker[i] = 0;
     }
@@ -621,7 +621,7 @@ void index_hash(PHASH_MAP &hash_map, std::string &dat_filename, std::string &has
     emphf::logger() << "Processign data to indexes" << std::endl;
     barrier.unlock();
 
-    size_t i = 0;
+    uint64_t i = 0;
 
     std::stringstream ss_contents2;
     ss_contents2 << contents;
@@ -629,7 +629,7 @@ void index_hash(PHASH_MAP &hash_map, std::string &dat_filename, std::string &has
 
     while (std::getline(ss_contents2, line)) {
         std::string kmer = "";
-        unsigned int tf = 0;
+        uint32_t tf = 0;
         std::istringstream is(line);
         is >> kmer >> tf;
 
@@ -663,13 +663,13 @@ void index_hash(PHASH_MAP &hash_map, std::string &dat_filename, std::string &has
 }
 
 
-void worker_for_fill_index(PHASH_MAP &hash_map, std::string dat_filename, int mock_dat, size_t start, size_t end, size_t step) {
+void worker_for_fill_index(PHASH_MAP &hash_map, std::string dat_filename, int mock_dat, uint64_t start, uint64_t end, uint64_t step) {
 
     barrier.lock();
     emphf::logger() << "Processign data to indexes" << std::endl;
     barrier.unlock();
 
-    size_t i = 0;
+    uint64_t i = 0;
     std::string line;
     emphf::stl_string_adaptor str_adapter;
 
@@ -686,7 +686,7 @@ void worker_for_fill_index(PHASH_MAP &hash_map, std::string dat_filename, int mo
 
 
         std::string kmer = "";
-        unsigned int tf = 0;
+        uint32_t tf = 0;
         std::istringstream is(line);
         if (!mock_dat) {
             is >> kmer >> tf;
@@ -718,13 +718,13 @@ void worker_for_fill_index(PHASH_MAP &hash_map, std::string dat_filename, int mo
 }
 
 
-void worker_for_fill_index_any(PHASH_MAP &hash_map, std::string dat_filename, int mock_dat, size_t start, size_t end, size_t step) {
+void worker_for_fill_index_any(PHASH_MAP &hash_map, std::string dat_filename, int mock_dat, uint64_t start, uint64_t end, uint64_t step) {
 
     barrier.lock();
     emphf::logger() << "Processign data to indexes" << std::endl;
     barrier.unlock();
 
-    size_t i = 0;
+    uint64_t i = 0;
     std::string line;
     emphf::stl_string_adaptor str_adapter;
 
@@ -741,7 +741,7 @@ void worker_for_fill_index_any(PHASH_MAP &hash_map, std::string dat_filename, in
 
 
         std::string kmer = "";
-        unsigned int tf = 0;
+        uint32_t tf = 0;
         std::istringstream is(line);
         if (!mock_dat) {
             is >> kmer >> tf;
@@ -778,7 +778,7 @@ void index_hash_pp(PHASH_MAP &hash_map, std::string &dat_filename, std::string &
     barrier.unlock();
 
     emphf::logger() << "Computing a number of kmers..." << std::endl;
-    size_t n = 0;
+    uint64_t n = 0;
     std::string line;
     std::ifstream myfile(dat_filename);
     while (std::getline(myfile, line)) {
@@ -819,7 +819,7 @@ void index_hash_pp(PHASH_MAP &hash_map, std::string &dat_filename, std::string &
     emphf::logger() << "Fill tf and checkers with zeros " << std::endl;
     barrier.unlock();
 
-    for (size_t i=0; i < n; i++) {
+    for (uint64_t i=0; i < n; i++) {
         hash_map.tf_values[i] = 0;
 
         if (Settings::K == 23) {
@@ -830,14 +830,14 @@ void index_hash_pp(PHASH_MAP &hash_map, std::string &dat_filename, std::string &
     }
 
     emphf::logger() << "4. Fill index concurrently..." << std::endl;
-    size_t batch_size;
+    uint64_t batch_size;
     batch_size = (n / num_threads) + 1;
     std::vector<std::thread> t;
 
     emphf::logger() << "\t init result array..." << std::endl;
     for (int i = 0; i < num_threads; ++i) {
-        size_t start = i * batch_size;
-        size_t end = (i + 1) * batch_size;
+        uint64_t start = i * batch_size;
+        uint64_t end = (i + 1) * batch_size;
 
         if (end > n) {
             end = n;
@@ -878,7 +878,7 @@ void index_hash_pp(PHASH_MAP &hash_map, std::string &dat_filename, std::string &
 
 
 
-void load_hash_for_qkmer(PHASH_MAP &hash_map, size_t n, std::string &data_filename, std::string &hash_filename) {
+void load_hash_for_qkmer(PHASH_MAP &hash_map, uint64_t n, std::string &data_filename, std::string &hash_filename) {
 
     barrier.lock();
     emphf::logger() << "Hash loading.." << std::endl;
@@ -902,7 +902,7 @@ void load_hash_for_qkmer(PHASH_MAP &hash_map, size_t n, std::string &data_filena
     }
     hash_map.n = n;
 
-    for (size_t i=0; i < n; i++) {
+    for (uint64_t i=0; i < n; i++) {
         hash_map.left_qtf_values[i] = 0;
         hash_map.right_qtf_values[i] = 0;
         hash_map.checker[i] = 0;
@@ -927,7 +927,7 @@ void construct_hash_unordered_hash_illumina(std::string data_file, HASH_MAP13 &k
     }
 
     infile.seekg(0, std::ios::end);
-    size_t length = infile.tellg();
+    uint64_t length = infile.tellg();
     char *contents = new char[length+1];
 
 
@@ -952,7 +952,7 @@ void construct_hash_unordered_hash_illumina(std::string data_file, HASH_MAP13 &k
 
 }
 
-void lu_compressed_worker(int worker_id, size_t start, size_t end, char *contents,  ATOMIC64 *positions, ATOMIC64 *ppositions, size_t* indices, PHASH_MAP &hash_map) {
+void lu_compressed_worker(int worker_id, uint64_t start, uint64_t end, char *contents,  ATOMIC64 *positions, ATOMIC64 *ppositions, uint64_t* indices, PHASH_MAP &hash_map) {
 
     emphf::stl_string_adaptor str_adapter2;
     static std::mutex barrier2;
@@ -960,16 +960,16 @@ void lu_compressed_worker(int worker_id, size_t start, size_t end, char *content
     int k = Settings::K;
     char ckmer[k+1];
 
-    size_t total = end - start;
+    uint64_t total = end - start;
     int pcompleted = 0;
     int last_value = 0;
-    size_t done = 0;
-    size_t nreads = 0;
+    uint64_t done = 0;
+    uint64_t nreads = 0;
 
     // move start if kmer contains new line or separators
     while (start < end-k+1) {
         bool found = false;
-        for (size_t i = start; i < start+k; ++i) {
+        for (uint64_t i = start; i < start+k; ++i) {
             if (contents[i] == '\n' || contents[i] == '~' || contents[i] == '?') {
                 start = i+1;
                 found = true;
@@ -985,7 +985,7 @@ void lu_compressed_worker(int worker_id, size_t start, size_t end, char *content
     emphf::logger() << "Worker " << worker_id << " started" <<  std::endl;
     barrier2.unlock();
 
-    for (size_t i = start; i < end-k+1; ++i) {
+    for (uint64_t i = start; i < end-k+1; ++i) {
 
         // progress bar
         done += 1;
@@ -1016,7 +1016,7 @@ void lu_compressed_worker(int worker_id, size_t start, size_t end, char *content
         if (k == 13) {
 
             auto h1 = hash_map.hasher.lookup(kmer, str_adapter2);
-            size_t h2 = ppositions[h1].fetch_add(1, std::memory_order_seq_cst);
+            uint64_t h2 = ppositions[h1].fetch_add(1, std::memory_order_seq_cst);
             positions[indices[h1]+h2] = i+1;
 
         } else {
@@ -1029,7 +1029,7 @@ void lu_compressed_worker(int worker_id, size_t start, size_t end, char *content
                 if (h1 >= hash_map.n || hash_map.checker[h1] != ukmer) {
                     continue;
                 }
-                size_t h2 = ppositions[h1].fetch_add(1, std::memory_order_seq_cst);
+                uint64_t h2 = ppositions[h1].fetch_add(1, std::memory_order_seq_cst);
                 if (h2 >= hash_map.tf_values[h1]) {
                     continue;
                 }
@@ -1039,7 +1039,7 @@ void lu_compressed_worker(int worker_id, size_t start, size_t end, char *content
                 if (h1 >= hash_map.n || hash_map.checker[h1] != urev_kmer) {
                     continue;
                 }
-                size_t h2 = ppositions[h1].fetch_add(1, std::memory_order_seq_cst);
+                uint64_t h2 = ppositions[h1].fetch_add(1, std::memory_order_seq_cst);
                 if (h2 >= hash_map.tf_values[h1]) {
                     continue;
                 }

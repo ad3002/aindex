@@ -258,13 +258,13 @@ std::string get_bitset_dna13(uint32_t x) {
 
 /// REVERSE COMPLEMENT SECTION
 
-//unsigned int reverse(uint64_t t) {
+//uint32_t reverse(uint64_t t) {
 //    /*
 //     * Reverse complement for bit 23-mer.
 //     */
-//    size_t n = t; //store in 64 bit number for call to BSWAP
+//    uint64_t n = t; //store in 64 bit number for call to BSWAP
 //    __asm__("BSWAP %0" : "=r"(n) : "0"(n));
-//    n >>= ((sizeof(size_t) - sizeof(uint64_t)) * 8);
+//    n >>= ((sizeof(uint64_t) - sizeof(uint64_t)) * 8);
 //    n = ((n & 0xaaaaaaaa) >> 1) | ((n & 0x55555555) << 1);
 //    n = ((n & 0xcccccccc) >> 2) | ((n & 0x33333333) << 2);
 //    n = ((n & 0xf0f0f0f0) >> 4) | ((n & 0x0f0f0f0f) << 4);
@@ -275,9 +275,9 @@ std::string get_bitset_dna13(uint32_t x) {
 //    /*
 //     * Reverse complement for bit 13-mer.
 //     */
-//    size_t n = t; //store in 64 bit number for call to BSWAP
+//    uint64_t n = t; //store in 64 bit number for call to BSWAP
 //    __asm__("BSWAP %0" : "=r"(n) : "0"(n));
-//    n >>= ((sizeof(size_t) - sizeof(uint32_t)) * 8);
+//    n >>= ((sizeof(uint64_t) - sizeof(uint32_t)) * 8);
 //    n = ((n & 0xaaaaaaaa) >> 1) | ((n & 0x55555555) << 1);
 //    n = ((n & 0xcccccccc) >> 2) | ((n & 0x33333333) << 2);
 //    n = ((n & 0xf0f0f0f0) >> 4) | ((n & 0x0f0f0f0f) << 4);
@@ -289,7 +289,7 @@ void get_revcomp(const std::string &input, std::string &output) {
     /*
      * Revcomp for string.
      */
-    size_t n = input.length();
+    uint64_t n = input.length();
     for(int y = n-1; y >= 0; y--) {
         if (input[y] == 'A') {
             output[n-1-y] = 'T';
@@ -311,7 +311,7 @@ std::string get_revcomp(const std::string &input) {
     /*
      * Revcomp for  string.
      */
-    size_t n = input.length();
+    uint64_t n = input.length();
     std::string output(n, 'N');
     for(int y = n-1; y >= 0; y--) {
         if (input[y] == 'A') {
@@ -333,7 +333,7 @@ std::string get_revcomp(std::string_view input) {
     /*
      * Revcomp for  string.
      */
-    size_t n = input.length();
+    uint64_t n = input.length();
     std::string output(n, 'N');
     for(int y = n-1; y >= 0; y--) {
         if (input[y] == 'A') {

@@ -7,6 +7,6 @@
 void printProgressBar(double progress);
 void printDoubleProgressBars(double progress1, double progress2);
 void printTripleProgressBars(double progress1, double progress2, double progress3);
-void printTripleProgressBars(double progress1, double progress2, double progress3, size_t a, size_t b, size_t c, size_t d, size_t e);
+void printTripleProgressBars(double progress1, double progress2, double progress3, uint64_t a, uint64_t b, uint64_t c, uint64_t d, uint64_t e);
 
 #endif

@@ -25,11 +25,11 @@
 typedef emphf::mphf<emphf::jenkins64_hasher> HASHER;
 typedef int *VAULT;
 
-typedef std::atomic<unsigned int> ATOMIC;
+typedef std::atomic<uint32_t> ATOMIC;
 typedef std::atomic<unsigned long> ATOMIC_LONG;
 
 typedef std::atomic<uint8_t> ATOMIC8;
-typedef std::atomic<size_t> ATOMIC64;
+typedef std::atomic<uint64_t> ATOMIC64;
 
 typedef std::unordered_map<uint64_t, int> HASH_MAP;
 typedef std::unordered_map<std::string, int> HASH_MAP13;
@@ -37,12 +37,12 @@ typedef std::unordered_map<std::string, int> HASH_MAP13;
 
 struct Stats {
 
-    size_t zero = 0;
-    size_t unique = 0;
-    size_t distinct = 0;
-    size_t total = 0;
-    size_t max_count = 0;
-    size_t coverage = 0;
+    uint64_t zero = 0;
+    uint64_t unique = 0;
+    uint64_t distinct = 0;
+    uint64_t total = 0;
+    uint64_t max_count = 0;
+    uint64_t coverage = 0;
 
     int *profile;
 
@@ -50,7 +50,7 @@ struct Stats {
         profile = nullptr;
     }
 
-    void init(size_t coverage) {
+    void init(uint64_t coverage) {
         zero = 0;
         unique = 0;
         distinct = 0;
@@ -61,12 +61,12 @@ struct Stats {
             profile = nullptr;
         }
         profile = new int[coverage+coverage/2];
-        for (size_t i=0; i<coverage+coverage/2; i++) {
+        for (uint64_t i=0; i<coverage+coverage/2; i++) {
             profile[i] = 0;
         }
 
 //
-//        for (size_t i=0; i < coverage+coverage/2; ++i) {
+//        for (uint64_t i=0; i < coverage+coverage/2; ++i) {
 //            std::cout << i << " " << profile[i] << std::endl;
 //        }
     }
@@ -87,7 +87,7 @@ struct PHASH_MAP {
     ATOMIC_LONG *right_qtf_values;
     uint64_t *checker;
     std::vector<std::string> checker_string;
-    size_t n = 0;
+    uint64_t n = 0;
 
     Stats stats;
 
@@ -102,11 +102,11 @@ struct PHASH_MAP {
 
     }
 
-    size_t get_n() {
+    uint64_t get_n() {
         return n;
     }
 
-    size_t size() {
+    uint64_t size() {
         return n;
     }
 
@@ -120,7 +120,7 @@ struct PHASH_MAP {
         if (checker != nullptr) delete [] checker;
     }
 
-    inline unsigned int get_freq(uint64_t kmer) {
+    inline uint32_t get_freq(uint64_t kmer) {
         std::string _kmer = "NNNNNNNNNNNNNNNNNNNNNNN";
         std::string _rev_kmer = "NNNNNNNNNNNNNNNNNNNNNNN";
         get_bitset_dna23(kmer, _kmer);
@@ -139,28 +139,28 @@ struct PHASH_MAP {
         return 0;
     }
 
-    inline size_t get_hash_value(std::string_view kmer) {
+    inline uint64_t get_hash_value(std::string_view kmer) {
         return hasher.lookup(kmer, str_adapter);
     }
 
-    inline size_t get_index_unsafe(std::string_view kmer) {
+    inline uint64_t get_index_unsafe(std::string_view kmer) {
         return hasher.lookup(kmer, str_adapter);
     }
 
-    inline size_t get_pfid(std::string_view _kmer) {
+    inline uint64_t get_pfid(std::string_view _kmer) {
         uint64_t kmer = get_dna23_bitset(_kmer);
         std::string _rev_kmer = "NNNNNNNNNNNNNNNNNNNNNNN";
         uint64_t rev_kmer = reverseDNA(kmer);
         get_bitset_dna23(rev_kmer, _rev_kmer);
         if (_kmer.compare(_rev_kmer) <= 0) {
-            size_t h1 = hasher.lookup(_kmer, str_adapter);
+            uint64_t h1 = hasher.lookup(_kmer, str_adapter);
             if (h1 < n && checker[h1] == kmer) {
                 return h1;
             } else {
                 return n;
             }
         } else {
-            size_t h1 = hasher.lookup(_rev_kmer, str_adapter);
+            uint64_t h1 = hasher.lookup(_rev_kmer, str_adapter);
             if (h1 < n && checker[h1] == rev_kmer) {
                 return h1;
             } else {
@@ -169,7 +169,7 @@ struct PHASH_MAP {
         }
     }
 
-    inline size_t get_pfid_by_umer_safe(uint64_t kmer) {
+    inline uint64_t get_pfid_by_umer_safe(uint64_t kmer) {
 
         std::string _kmer = "NNNNNNNNNNNNNNNNNNNNNNN";
         get_bitset_dna23(kmer, _kmer, Settings::K);
@@ -178,14 +178,14 @@ struct PHASH_MAP {
         uint64_t rev_kmer = reverseDNA(kmer);
         get_bitset_dna23(rev_kmer, _rev_kmer);
         if (_kmer.compare(_rev_kmer) <= 0) {
-            size_t h1 = hasher.lookup(_kmer, str_adapter);
+            uint64_t h1 = hasher.lookup(_kmer, str_adapter);
             if (h1 < n && checker[h1] == kmer) {
                 return h1;
             } else {
                 return n;
             }
         } else {
-            size_t h1 = hasher.lookup(_rev_kmer, str_adapter);
+            uint64_t h1 = hasher.lookup(_rev_kmer, str_adapter);
             if (h1 < n && checker[h1] == rev_kmer) {
                 return h1;
             } else {
@@ -194,22 +194,22 @@ struct PHASH_MAP {
         }
     }
 
-    inline size_t get_pfid_by_umer_unsafe(uint64_t kmer) {
+    inline uint64_t get_pfid_by_umer_unsafe(uint64_t kmer) {
         std::string _kmer = "NNNNNNNNNNNNNNNNNNNNNNN";
         get_bitset_dna23(kmer, _kmer);
         return hasher.lookup(_kmer, str_adapter);
     }
 
-    inline unsigned int get_freq(std::string_view kmer) {
+    inline uint32_t get_freq(std::string_view kmer) {
         uint64_t _kmer = get_dna23_bitset(kmer);
         return get_freq(_kmer);
     }
 
-    inline uint64_t get_kmer(size_t p) {
+    inline uint64_t get_kmer(uint64_t p) {
         return checker[p];
     }
 
-    inline std::string get_kmer_string(size_t p) {
+    inline std::string get_kmer_string(uint64_t p) {
         std::string _kmer = "NNNNNNNNNNNNNNNNNNNNNNN";
         get_bitset_dna23(checker[p], _kmer, Settings::K);
         return _kmer;
@@ -266,13 +266,13 @@ struct PHASH_MAP {
             exit(12);
         }
 
-        size_t zeros = 0;
-        size_t ones = 0;
-        size_t other = 0;
-        for (size_t i=0; i < n; i++) {
+        uint64_t zeros = 0;
+        uint64_t ones = 0;
+        uint64_t other = 0;
+        for (uint64_t i=0; i < n; i++) {
             std::string kmer = "NNNNNNNNNNNNNNNNNNNNNNN";
             get_bitset_dna23(checker[i], kmer);
-            size_t tf = tf_values[i].load();
+            uint64_t tf = tf_values[i].load();
             if (tf == 1) ones += 1;
             if (tf == 0) zeros += 1;
             if (tf > 1) other += 1;
@@ -289,18 +289,18 @@ struct PHASH_MAP {
     }
 
     void reset_tf() {
-        for (size_t i=0; i < n; i++) {
+        for (uint64_t i=0; i < n; i++) {
             tf_values[i] = 0;
         }
     }
 
-    void set_stats(size_t coverage) {
+    void set_stats(uint64_t coverage) {
 
         stats.init(coverage);
 
-        size_t max_coverage = coverage + coverage/2;
+        uint64_t max_coverage = coverage + coverage/2;
 
-        for (size_t i=0; i < n; i++) {
+        for (uint64_t i=0; i < n; i++) {
             stats.total += tf_values[i];
             if (tf_values[i] == 0) {
                 stats.zero += 1;
@@ -333,14 +333,14 @@ struct PHASH_MAP {
 
     }
 
-    void print_stats_profile(size_t coverage) {
-        for (size_t i=0; i<coverage+coverage/2;i++) {
+    void print_stats_profile(uint64_t coverage) {
+        for (uint64_t i=0; i<coverage+coverage/2;i++) {
             std::cout << i << ":" << stats.profile[i] << " ";
         }
         std::cout << std::endl;
     }
 
-    std::string print_and_set_coverage(size_t coverage) {
+    std::string print_and_set_coverage(uint64_t coverage) {
         set_stats(coverage);
         print_stats_profile(coverage);
         std::string res = "Z: " + std::to_string(stats.zero) + " U: " + std::to_string(stats.unique) + " D: " + std::to_string(stats.distinct) + " T: " + std::to_string(stats.total) + " C: " + std::to_string(stats.coverage) + " M: " + std::to_string(stats.max_count);
@@ -352,29 +352,29 @@ private:
 
 };
 
-void lu_compressed_worker(int worker_id, size_t start, size_t end, char *contents,  ATOMIC64 *positions, ATOMIC64 *ppositions, size_t* indices, PHASH_MAP &hash_map);
+void lu_compressed_worker(int worker_id, uint64_t start, uint64_t end, char *contents,  ATOMIC64 *positions, ATOMIC64 *ppositions, uint64_t* indices, PHASH_MAP &hash_map);
 
 struct AIndexCompressed {
 
-    size_t* indices; // position indices
+    uint64_t* indices; // position indices
     ATOMIC64* ppositions; // position completness
     ATOMIC64* positions; // position itself
-    size_t total_size = 0;
-    size_t max_tf = 0;
+    uint64_t total_size = 0;
+    uint64_t max_tf = 0;
 
     AIndexCompressed(PHASH_MAP &hash_map) {
 
         emphf::logger() << "...Allocate indices..." << std::endl;
-        indices = new size_t[hash_map.n+1];
+        indices = new uint64_t[hash_map.n+1];
         if (indices == nullptr) {
             emphf::logger() << "Failed to allocate memory for positions: " << hash_map.n+1 << std::endl;
             exit(10);
         }
         indices[0] = 0;
-        for (size_t i=1; i<hash_map.n+1; ++i) {
+        for (uint64_t i=1; i<hash_map.n+1; ++i) {
             indices[i] = indices[i-1] + hash_map.tf_values[i-1];
             total_size += hash_map.tf_values[i-1];
-            max_tf = std::max(max_tf, (size_t)hash_map.tf_values[i-1]);
+            max_tf = std::max(max_tf, (uint64_t)hash_map.tf_values[i-1]);
         }
         std::cout << "\tmax_tf: " << max_tf << std::endl;
         std::cout << "\ttotal_size: " << total_size << std::endl;
@@ -404,16 +404,16 @@ struct AIndexCompressed {
         if (positions != nullptr) delete [] positions;
     }
 
-    void fill_index_from_reads(char *contents, size_t length, uint num_threads, PHASH_MAP &hash_map) {
+    void fill_index_from_reads(char *contents, uint64_t length, uint num_threads, PHASH_MAP &hash_map) {
 
         emphf::logger() << "Building index..." << " " << length << " " <<  num_threads << " " << Settings::K << std::endl;
 
-        size_t batch_size = (length / num_threads) + 1;
+        uint64_t batch_size = (length / num_threads) + 1;
         std::vector<std::thread> t;
 
-        for (size_t worker_id = 0; worker_id < num_threads; ++worker_id) {
-            size_t start = worker_id * batch_size;
-            size_t end = (worker_id + 1) * batch_size;
+        for (uint64_t worker_id = 0; worker_id < num_threads; ++worker_id) {
+            uint64_t start = worker_id * batch_size;
+            uint64_t end = (worker_id + 1) * batch_size;
             if (end > length) {
                 end = length;
             }
@@ -436,50 +436,50 @@ struct AIndexCompressed {
             );
         }
 
-        for (size_t worker_id = 0; worker_id < num_threads; ++worker_id) {
+        for (uint64_t worker_id = 0; worker_id < num_threads; ++worker_id) {
             t[worker_id].join();
         }
 
         emphf::logger() << "\tDone." << std::endl;
     }
 
-    void get_positions(std::string kmer, unsigned int* r, PHASH_MAP &hash_map) {
+    void get_positions(std::string kmer, uint32_t* r, PHASH_MAP &hash_map) {
 
-        memset(r, 0, max_tf * sizeof(unsigned int));
+        memset(r, 0, max_tf * sizeof(uint32_t));
         auto h1 = hash_map.get_pfid(kmer);
-        size_t j = 0;
-        for (size_t i=indices[h1]; i < indices[h1+1]; ++i) {
+        uint64_t j = 0;
+        for (uint64_t i=indices[h1]; i < indices[h1+1]; ++i) {
             r[j] = positions[i];
             j += 1;
         }
     }
 
-    void set_positions(std::string kmer, unsigned int* r, PHASH_MAP &hash_map) {
+    void set_positions(std::string kmer, uint32_t* r, PHASH_MAP &hash_map) {
         auto h1 = hash_map.get_pfid(kmer);
-        size_t j = 0;
-        for (size_t i=indices[h1]; i < indices[h1+1]; ++i) {
+        uint64_t j = 0;
+        for (uint64_t i=indices[h1]; i < indices[h1+1]; ++i) {
             positions[i] = r[j];
             j += 1;
         }
     }
 
-    void save(std::string output_prefix, std::vector<size_t> start_positions, PHASH_MAP &hash_map) {
+    void save(std::string output_prefix, std::vector<uint64_t> start_positions, PHASH_MAP &hash_map) {
         //
         emphf::logger() << "Saving pos.bin array..." << std::endl;
         std::ofstream fout2(output_prefix + ".pos.bin", std::ios::out | std::ios::binary);
-        fout2.write((char *) &start_positions[0], start_positions.size() * sizeof(size_t));
+        fout2.write((char *) &start_positions[0], start_positions.size() * sizeof(uint64_t));
         fout2.close();
 
         emphf::logger() << "Saving index.bin array..." << std::endl;
         std::ofstream fout3(output_prefix+ ".index.bin", std::ios::out | std::ios::binary);
-        emphf::logger() << "Positions array size: " << sizeof(size_t) * total_size << std::endl;
-        fout3.write(reinterpret_cast<const char *> (positions), sizeof(size_t) * total_size);
+        emphf::logger() << "Positions array size: " << sizeof(uint64_t) * total_size << std::endl;
+        fout3.write(reinterpret_cast<const char *> (positions), sizeof(uint64_t) * total_size);
         fout3.close();
 
         emphf::logger() << "Saving indices array..." << std::endl;
         std::ofstream fout4(output_prefix+ ".indices.bin", std::ios::out | std::ios::binary);
-        emphf::logger() << "Indices array size: " << sizeof(size_t) * total_size << std::endl;
-        fout4.write(reinterpret_cast<const char *> (indices), sizeof(size_t) * (hash_map.n+1));
+        emphf::logger() << "Indices array size: " << sizeof(uint64_t) * total_size << std::endl;
+        fout4.write(reinterpret_cast<const char *> (indices), sizeof(uint64_t) * (hash_map.n+1));
         fout4.close();
 
         emphf::logger() << "\tDone." << std::endl;
@@ -491,7 +491,7 @@ private:
 
 struct AtomicCounter {
 
-    std::atomic<unsigned int> value;
+    std::atomic<uint32_t> value;
 
     void increment(){
         ++value;
@@ -509,11 +509,11 @@ struct AtomicCounter {
 extern void load_hash(PHASH_MAP &hash_map, std::string &output_prefix, std::string &tf_file, std::string &hash_filename);
 extern void load_only_hash(PHASH_MAP &hash_map, std::string &hash_filename);
 void construct_hash_unordered_hash_illumina(std::string data_file, HASH_MAP13 &kmers);
-void load_hash_for_qkmer(PHASH_MAP &hash_map, size_t n, std::string &data_filename, std::string &hash_filename);
+void load_hash_for_qkmer(PHASH_MAP &hash_map, uint64_t n, std::string &data_filename, std::string &hash_filename);
 void index_hash(PHASH_MAP &hash_map, std::string &dat_filename, std::string &hash_filename);
 void index_hash_pp(PHASH_MAP &hash_map, std::string &dat_filename, std::string &hash_filename, int num_threads, int mock_dat=0);
 void load_hash_only_pf(PHASH_MAP &hash_map, std::string &output_prefix, std::string &hash_filename, bool load_checker=true);
-void load_full_hash(PHASH_MAP &hash_map, std::string &hash_filename, int k, size_t n);
+void load_full_hash(PHASH_MAP &hash_map, std::string &hash_filename, int k, uint64_t n);
 void load_hash_full_tf(PHASH_MAP &hash_map, std::string &tf_file, std::string &hash_filename);
 
 

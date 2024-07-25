@@ -19,17 +19,17 @@ namespace emphf {
         mphf() noexcept = default;
 
         template <typename HypergraphSorter, typename Range, typename Adaptor>
-        mphf(HypergraphSorter& sorter, size_t n,
+        mphf(HypergraphSorter& sorter, uint64_t n,
              const Range& input_range, Adaptor adaptor,
              double gamma = 1.23)
             : m_n(n)
-            , m_hash_domain((static_cast<size_t>(std::ceil(static_cast<double>(m_n) * gamma)) + 2) / 3)
+            , m_hash_domain((static_cast<uint64_t>(std::ceil(static_cast<double>(m_n) * gamma)) + 2) / 3)
         {
             using node_t = typename HypergraphSorter::node_t;
             using hyperedge = typename HypergraphSorter::hyperedge;
             using value_type = decltype(*std::begin(input_range));
 
-            size_t nodes_domain = m_hash_domain * 3;
+            uint64_t nodes_domain = m_hash_domain * 3;
 
             if (nodes_domain >= std::numeric_limits<node_t>::max()) {
                 throw std::invalid_argument("Too many nodes for node_t");
@@ -44,7 +44,7 @@ namespace emphf {
 
             std::mt19937_64 rng(37); // deterministic seed
 
-            for (size_t trial = 0; ; ++trial) {
+            for (uint64_t trial = 0; ; ++trial) {
                 logger() << "Hypergraph generation: trial " << trial << std::endl;
                 m_hasher = BaseHasher::generate(rng);
                 if (sorter.try_generate_and_sort(input_range, edge_gen, m_n, m_hash_domain)) break;

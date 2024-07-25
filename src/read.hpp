@@ -29,7 +29,7 @@
 const int MINIMAL_PHRED = 33;
 const int MAXIMAL_PHRED = 125;
 
-typedef std::atomic<size_t> ATOMIC_SIZE_T;
+typedef std::atomic<uint64_t> ATOMIC_uint64_t;
 
 namespace READS {
 
@@ -100,16 +100,16 @@ namespace READS {
 
         std::string type = "unknown";
         std::string prev_type = "unknown";
-        unsigned int start_position = 0;
-        unsigned int end_position = 0;
-        unsigned int stop_point = 0;
-        unsigned int position = 0;
+        uint32_t start_position = 0;
+        uint32_t end_position = 0;
+        uint32_t stop_point = 0;
+        uint32_t position = 0;
         std::vector<int> fixed;
         int status = 0;
 
         Correction();
 
-        Correction(const std::string& _type, const std::string& _prev_type, unsigned int _start_position) {
+        Correction(const std::string& _type, const std::string& _prev_type, uint32_t _start_position) {
             type = _type;
             prev_type = _prev_type;
             start_position = _start_position;
@@ -120,7 +120,7 @@ namespace READS {
 
     struct READ {
 
-        size_t rid = 0;
+        uint64_t rid = 0;
         std::string head;
         std::string seq;
         std::string strand;
@@ -144,7 +144,7 @@ namespace READS {
         int rmi = 0;
         int rma = 0;
         bool is_string = false;
-        size_t n = 0;
+        uint64_t n = 0;
 
         int start_position = 0;
         int end_position = 0;
@@ -172,7 +172,7 @@ namespace READS {
             fm = new uint[seq.length()];
             am = new uint[seq.length()];
 
-            for (size_t i = 0; i < seq.length(); i++) {
+            for (uint64_t i = 0; i < seq.length(); i++) {
                 fm[i] = 0;
                 am[i] = MAXIMAL_PHRED;
             }
@@ -182,7 +182,7 @@ namespace READS {
 
         }
 
-        size_t vlength() {
+        uint64_t vlength() {
             return right_status - left_status;
         }
 
@@ -190,7 +190,7 @@ namespace READS {
             std::string rev = seq;
             get_revcomp(seq, rev);
             seq = rev;
-            size_t temp = left_status;
+            uint64_t temp = left_status;
             left_status = seq.length() - right_status;
             right_status = seq.length() - temp;
         }
@@ -232,7 +232,7 @@ namespace READS {
             am = nullptr;
         }
 
-        size_t length() {
+        uint64_t length() {
             return seq.length();
         }
 
@@ -257,24 +257,24 @@ namespace READS {
             fh << "0 0 0 0 0 0 S" << status << " " << position << " " << left_status << " " << left_position << " " << meanq;
             if (adapters.size() > 0) {
                 fh << " A ";
-                for (size_t p = 0; p < adapters.size(); p++) {
+                for (uint64_t p = 0; p < adapters.size(); p++) {
                     fh << adapters[p] << " ";
                 }
             }
             fh << "\n";
             fh << seq << "\n";
-            for (size_t p = 0; p < seq.length() - Settings::K+1; p++) {
+            for (uint64_t p = 0; p < seq.length() - Settings::K+1; p++) {
                 fh << (char) am[p];
             }
             fh << "\n";
-            for (size_t p = 0; p < seq.length()-Settings::K+1; p++) {
+            for (uint64_t p = 0; p < seq.length()-Settings::K+1; p++) {
                 fh << 1;
                 if (p != seq.length()-Settings::K) {
                     fh << ',';
                 }
             }
             fh << "\n";
-            for (size_t p = 0; p < seq.length()-Settings::K+1; p++) {
+            for (uint64_t p = 0; p < seq.length()-Settings::K+1; p++) {
                 fh << fm[p];
                 if (p != seq.length()-Settings::K) {
                     fh << ',';
@@ -290,7 +290,7 @@ namespace READS {
             if (fm == nullptr) {
                 fm = new uint[seq.length()];
             }
-            for (size_t i = 0; i < seq.length() - Settings::K + 1; i++) {
+            for (uint64_t i = 0; i < seq.length() - Settings::K + 1; i++) {
                 std::string kmer = seq.substr(i, Settings::K);
                 fm[i] = kmers.get_freq(kmer);
                 if (fm[i] <= Settings::TRUE_ERRORS) {
@@ -298,7 +298,7 @@ namespace READS {
                 }
 
             }
-            for (size_t i = seq.length() - Settings::K + 1; i < seq.length(); i++) {
+            for (uint64_t i = seq.length() - Settings::K + 1; i < seq.length(); i++) {
                 fm[i] = 0;
             }
 
@@ -313,15 +313,15 @@ namespace READS {
             if (am == nullptr) {
                 am = new uint[seq.length()];
             }
-            for (size_t i = 0; i < seq.length() - Settings::K + 1; i++) {
+            for (uint64_t i = 0; i < seq.length() - Settings::K + 1; i++) {
                 am[i] = std::min( (int)std::round(fm[i]/coverage), 9);
             }
-            for (size_t i = seq.length() - Settings::K + 1; i < seq.length(); i++) {
+            for (uint64_t i = seq.length() - Settings::K + 1; i < seq.length(); i++) {
                 am[i] = 0;
             }
         }
 
-        void cut_end_from(size_t position) {
+        void cut_end_from(uint64_t position) {
             if (position == 0) {
                 Q = "";
                 seq = "";
@@ -332,7 +332,7 @@ namespace READS {
 
         }
 
-        void cut_start_to(size_t position) {
+        void cut_start_to(uint64_t position) {
             if (position+1 >= seq.length()) {
                 Q = "";
                 seq = "";
@@ -342,11 +342,11 @@ namespace READS {
             if (Q.length()) Q = Q.substr(position+1);
         }
 
-        char at(size_t pos) {
+        char at(uint64_t pos) {
             return seq[pos];
         }
 
-        char atq(size_t pos) {
+        char atq(uint64_t pos) {
             return (int)Q[pos]-33;
         }
     };
@@ -358,8 +358,8 @@ namespace READS {
         int status = 1000;
         int start_position = 0;
         int end_position = 0;
-        unsigned int position = 0;
-        size_t n = 0;
+        uint32_t position = 0;
+        uint64_t n = 0;
 
         STUPID_READ() {
             seq = "";
@@ -377,7 +377,7 @@ namespace READS {
             seq = rev;
         }
 
-        size_t length() {
+        uint64_t length() {
             return seq.length();
         }
 
@@ -391,7 +391,7 @@ namespace READS {
 
         bool set_fm(PHASH_MAP &kmers) {
 
-            for (size_t i = 0; i < seq.length() - Settings::K + 1; i++) {
+            for (uint64_t i = 0; i < seq.length() - Settings::K + 1; i++) {
                 std::string kmer = seq.substr(i, Settings::K);
                 if (kmers.get_freq(kmer) <= Settings::TRUE_ERRORS) {
                     return false;
@@ -402,7 +402,7 @@ namespace READS {
         }
 
 
-        void cut_end_from(size_t position) {
+        void cut_end_from(uint64_t position) {
             if (position == 0) {
                 seq = "";
                 return;
@@ -411,7 +411,7 @@ namespace READS {
 
         }
 
-        void cut_start_to(size_t position) {
+        void cut_start_to(uint64_t position) {
             if (position+1 >= seq.length()) {
                 seq = "";
                 return;
@@ -420,7 +420,7 @@ namespace READS {
 
         }
 
-        char at(size_t pos) {
+        char at(uint64_t pos) {
             return seq[pos];
         }
 
@@ -430,7 +430,7 @@ namespace READS {
 
         int rid = 0;
         dna_bitset* bitdna;
-        size_t n = 0;
+        uint64_t n = 0;
 
         SIMPLE_READ(std::string &line_seq) {
 
@@ -438,7 +438,7 @@ namespace READS {
 
         }
 
-        size_t length() {
+        uint64_t length() {
             return bitdna->length();
         }
 
@@ -446,7 +446,7 @@ namespace READS {
             delete bitdna;
         }
 
-        char at(size_t pos) {
+        char at(uint64_t pos) {
             return bitdna->at(pos);
         }
 
@@ -454,7 +454,7 @@ namespace READS {
             fh << bitdna->to_string() << "\n";
         }
 
-        void cut_end_from(size_t position) {
+        void cut_end_from(uint64_t position) {
 
             if (position == 0) {
                 delete bitdna;
@@ -468,7 +468,7 @@ namespace READS {
             bitdna = new dna_bitset(read.c_str(), bitdna->length());
         }
 
-        void cut_start_to(size_t position) {
+        void cut_start_to(uint64_t position) {
             if (position+1 >= bitdna->length()) {
                 delete bitdna;
                 bitdna = new dna_bitset("\0", 0);
@@ -513,7 +513,7 @@ namespace READS {
 
         }
 
-        size_t length() {
+        uint64_t length() {
             return seq.length();
         }
 
@@ -565,7 +565,7 @@ namespace READS {
             read2 = new READ(read2->seq);
         }
 
-        size_t length() {
+        uint64_t length() {
             return read1->length() + read2->length();
         }
 
@@ -611,7 +611,7 @@ namespace READS {
         void save_as_am(std::ofstream &fh) {
 
             if (read1->length() >= Settings::MINIMAL_READ_LENGTH) {
-                for (size_t i = 0; i < read1->length(); i++) {
+                for (uint64_t i = 0; i < read1->length(); i++) {
                     fh << read1->am[i];
                 }
             }
@@ -619,7 +619,7 @@ namespace READS {
                 fh << "~";
             }
             if (read2->length() >= Settings::MINIMAL_READ_LENGTH) {
-                for (size_t i = 0; i < read2->length(); i++) {
+                for (uint64_t i = 0; i < read2->length(); i++) {
                     fh << read2->am[i];
                 }
             }
@@ -630,7 +630,7 @@ namespace READS {
 
             int tf = 0;
             if (read1->length() >= Settings::MINIMAL_READ_LENGTH) {
-                for (size_t i = 0; i < read1->length(); i++) {
+                for (uint64_t i = 0; i < read1->length(); i++) {
                     tf = read1->fm[i];
                     fh << tf;
                     if (i < read1->length()-1) {
@@ -644,7 +644,7 @@ namespace READS {
                 fh << "~";
             }
             if (read2->length() >= Settings::MINIMAL_READ_LENGTH) {
-                for (size_t i = 0; i < read2->length(); i++) {
+                for (uint64_t i = 0; i < read2->length(); i++) {
                     tf = read2->fm[i];
                     fh << tf;
                     if (i < read2->length()-1) {
@@ -680,7 +680,7 @@ namespace READS {
             read2 = new STUPID_READ(seq2);
         }
 
-        size_t length() {
+        uint64_t length() {
             return read1->length()+read2->length();
         }
 
@@ -729,7 +729,7 @@ namespace READS {
         }
 
 
-        size_t length() {
+        uint64_t length() {
             return seq.length();
         }
 
@@ -755,36 +755,36 @@ namespace READS {
 
     struct INDEXER {
 
-        size_t n_reads = 0;
-        size_t batch_size = 0;
+        uint64_t n_reads = 0;
+        uint64_t batch_size = 0;
 
-        size_t *index = nullptr;
+        uint64_t *index = nullptr;
         std::vector<std::vector<std::tuple<std::string,int,int>>> scenarios;
 
-        const size_t BUFSIZE = 1024 * 1024;
+        const uint64_t BUFSIZE = 1024 * 1024;
 
-        size_t * result = nullptr;
-        size_t * size_t_result = nullptr;
-        ATOMIC_SIZE_T *atomic_result = nullptr;
+        uint64_t * result = nullptr;
+        uint64_t * uint64_t_result = nullptr;
+        ATOMIC_uint64_t *atomic_result = nullptr;
 
-        void init_int_result(size_t size) {
-            result = new size_t[n_reads*size]; // status1 start1 end1 status2 start2 end2
-            for (size_t i=0; i<n_reads*size; ++i) {
+        void init_int_result(uint64_t size) {
+            result = new uint64_t[n_reads*size]; // status1 start1 end1 status2 start2 end2
+            for (uint64_t i=0; i<n_reads*size; ++i) {
                 result[i] = 0;
             }
         }
 
-        void init_result(size_t size) {
-            result = new size_t[n_reads*size]; // status1 start1 end1 status2 start2 end2
-            for (size_t i=0; i<n_reads*size; ++i) {
+        void init_result(uint64_t size) {
+            result = new uint64_t[n_reads*size]; // status1 start1 end1 status2 start2 end2
+            for (uint64_t i=0; i<n_reads*size; ++i) {
                 result[i] = 0;
             }
             std::cout << "result array init done: " << n_reads*size << std::endl;
         }
 
-        void init_atomic_result(size_t size) {
-            atomic_result = new ATOMIC_SIZE_T[n_reads*size]; // status1 start1 end1 status2 start2 end2
-            for (size_t i=0; i<n_reads*size; ++i) {
+        void init_atomic_result(uint64_t size) {
+            atomic_result = new ATOMIC_uint64_t[n_reads*size]; // status1 start1 end1 status2 start2 end2
+            for (uint64_t i=0; i<n_reads*size; ++i) {
                 atomic_result[i] = 0;
             }
             std::cout << "result array init done: " << n_reads*size << std::endl;
@@ -792,47 +792,47 @@ namespace READS {
 
 
 
-        void init_size_t_result(size_t size) {
-            size_t_result = new size_t[n_reads*size]; // status1 start1 end1 status2 start2 end2
-            for (size_t i=0; i<n_reads*size; ++i) {
-                size_t_result[i] = 0;
+        void init_uint64_t_result(uint64_t size) {
+            uint64_t_result = new uint64_t[n_reads*size]; // status1 start1 end1 status2 start2 end2
+            for (uint64_t i=0; i<n_reads*size; ++i) {
+                uint64_t_result[i] = 0;
             }
         }
 
         void init_scenarios() {
-            for (size_t i=0; i<n_reads; ++i) {
+            for (uint64_t i=0; i<n_reads; ++i) {
                 std::vector<std::tuple<std::string,int,int> > s;
                 scenarios.push_back(s);
             }
         }
 
-        void set_result(size_t pos, int reg, int val) {
+        void set_result(uint64_t pos, int reg, int val) {
             result[n_reads*reg+pos] = val;
         }
 
-        void set_atomic_result(int reg, size_t rid, size_t val) {
+        void set_atomic_result(int reg, uint64_t rid, uint64_t val) {
             atomic_result[n_reads*reg + rid] = val;
         }
 
-        void inc_atomic_result(size_t pos, int reg, int val) {
+        void inc_atomic_result(uint64_t pos, int reg, int val) {
             atomic_result[n_reads*reg+pos] += val;
         }
 
-        void set_result(size_t pos, int val) {
+        void set_result(uint64_t pos, int val) {
 
             result[pos] = val;
         }
 
-        void set_result(size_t pos, size_t val) {
+        void set_result(uint64_t pos, uint64_t val) {
 
             result[pos] = val;
         }
 
-        size_t get_int_val(size_t pos) {
+        uint64_t get_int_val(uint64_t pos) {
             return result[pos];
         }
 
-        size_t get_atomic_val(int reg, size_t rid) {
+        uint64_t get_atomic_val(int reg, uint64_t rid) {
             return atomic_result[n_reads*reg+rid].load();
         }
 
@@ -842,8 +842,8 @@ namespace READS {
         void save_index(std::string index_file) {
             emphf::logger() << "Saving index array..." << std::endl;
             std::ofstream fout(index_file, std::ios::out | std::ios::binary);
-            emphf::logger() << "Index array size: " << sizeof(size_t) * n_reads << std::endl;
-            fout.write(reinterpret_cast<const char *> (index), sizeof(size_t) * n_reads);
+            emphf::logger() << "Index array size: " << sizeof(uint64_t) * n_reads << std::endl;
+            fout.write(reinterpret_cast<const char *> (index), sizeof(uint64_t) * n_reads);
             fout.close();
             emphf::logger() << "Done." << std::endl;
         }
@@ -852,11 +852,11 @@ namespace READS {
 
             std::ifstream fout(index_file, std::ios::in | std::ios::binary);
             fout.seekg(0, std::ios::end);
-            size_t length = fout.tellg();
+            uint64_t length = fout.tellg();
             fout.close();
 
             FILE* in = std::fopen(index_file.c_str(), "rb");
-            index = (size_t*)mmap(NULL, length, PROT_READ, MAP_PRIVATE, fileno(in), 0);
+            index = (uint64_t*)mmap(NULL, length, PROT_READ, MAP_PRIVATE, fileno(in), 0);
             if (index == nullptr) {
                 std::cerr << "Failed index loading" << std::endl;
                 exit(10);
@@ -865,9 +865,9 @@ namespace READS {
         }
 
         void load_index_raw(std::string index_file) {
-            size_t f = 0;
-            size_t pos = 0;
-            index = new size_t[n_reads];
+            uint64_t f = 0;
+            uint64_t pos = 0;
+            index = new uint64_t[n_reads];
             std::ifstream fout(index_file, std::ios::in | std::ios::binary);
             emphf::logger() << "Loading index array..." << std::endl;
             while(fout.read(reinterpret_cast<char *>(&f), sizeof(f))) {
@@ -881,7 +881,7 @@ namespace READS {
             emphf::logger() << "Done." << std::endl;
         }
 
-        size_t build_fastq_index(std::string fastq_file1) {
+        uint64_t build_fastq_index(std::string fastq_file1) {
 
             emphf::logger() << "\tComputing lines new way... " << std::endl;
             n_reads = 0;
@@ -900,12 +900,12 @@ namespace READS {
 
             std::ifstream fout(fastq_file1, std::ios::in | std::ios::binary);
             fout.seekg(0, std::ios::end);
-            size_t length = fout.tellg();
+            uint64_t length = fout.tellg();
             fout.close();
 
             char buf[BUFSIZE+1];
             int bytes_read;
-            size_t readed = 0;
+            uint64_t readed = 0;
 
             while((bytes_read = read(fp, buf, BUFSIZE)) > 0){
                 char* p = buf;
@@ -924,11 +924,11 @@ namespace READS {
 
             emphf::logger() << n_reads << " reads" << std::endl;
 
-            index = new size_t[n_reads];
+            index = new uint64_t[n_reads];
             fp = open(fastq_file1.c_str(), O_RDONLY);
 
-            size_t read_n = 0;
-            size_t prev_pos = 0;
+            uint64_t read_n = 0;
+            uint64_t prev_pos = 0;
             readed = 0;
 
 
@@ -953,7 +953,7 @@ namespace READS {
             return n_reads;
         }
 
-        size_t build_fastq_index_v2(std::string fastq_file1, size_t expected_n_reads) {
+        uint64_t build_fastq_index_v2(std::string fastq_file1, uint64_t expected_n_reads) {
 
             emphf::logger() << "\tComputing lines new way... " << std::endl;
             n_reads = expected_n_reads;
@@ -966,21 +966,21 @@ namespace READS {
 
             std::ifstream fout(fastq_file1, std::ios::in | std::ios::binary);
             fout.seekg(0, std::ios::end);
-            // size_t length = fout.tellg();
+            // uint64_t length = fout.tellg();
             fout.close();
 
             char buf[BUFSIZE+1];
             int bytes_read;
-            size_t readed = 0;
+            uint64_t readed = 0;
 
             emphf::logger() << "\treads: " << n_reads << " reads" << std::endl;
 
-            index = new size_t[n_reads];
+            index = new uint64_t[n_reads];
             fp = open(fastq_file1.c_str(), O_RDONLY);
 
-            size_t total_reads = 0;
-            size_t read_n = 0;
-            size_t prev_pos = 0;
+            uint64_t total_reads = 0;
+            uint64_t read_n = 0;
+            uint64_t prev_pos = 0;
             readed = 0;
 
             while((bytes_read = read(fp, buf, BUFSIZE)) > 0){
@@ -1005,7 +1005,7 @@ namespace READS {
             return total_reads;
         }
 
-//        size_t build_fasta_index(std::string fai_file) {
+//        uint64_t build_fasta_index(std::string fai_file) {
 //
 //            emphf::logger() << "\tbuilding index from fai file... " << std::endl;
 //
@@ -1023,7 +1023,7 @@ namespace READS {
 //            }
 //
 //
-//            size_t length, offset, linebases, linewidth;
+//            uint64_t length, offset, linebases, linewidth;
 //            while (fia_file >> header >> offset >> linebases >> linewidth) {
 //
 //            }
@@ -1043,12 +1043,12 @@ namespace READS {
 //
 //            std::ifstream fout(fasta_file, std::ios::in | std::ios::binary);
 //            fout.seekg(0, std::ios::end);
-//            size_t length = fout.tellg();
+//            uint64_t length = fout.tellg();
 //            fout.close();
 //
 //            char buf[BUFSIZE+1];
 //            int bytes_read;
-//            size_t readed = 0;
+//            uint64_t readed = 0;
 //
 //            while((bytes_read = read(fp, buf, BUFSIZE)) > 0){
 //                char* p = buf;
@@ -1068,11 +1068,11 @@ namespace READS {
 //            close(fp);
 //            emphf::logger() << n_reads << " sequences" << std::endl;
 //
-//            index = new size_t[n_reads];
+//            index = new uint64_t[n_reads];
 //            fp = open(reads_file.c_str(), O_RDONLY);
 //
-//            size_t read_n = 0;
-//            size_t prev_pos = 0;
+//            uint64_t read_n = 0;
+//            uint64_t prev_pos = 0;
 //            readed = 0;
 //
 //            while((bytes_read = read(fp, buf, BUFSIZE)) > 0){
@@ -1094,7 +1094,7 @@ namespace READS {
 //            return n_reads;
 //        }
 
-        size_t build_reads_index(const std::string& reads_file) {
+        uint64_t build_reads_index(const std::string& reads_file) {
 
             emphf::logger() << "\tComputing lines new way... " << std::endl;
             n_reads = 0;
@@ -1106,12 +1106,12 @@ namespace READS {
 
             std::ifstream fout(reads_file, std::ios::in | std::ios::binary);
             fout.seekg(0, std::ios::end);
-            size_t length = fout.tellg();
+            uint64_t length = fout.tellg();
             fout.close();
 
             char buf[BUFSIZE+1];
             int bytes_read;
-            size_t readed = 0;
+            uint64_t readed = 0;
 
             while((bytes_read = read(fp, buf, BUFSIZE)) > 0){
                 char* p = buf;
@@ -1128,11 +1128,11 @@ namespace READS {
             close(fp);
             emphf::logger() << n_reads << " reads" << std::endl;
 
-            index = new size_t[n_reads];
+            index = new uint64_t[n_reads];
             fp = open(reads_file.c_str(), O_RDONLY);
 
-            size_t read_n = 0;
-            size_t prev_pos = 0;
+            uint64_t read_n = 0;
+            uint64_t prev_pos = 0;
             readed = 0;
 
             while((bytes_read = read(fp, buf, BUFSIZE)) > 0){
@@ -1154,7 +1154,7 @@ namespace READS {
             return n_reads;
         }
 
-        // void save_fastq_to_file(std::ifstream &l_file,  size_t rid) {
+        // void save_fastq_to_file(std::ifstream &l_file,  uint64_t rid) {
         //     std::string line_head = "";
         //     std::string line_seq = "";
         //     std::string line_strand = "";
@@ -1173,7 +1173,7 @@ namespace READS {
 
         // }
 
-        READS::READ * get_fastq_reads(std::ifstream &r_file, size_t rid) {
+        READS::READ * get_fastq_reads(std::ifstream &r_file, uint64_t rid) {
             std::string line_head = "";
             std::string line_seq = "";
             std::string line_strand = "";
@@ -1192,7 +1192,7 @@ namespace READS {
 
         }
 
-        READS::SPRING_PAIR * get_spring_read(std::ifstream &r_file, size_t rid) {
+        READS::SPRING_PAIR * get_spring_read(std::ifstream &r_file, uint64_t rid) {
             std::string line_seq = "";
             r_file.seekg(index[rid]);
             std::getline(r_file, line_seq);
@@ -1200,7 +1200,7 @@ namespace READS {
             return read;
         }
 
-//        size_t build_reads_index_pp(std::string reads_file, int num_threads) {
+//        uint64_t build_reads_index_pp(std::string reads_file, int num_threads) {
 //
 //            /// compute file size
 //
@@ -1212,24 +1212,24 @@ namespace READS {
 //            }
 //            std::ifstream fout(reads_file, std::ios::in | std::ios::binary);
 //            fout.seekg(0, std::ios::end);
-//            size_t length = fout.tellg();
+//            uint64_t length = fout.tellg();
 //            fout.close();
 //
 //            /// split it in batches
 //
-//            size_t batch_size;
+//            uint64_t batch_size;
 //            batch_size = (length / num_threads) + 1;
 //            std::vector<std::thread> t;
 //            void* results = operator new(num_threads);
 //
-//            for (size_t i = 0; i < num_threads; ++i) {
-//                std::vector<size_t> t;
+//            for (uint64_t i = 0; i < num_threads; ++i) {
+//                std::vector<uint64_t> t;
 //                results[i] = &t;
 //            }
 //
-//            for (size_t i = 0; i < num_threads; ++i) {
-//                size_t start = i * batch_size;
-//                size_t end = (i + 1) * batch_size;
+//            for (uint64_t i = 0; i < num_threads; ++i) {
+//                uint64_t start = i * batch_size;
+//                uint64_t end = (i + 1) * batch_size;
 //
 //                if (end > n_reads) {
 //                    end = n_reads;
@@ -1243,7 +1243,7 @@ namespace READS {
 //                                        i
 //                ));
 //            }
-//            for (size_t i = 0; i < num_threads; ++i) {
+//            for (uint64_t i = 0; i < num_threads; ++i) {
 //                t[i].join();
 //            }
 //            emphf::logger() << "\tDone." << std::endl;
@@ -1255,7 +1255,7 @@ namespace READS {
 //
 //            char buf[BUFSIZE+1];
 //            int bytes_read;
-//            size_t readed = 0;
+//            uint64_t readed = 0;
 //
 //            while((bytes_read = read(fp, buf, BUFSIZE)) > 0){
 //                char* p = buf;
@@ -1272,11 +1272,11 @@ namespace READS {
 //            close(fp);
 //            emphf::logger() << n_reads << " reads" << std::endl;
 //
-//            index = new size_t[n_reads];
+//            index = new uint64_t[n_reads];
 //            fp = open(reads_file.c_str(), O_RDONLY);
 //
-//            size_t read_n = 0;
-//            size_t prev_pos = 0;
+//            uint64_t read_n = 0;
+//            uint64_t prev_pos = 0;
 //            readed = 0;
 //
 //            while((bytes_read = read(fp, buf, BUFSIZE)) > 0){
@@ -1309,8 +1309,8 @@ namespace READS {
             if (result != nullptr) {
                 delete [] result;
             }
-            if (size_t_result != nullptr) {
-                delete [] size_t_result;
+            if (uint64_t_result != nullptr) {
+                delete [] uint64_t_result;
             }
 
             if (atomic_result != nullptr) {
@@ -1350,7 +1350,7 @@ namespace READS {
 
     void read_springs(std::string file_name, std::vector<SPRING *> &reads);
 
-    void read_reads(std::string file_name, std::vector<READ *> &reads, size_t n);
+    void read_reads(std::string file_name, std::vector<READ *> &reads, uint64_t n);
 
     void read_pair_reads(std::string file_name1, std::string file_name2, std::vector<READ_PAIR *> &read_pairs);
 
@@ -1358,10 +1358,10 @@ namespace READS {
 
     int get_fm_mode(READ &read);
 
-    void read_spring_pairs(std::string file_name, std::vector<SPRING_PAIR *> &reads, size_t n_reads);
+    void read_spring_pairs(std::string file_name, std::vector<SPRING_PAIR *> &reads, uint64_t n_reads);
 
     template<typename T>
-    size_t read_simple_spring_pairs(std::string file_name, std::vector<T *> &reads);
+    uint64_t read_simple_spring_pairs(std::string file_name, std::vector<T *> &reads);
 
 }
 

@@ -19,21 +19,21 @@ public:
      * @param dna_len length of the DNA sequence
      */
 
-    dna_bitset (const char* dna_str, size_t dna_len)
+    dna_bitset (const char* dna_str, uint64_t dna_len)
     {
         m_len = dna_len;
 
 
 
         /* bytes necessary to store dna_str as a bitset */
-        size_t dna_bytes = (dna_len / 4) + (dna_len % 4 != 0);
+        uint64_t dna_bytes = (dna_len / 4) + (dna_len % 4 != 0);
 
         m_data = new uint8_t[dna_bytes];
 
         std::memset(m_data, 0, dna_bytes);
 
         /* for each base of the DNA sequence */
-        for (size_t i = 0; i < dna_len; i++)
+        for (uint64_t i = 0; i < dna_len; i++)
         {
             uint8_t shift = 6 - 2*(i % 4);
 
@@ -60,11 +60,11 @@ public:
         }
     }
 
-    size_t length() {
+    uint64_t length() {
         return m_len;
     }
 
-    void kmer(size_t pos, int k, char* dna_str) {
+    void kmer(uint64_t pos, int k, char* dna_str) {
 
         for (int i=0; i < k; ++i) {
             uint8_t shift = 6 - 2 * ((pos + i) % 4);
@@ -89,7 +89,7 @@ public:
         }
     }
 
-    char at(size_t pos) {
+    char at(uint64_t pos) {
 
         uint8_t shift = 6 - 2 * ((pos) % 4);
         uint8_t mask = BASE_MASK << shift;
@@ -113,15 +113,15 @@ public:
 
     }
 
-    // void cut_start(size_t pos) {
+    // void cut_start(uint64_t pos) {
     //     std::runtime_error("not implemented");
     // }
 
-    // void cut_end(size_t pos) {
+    // void cut_end(uint64_t pos) {
     //     std::runtime_error("not implemented");
     // }
 
-    uint64_t ukmer(size_t pos, int k) {
+    uint64_t ukmer(uint64_t pos, int k) {
 
         uint64_t num = 0;
         for (int i=0; i < k; ++i) {
@@ -166,7 +166,7 @@ public:
         char* dna_str = new char[m_len+1];
 
         /* for each base of the DNA sequence */
-        for (size_t i = 0; i < m_len; i++)
+        for (uint64_t i = 0; i < m_len; i++)
         {
             uint8_t shift = 6 - 2*(i % 4);
 
@@ -200,7 +200,7 @@ public:
 
 private:
     uint8_t* m_data;
-    size_t   m_len;
+    uint64_t   m_len;
 };
 
 #endif //STIRKA_DNA_BITSEQ_HPP

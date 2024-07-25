@@ -59,8 +59,8 @@ int main(int argc, char** argv) {
     emphf::logger() << "Load and reads and build docid index..." << std::endl;
     emphf::logger() << "Opening read_file: " << read_file << std::endl;
 
-    std::vector<size_t> start_positions;
-    std::unordered_map<size_t, uint32_t> start2rid;
+    std::vector<uint64_t> start_positions;
+    std::unordered_map<uint64_t, uint32_t> start2rid;
 
     std::ifstream infile(read_file);
     if (!infile) {
@@ -69,7 +69,7 @@ int main(int argc, char** argv) {
     }
 
     infile.seekg(0, std::ios::end);
-    size_t length = infile.tellg();
+    uint64_t length = infile.tellg();
     char *contents = new char[length + 1];
     if (contents == nullptr) {
         emphf::logger() << "Failed to allocate for reads: " << length + 1 << std::endl;
@@ -81,7 +81,7 @@ int main(int argc, char** argv) {
     infile.close();
     contents[length] = 0;
     uint32_t rid = 0;
-    size_t pos = 0;
+    uint64_t pos = 0;
     start_positions.push_back(pos);
     start2rid[pos] = rid;
 
@@ -89,9 +89,9 @@ int main(int argc, char** argv) {
     AIndexCompressed aindex(hash_map);
     std::cout << "Done." << std::endl;
 
-    size_t current_position = 0;
-    size_t nreads = 0;
-    for (size_t i = 0; i < length; i++) {
+    uint64_t current_position = 0;
+    uint64_t nreads = 0;
+    for (uint64_t i = 0; i < length; i++) {
         if (contents[i] == '\n') {
             start_positions.push_back(i + 1);
             rid += 1;

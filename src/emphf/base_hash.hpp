@@ -39,7 +39,7 @@ namespace emphf {
         {
             hash_triple_t h(m_seed, m_seed, 0x9e3779b97f4a7c13ULL);
 
-            size_t len = static_cast<size_t>(s.second - s.first);
+            uint64_t len = static_cast<uint64_t>(s.second - s.first);
             const uint8_t* cur = s.first;
             const uint8_t* end = s.second;
 

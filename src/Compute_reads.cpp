@@ -35,7 +35,7 @@ int main(int argc, char** argv) {
     emphf::logger() << "Starting..." << std::endl;
 
     emphf::logger() << "Converting reads..." << std::endl;
-    size_t n_reads = 0;
+    uint64_t n_reads = 0;
 
     std::string line1;
     std::string line2;
@@ -46,13 +46,13 @@ int main(int argc, char** argv) {
         std::ifstream fin1(file_name1, std::ios::in);
         std::ifstream fin2(file_name2, std::ios::in);
 
-        size_t start_pos = 0;
+        uint64_t start_pos = 0;
         while (std::getline(fin1, line1)) {
             std::getline(fin1, line1);
             std::getline(fin2, line2);
             std::getline(fin2, line2);
 
-            size_t end_pos = start_pos + line1.size() + line2.size() + 1; // Adding 1 for the '~' separator
+            uint64_t end_pos = start_pos + line1.size() + line2.size() + 1; // Adding 1 for the '~' separator
 
             std::string_view rline2 = line2;
             line2 = get_revcomp(rline2);
@@ -87,11 +87,11 @@ int main(int argc, char** argv) {
         std::ofstream fout_index(index_file, std::ios::out);
         std::ifstream fin1(file_name1, std::ios::in);
 
-        size_t start_pos = 0;
+        uint64_t start_pos = 0;
         while (std::getline(fin1, line1)) {
             std::getline(fin1, line1);
             
-            size_t end_pos = start_pos + line1.size();
+            uint64_t end_pos = start_pos + line1.size();
 
             fout << line1;
             fout << "\n";
@@ -116,10 +116,10 @@ int main(int argc, char** argv) {
     } else if (read_type == "reads") {
         std::ifstream fin1(file_name1, std::ios::in);
         std::ofstream fout_index(index_file, std::ios::out);
-        size_t start_pos = 0;
+        uint64_t start_pos = 0;
         while (std::getline(fin1, line1)) {
             
-            size_t end_pos = start_pos + line1.size();
+            uint64_t end_pos = start_pos + line1.size();
             fout_index << n_reads << "\t" << start_pos << "\t" << end_pos << "\n";
 
             start_pos = end_pos + 1; // Adding 1 for the newline character
@@ -143,11 +143,11 @@ int main(int argc, char** argv) {
 
         std::string current_sequence;
         std::string header;
-        size_t start_pos = 0;
+        uint64_t start_pos = 0;
         while (std::getline(fin1, line1)) {
             if (line1[0] == '>') {
                 if (!current_sequence.empty()) {
-                    size_t end_pos = start_pos + current_sequence.size();
+                    uint64_t end_pos = start_pos + current_sequence.size();
 
                     fout << current_sequence << "\n";
                     fout_index << n_reads << "\t" << start_pos << "\t" << end_pos << "\n";
@@ -168,7 +168,7 @@ int main(int argc, char** argv) {
         }
 
         if (!current_sequence.empty()) {
-            size_t end_pos = start_pos + current_sequence.size();
+            uint64_t end_pos = start_pos + current_sequence.size();
 
             fout << current_sequence << "\n";
             fout_index << n_reads << "\t" << start_pos << "\t" << end_pos << "\n";

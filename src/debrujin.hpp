@@ -12,14 +12,14 @@
 namespace DEBRUJIN {
 
     struct CONT {
-        unsigned int A = 0;
-        unsigned int C = 0;
-        unsigned int G = 0;
-        unsigned int T = 0;
-        unsigned int n = 0;
-        unsigned int sum = 0;
+        uint32_t A = 0;
+        uint32_t C = 0;
+        uint32_t G = 0;
+        uint32_t T = 0;
+        uint32_t n = 0;
+        uint32_t sum = 0;
         char best_hit;
-        unsigned int best_hit_tf = 0;
+        uint32_t best_hit_tf = 0;
         uint64_t best_ukmer = 0;
 
         void print(int i) {
@@ -36,13 +36,13 @@ namespace DEBRUJIN {
 
     int get_freq(uint64_t kmer, PHASH_MAP &kmers);
 
-    void print_next(uint64_t kmer, PHASH_MAP &kmers, CONT &cont, unsigned int cutoff);
+    void print_next(uint64_t kmer, PHASH_MAP &kmers, CONT &cont, uint32_t cutoff);
 
-    void print_prev(uint64_t kmer, PHASH_MAP &kmers, CONT &cont, unsigned int cutoff);
+    void print_prev(uint64_t kmer, PHASH_MAP &kmers, CONT &cont, uint32_t cutoff);
 
     void set_fm_for_read(READS::READ &read, PHASH_MAP &kmers);
 
-    void set_fm_for_read(READS::READ &read, PHASH_MAP &kmers, int from, size_t to);
+    void set_fm_for_read(READS::READ &read, PHASH_MAP &kmers, int from, uint64_t to);
 
 
 }

@@ -41,9 +41,9 @@ emphf::stl_string_adaptor str_adapter;
 
 // Define a structure for an interval
 struct Interval {
-    size_t rid;
-    size_t start;
-    size_t end;
+    uint64_t rid;
+    uint64_t start;
+    uint64_t end;
 
     bool operator<(const Interval& other) const {
         return start < other.start;
@@ -53,12 +53,12 @@ struct Interval {
 // Class to manage intervals
 class IntervalTree {
 public:
-    void addInterval(size_t rid, size_t start, size_t end) {
+    void addInterval(uint64_t rid, uint64_t start, uint64_t end) {
         intervals.insert({rid, start, end});
     }
 
     // Finds the interval that contains the position
-    const Interval* findInterval(size_t pos) const {
+    const Interval* findInterval(uint64_t pos) const {
         auto it = intervals.lower_bound({0, pos, pos});
         if (it != intervals.begin()) {
             --it;
@@ -76,9 +76,9 @@ private:
 class UsedReads {
 public:
 
-    UsedReads(size_t n_reads) {
+    UsedReads(uint64_t n_reads) {
         used_reads = new ATOMIC_BOOL[n_reads];
-        for (size_t i=0; i < n_reads; ++i) {
+        for (uint64_t i=0; i < n_reads; ++i) {
             used_reads[i] = 0;
         }
     }
@@ -87,15 +87,15 @@ public:
         delete[] used_reads;
     }
 
-    ATOMIC_BOOL get(size_t rid) {
+    ATOMIC_BOOL get(uint64_t rid) {
         return used_reads[rid].load();
     }  
 
-    void set(size_t rid) {
+    void set(uint64_t rid) {
         used_reads[rid].store(true);
     }
 
-    bool used_or_use(size_t rid) {
+    bool used_or_use(uint64_t rid) {
         auto status = get(rid); // 1 is used // atomic
         bool result = true;
         if (status == 0) {
@@ -105,7 +105,7 @@ public:
         return result;
     }
 
-    bool used(size_t rid) {
+    bool used(uint64_t rid) {
         auto status = get(rid); // 1 is used // atomic
         bool result = true;
         if (status == 0) {
@@ -119,36 +119,36 @@ private:
 };
 
 struct Hit {
-    size_t rid;
-    size_t start;
+    uint64_t rid;
+    uint64_t start;
     std::string read;
-    size_t local_pos;
+    uint64_t local_pos;
     int ori;
     bool rev;
 };
 
 class AindexWrapper {
 
-    size_t *positions = nullptr;
-    size_t *indices = nullptr;
-    size_t n = 0;
+    uint64_t *positions = nullptr;
+    uint64_t *indices = nullptr;
+    uint64_t n = 0;
     uint32_t max_tf = 0;
-    size_t indices_length = 0;
+    uint64_t indices_length = 0;
 
 public:
 
     bool aindex_loaded = false;
     PHASH_MAP *hash_map;
-    size_t n_reads = 0;
-    size_t n_kmers = 0;
+    uint64_t n_reads = 0;
+    uint64_t n_kmers = 0;
 
     
-    size_t reads_size = 0;
+    uint64_t reads_size = 0;
     char *reads = nullptr;
 
-    std::unordered_map<size_t, uint32_t> start2rid;
-    std::unordered_map<size_t, size_t> start2end;
-    std::vector<size_t> start_positions;
+    std::unordered_map<uint64_t, uint32_t> start2rid;
+    std::unordered_map<uint64_t, uint64_t> start2end;
+    std::vector<uint64_t> start_positions;
 
     IntervalTree pos_intervalTree;
     
@@ -158,7 +158,7 @@ public:
 
     ~AindexWrapper() {
         // emphf::logger() << "NOTE: Calling aindex deconstructor..." << std::endl;
-        if (positions != nullptr) munmap(positions, n*sizeof(size_t));
+        if (positions != nullptr) munmap(positions, n*sizeof(uint64_t));
         if (indices != nullptr) munmap(indices, indices_length);
         if (reads != nullptr) munmap(reads, reads_size);
 
@@ -196,7 +196,7 @@ public:
         }
 
         n_reads = 0;
-        size_t rid, start_pos, end_pos;
+        uint64_t rid, start_pos, end_pos;
         while (fin >> rid >> start_pos >> end_pos) {
             pos_intervalTree.addInterval(rid, start_pos, end_pos+1);
             start2rid[start_pos] = rid;
@@ -213,7 +213,7 @@ public:
         emphf::logger() << "Memory mapping reads file..." << std::endl;
         std::ifstream fout(reads_file, std::ios::in | std::ios::binary);
         fout.seekg(0, std::ios::end);
-        size_t length = fout.tellg();
+        uint64_t length = fout.tellg();
         fout.close();
 
         FILE* in = std::fopen(reads_file.c_str(), "rb");
@@ -243,7 +243,7 @@ public:
         }
 
         fin.seekg(0, std::ios::end);
-        size_t length = fin.tellg();
+        uint64_t length = fin.tellg();
         fin.seekg(0, std::ios::beg);
 
         reads = new char[length];
@@ -277,11 +277,11 @@ public:
 
         std::ifstream fin_temp(indices_file, std::ios::in | std::ios::binary);
         fin_temp.seekg(0, std::ios::end);
-        size_t length = fin_temp.tellg();
+        uint64_t length = fin_temp.tellg();
         fin_temp.close();
 
         FILE* in1 = std::fopen(indices_file.c_str(), "rb");
-        indices = (size_t*)mmap(NULL, length, PROT_READ|PROT_WRITE, MAP_PRIVATE, fileno(in1), 0);
+        indices = (uint64_t*)mmap(NULL, length, PROT_READ|PROT_WRITE, MAP_PRIVATE, fileno(in1), 0);
         if (indices == nullptr) {
             std::cerr << "Failed position loading" << std::endl;
             exit(10);
@@ -300,7 +300,7 @@ public:
 
         emphf::logger() << "\tpositions length: " << length << std::endl;
         FILE* in = std::fopen(index_file.c_str(), "rb");
-        positions = (size_t*)mmap(NULL, length, PROT_READ|PROT_WRITE, MAP_PRIVATE, fileno(in), 0);
+        positions = (uint64_t*)mmap(NULL, length, PROT_READ|PROT_WRITE, MAP_PRIVATE, fileno(in), 0);
         if (positions == nullptr) {
             std::cerr << "Failed position loading" << std::endl;
             exit(10);
@@ -311,21 +311,21 @@ public:
 
     }
 
-    size_t get_reads_size() {
+    uint64_t get_reads_size() {
         return reads_size;
     }
 
-    size_t get_n() {
+    uint64_t get_n() {
         return hash_map->n;
     }
 
-    size_t get_hash_size() {
+    uint64_t get_hash_size() {
         return hash_map->n;
     }
 
     // Various getters for reads
 
-    const char* get_read(size_t start, size_t end, uint rev) {
+    const char* get_read(uint64_t start, uint64_t end, uint rev) {
         // TODO: make it thread safe
         if (start >= reads_size || end > reads_size || start >= end) {
             return nullptr;  // Invalid range
@@ -339,25 +339,25 @@ public:
     }
 
     std::string get_read_by_rid(uint32_t rid) {
-        size_t start = start_positions[rid];
-        size_t end = start2end.at(start);
+        uint64_t start = start_positions[rid];
+        uint64_t end = start2end.at(start);
         return std::string(reads + start, end - start);
     }
 
-    const char * get_pointer_to_read_by_rid(size_t rid) {
+    const char * get_pointer_to_read_by_rid(uint64_t rid) {
         // TODO: make it thread safe
         if (rid >= start_positions.size()) {
             std::cerr << "Read id " << rid << " not found." << std::endl;
             std::terminate();
         }
-        size_t start = start_positions[rid];
-        size_t end = start2end.at(start);
+        uint64_t start = start_positions[rid];
+        uint64_t end = start2end.at(start);
         static std::string read_str;
         read_str = std::string(reads + start, end - start);
         return read_str.c_str();
     }
 
-    size_t get_start_by_pos(size_t pos) {
+    uint64_t get_start_by_pos(uint64_t pos) {
         const Interval* interval = pos_intervalTree.findInterval(pos);
         if (interval) {
             return interval->start;
@@ -367,40 +367,40 @@ public:
         }
     }
 
-    size_t get_end_by_start(size_t start) {
+    uint64_t get_end_by_start(uint64_t start) {
         return start2end.at(start);
     }
 
-    std::string get_read_by_start(size_t start) const {
-        size_t end = start2end.at(start);
+    std::string get_read_by_start(uint64_t start) const {
+        uint64_t end = start2end.at(start);
         return std::string(reads + start, end - start);;
     }
 
-    size_t get_rid(size_t pos) {
+    uint64_t get_rid(uint64_t pos) {
         const Interval* interval = pos_intervalTree.findInterval(pos);
         if (!interval) {
             std::cerr << "Position " << pos << " not found in any interval." << std::endl;
             std::terminate();
         }
-        size_t start = interval->start;
+        uint64_t start = interval->start;
         return start2rid.at(start);
     }
 
     // Varios getters for kmers
 
-    size_t get(char* ckmer) {
+    uint64_t get(char* ckmer) {
         // Return tf for given char * kmer
         return get(std::string(ckmer));
     }
 
-    size_t get(uint64_t ukmer) {
+    uint64_t get(uint64_t ukmer) {
         if (ukmer >= hash_map->n) {
             return 0;
         }
         return hash_map->tf_values[ukmer];
     }
 
-    size_t get(std::string& kmer) {
+    uint64_t get(std::string& kmer) {
         // Return tf for given kmer
         uint64_t ukmer = get_dna23_bitset(kmer);
         auto h1 = hash_map->hasher.lookup(kmer, str_adapter);
@@ -420,7 +420,7 @@ public:
         return 0;
     }
 
-    size_t get(std::string_view kmer) const {
+    uint64_t get(std::string_view kmer) const {
         // Return tf for given kmer
         uint64_t ukmer = get_dna23_bitset(kmer);
         auto h1 = hash_map->hasher.lookup(kmer, str_adapter);
@@ -440,12 +440,12 @@ public:
         return 0;
     }
 
-    size_t get_hash_value(std::string_view kmer) {
+    uint64_t get_hash_value(std::string_view kmer) {
         // Return hash value for given kmer
         return hash_map->get_pfid(kmer);
     }
 
-    size_t get_strand(const std::string& kmer) {
+    uint64_t get_strand(const std::string& kmer) {
         uint64_t ukmer = get_dna23_bitset(kmer);
         auto h1 = hash_map->hasher.lookup(kmer, str_adapter);
         if (h1 >= hash_map->n || hash_map->checker[h1] != ukmer) {
@@ -464,12 +464,12 @@ public:
         return 0;
     }
 
-    void get_kmer_by_kid(size_t r, char* kmer) {
+    void get_kmer_by_kid(uint64_t r, char* kmer) {
             uint64_t ukmer = hash_map->checker[r];
             get_bitset_dna23_c(ukmer, kmer, 23);            
     }
 
-    size_t get_kmer(size_t kid, char* kmer, char* rkmer) {
+    uint64_t get_kmer(uint64_t kid, char* kmer, char* rkmer) {
         // Get tf, kmer and rev_kmer stored in given arrays.
         // TODO: fix this
         uint64_t ukmer = hash_map->checker[kid];
@@ -479,18 +479,18 @@ public:
         return hash_map->tf_values[kid];
     }
 
-    size_t get_kid_by_kmer(std::string _kmer) {
+    uint64_t get_kid_by_kmer(std::string _kmer) {
         uint64_t kmer = get_dna23_bitset(_kmer);
         return hash_map->get_pfid_by_umer_safe(kmer);
     }
     
     // Getters for positions
 
-    void get_positions(size_t* r, const std::string_view& kmer) {
+    void get_positions(uint64_t* r, const std::string_view& kmer) {
         // Get read positions and save them to given r
         auto h1 = hash_map->get_pfid(kmer);
-        size_t j = 0;
-        for (size_t i=indices[h1]; i < indices[h1+1] && h1+1 < indices_length; ++i) {
+        uint64_t j = 0;
+        for (uint64_t i=indices[h1]; i < indices[h1+1] && h1+1 < indices_length; ++i) {
             if (j == max_tf - 1) {
                 break;
             }
@@ -500,11 +500,11 @@ public:
         r[j] = 0;
     }
 
-    std::vector<size_t> get_positions(const std::string& kmer) {
+    std::vector<uint64_t> get_positions(const std::string& kmer) {
         // Get read positions and save them to given r
-        std::vector<size_t> r;
+        std::vector<uint64_t> r;
         auto h1 = hash_map->get_pfid(kmer);
-        for (size_t i=indices[h1]; i < indices[h1+1] && h1+1 < indices_length; ++i) {
+        for (uint64_t i=indices[h1]; i < indices[h1+1] && h1+1 < indices_length; ++i) {
             if (positions[i] == 0) {
                 continue;
             }
@@ -525,12 +525,12 @@ public:
         hash_map->decrease(kmer);
     }
 
-    void set_positions(size_t* r, const std::string& kmer) {
+    void set_positions(uint64_t* r, const std::string& kmer) {
         // Set read positions
         // TODO: check borders
         auto h1 = hash_map->get_pfid(kmer);
-        size_t j = 0;
-        for (size_t i=indices[h1]; i < indices[h1+1]; ++i) {
+        uint64_t j = 0;
+        for (uint64_t i=indices[h1]; i < indices[h1+1]; ++i) {
             positions[i] = r[j];
             j += 1;
         }
@@ -538,21 +538,21 @@ public:
 
     // Consistency checks
 
-    void check_get_reads_se_by_kmer(std::string const kmer, size_t h1, bool* used_reads, std::vector<Hit> &hits) {
+    void check_get_reads_se_by_kmer(std::string const kmer, uint64_t h1, bool* used_reads, std::vector<Hit> &hits) {
 
-        for (size_t i=indices[h1]; i < indices[h1+1]; ++i) {
+        for (uint64_t i=indices[h1]; i < indices[h1+1]; ++i) {
 
             if (positions[i] == 0) {
                 break;
             }
 
-            size_t position = positions[i] - 1;
-            size_t start = get_start_by_pos(position);
+            uint64_t position = positions[i] - 1;
+            uint64_t start = get_start_by_pos(position);
 
-            size_t end = start;
-            size_t spring_pos = 0;
+            uint64_t end = start;
+            uint64_t spring_pos = 0;
 
-            size_t pos = position - start;
+            uint64_t pos = position - start;
             std::string left_read;
             std::string right_read;
 
@@ -575,7 +575,7 @@ public:
                 end += 1;
             }
 
-            size_t real_rid = start2rid[start];
+            uint64_t real_rid = start2rid[start];
 
             Hit hit;
             hit.rid = real_rid;
@@ -640,22 +640,22 @@ public:
 
     void check_aindex() {
 
-        for (size_t h1=0; h1<hash_map->n; ++h1) {
-            size_t tf = hash_map->tf_values[h1];
-            size_t xtf = 0;
+        for (uint64_t h1=0; h1<hash_map->n; ++h1) {
+            uint64_t tf = hash_map->tf_values[h1];
+            uint64_t xtf = 0;
 
             if (h1 && h1 % 1000000 == 0) {
                 std::cout << "Completed: " << h1 << "/" << hash_map->n << std::endl;
             }
 
-            for (size_t i=indices[h1]; i < indices[h1+1]; ++i) {
+            for (uint64_t i=indices[h1]; i < indices[h1+1]; ++i) {
                 if (positions[i] == 0) {
                     break;
                 }
 
                 xtf += 1;
 
-                size_t pos = positions[i]-1;
+                uint64_t pos = positions[i]-1;
 
                 char ckmer[Settings::K];
 
@@ -666,7 +666,7 @@ public:
                 uint64_t h1_kmer = hash_map->checker[h1];
                 std::string kmer = get_bitset_dna23(h1_kmer);
                 if (data_kmer != kmer) {
-                    size_t rh1 = reverseDNA(h1_kmer);
+                    uint64_t rh1 = reverseDNA(h1_kmer);
                     std::string rkmer = get_bitset_dna23(rh1);
                     if (data_kmer != rkmer) {
                         std::cout << h1 << " " << i << " " << tf << " " << xtf << " " <<  data_kmer << " " << kmer << " " << rkmer << std::endl;
@@ -685,7 +685,7 @@ public:
         bool* used_reads = new bool[1];
         std::vector<Hit> hits;
 
-        for (size_t h1=0; h1<hash_map->n; ++h1) {
+        for (uint64_t h1=0; h1<hash_map->n; ++h1) {
 
             if (h1 && h1 % 1000000 == 0) {
                 std::cout << "Completed: " << h1 << "/" << hash_map->n << std::endl;
@@ -696,7 +696,7 @@ public:
             hits.clear();
             check_get_reads_se_by_kmer(kmer, h1, used_reads, hits);
 
-            size_t max_pos = 0;
+            uint64_t max_pos = 0;
 
             for (auto hit: hits) {
                 std::max(max_pos, hit.local_pos);
@@ -721,7 +721,7 @@ AindexWrapper load_aindex(
                 const std::string tf_prefix,
                 const std::string input_reads_file,
                 const std::string aindex_prefix,
-                const size_t max_tf,
+                const uint64_t max_tf,
                 bool in_memory = false
                 ) {
     AindexWrapper aindex = AindexWrapper();
@@ -766,45 +766,45 @@ extern "C" {
 
     void AindexWrapper_decrease(AindexWrapper* foo, char* kmer){ foo->decrease(kmer); }
 
-    size_t AindexWrapper_get_kid_by_kmer(AindexWrapper* foo, char* kmer){ return foo->get_kid_by_kmer(kmer); }
+    uint64_t AindexWrapper_get_kid_by_kmer(AindexWrapper* foo, char* kmer){ return foo->get_kid_by_kmer(kmer); }
 
-    void AindexWrapper_get_kmer_by_kid(AindexWrapper* foo, size_t kid, char* kmer){ foo->get_kmer_by_kid(kid, kmer); }
+    void AindexWrapper_get_kmer_by_kid(AindexWrapper* foo, uint64_t kid, char* kmer){ foo->get_kmer_by_kid(kid, kmer); }
 
-    size_t AindexWrapper_get(AindexWrapper* foo, char* kmer){ return foo->get(kmer); }
+    uint64_t AindexWrapper_get(AindexWrapper* foo, char* kmer){ return foo->get(kmer); }
 
-    size_t AindexWrapper_get_n(AindexWrapper* foo){ return foo->get_n(); }
+    uint64_t AindexWrapper_get_n(AindexWrapper* foo){ return foo->get_n(); }
 
-    size_t AindexWrapper_get_rid(AindexWrapper* foo, size_t pos){ return foo->get_rid(pos); }
+    uint64_t AindexWrapper_get_rid(AindexWrapper* foo, uint64_t pos){ return foo->get_rid(pos); }
 
-    size_t AindexWrapper_get_start(AindexWrapper* foo, size_t pos){ return foo->get_start_by_pos(pos); }
+    uint64_t AindexWrapper_get_start(AindexWrapper* foo, uint64_t pos){ return foo->get_start_by_pos(pos); }
 
-    const char*  AindexWrapper_get_read(AindexWrapper* foo, size_t start, size_t end, uint rev){ return foo->get_read(start, end, rev); }
+    const char*  AindexWrapper_get_read(AindexWrapper* foo, uint64_t start, uint64_t end, uint rev){ return foo->get_read(start, end, rev); }
 
-    const char*  AindexWrapper_get_read_by_rid(AindexWrapper* foo, size_t rid){ return foo->get_pointer_to_read_by_rid(rid); }
+    const char*  AindexWrapper_get_read_by_rid(AindexWrapper* foo, uint64_t rid){ return foo->get_pointer_to_read_by_rid(rid); }
 
-    void AindexWrapper_get_positions(AindexWrapper* foo, size_t* r, char* kmer){ foo->get_positions(r, kmer); }
+    void AindexWrapper_get_positions(AindexWrapper* foo, uint64_t* r, char* kmer){ foo->get_positions(r, kmer); }
 
-    void AindexWrapper_set_positions(AindexWrapper* foo, size_t* r, char* kmer){ foo->set_positions(r, kmer); }
+    void AindexWrapper_set_positions(AindexWrapper* foo, uint64_t* r, char* kmer){ foo->set_positions(r, kmer); }
 
-    size_t AindexWrapper_get_kmer(AindexWrapper* foo, size_t p, char* kmer, char* rkmer){ return foo->get_kmer(p, kmer, rkmer); }
+    uint64_t AindexWrapper_get_kmer(AindexWrapper* foo, uint64_t p, char* kmer, char* rkmer){ return foo->get_kmer(p, kmer, rkmer); }
 
-    size_t AindexWrapper_get_strand(AindexWrapper* foo, char* kmer){ return foo->get_strand(kmer); }
+    uint64_t AindexWrapper_get_strand(AindexWrapper* foo, char* kmer){ return foo->get_strand(kmer); }
 
-    size_t AindexWrapper_get_hash_size(AindexWrapper* foo){ return foo->get_hash_size(); }
+    uint64_t AindexWrapper_get_hash_size(AindexWrapper* foo){ return foo->get_hash_size(); }
 
-    size_t AindexWrapper_get_reads_size(AindexWrapper* foo){ return foo->get_reads_size(); }
+    uint64_t AindexWrapper_get_reads_size(AindexWrapper* foo){ return foo->get_reads_size(); }
 
     void AindexWrapper_load_reads_in_memory(AindexWrapper* foo, char* reads_file){ foo->load_reads_in_memory(reads_file); }
 
     void AindexWrapper_load_aindex(AindexWrapper* foo, char* aindex_prefix, uint32_t max_tf){ foo->load_aindex(aindex_prefix, max_tf); }
 
-    size_t AindexWrapper_get_start_by_pos(AindexWrapper* foo, size_t pos) { return foo->get_start_by_pos(pos); }
+    uint64_t AindexWrapper_get_start_by_pos(AindexWrapper* foo, uint64_t pos) { return foo->get_start_by_pos(pos); }
 
-    size_t AindexWrapper_get_end_by_start(AindexWrapper* foo, size_t start) { return foo->get_end_by_start(start); }
+    uint64_t AindexWrapper_get_end_by_start(AindexWrapper* foo, uint64_t start) { return foo->get_end_by_start(start); }
 
-    const char* AindexWrapper_get_pointer_to_read_by_rid(AindexWrapper* foo, size_t rid) { return foo->get_pointer_to_read_by_rid(rid); }
+    const char* AindexWrapper_get_pointer_to_read_by_rid(AindexWrapper* foo, uint64_t rid) { return foo->get_pointer_to_read_by_rid(rid); }
 
-    size_t AindexWrapper_get_hash_value(AindexWrapper* foo, char* kmer) { return foo->get_hash_value(kmer); }
+    uint64_t AindexWrapper_get_hash_value(AindexWrapper* foo, char* kmer) { return foo->get_hash_value(kmer); }
 
     void AindexWrapper_check_aindex(AindexWrapper* foo) { foo->check_aindex(); }
 

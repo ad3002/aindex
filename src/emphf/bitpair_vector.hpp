@@ -32,12 +32,12 @@ namespace emphf {
             m_bits.resize((m_size + 31) / 32);
         }
 
-        size_t size() const noexcept
+        uint64_t size() const noexcept
         {
             return m_size;
         }
 
-        size_t mem_size() const noexcept
+        uint64_t mem_size() const noexcept
         {
             return m_bits.size() * sizeof(m_bits[0]);
         }

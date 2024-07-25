@@ -130,7 +130,7 @@ namespace emphf {
         long m_pos;
         std::string_view m_line_view;
         char* m_buf;
-        size_t m_buf_len;
+        uint64_t m_buf_len;
     };
 
     class file_lines
@@ -151,16 +151,16 @@ namespace emphf {
 
         line_iterator end() const { return line_iterator(); }
 
-        size_t size() const
+        uint64_t size() const
         {
-            size_t lines = 0;
+            uint64_t lines = 0;
             fseek(m_is.get(), 0, SEEK_SET);
-            static const size_t buf_size = 4096;
+            static const uint64_t buf_size = 4096;
             char buf[buf_size];
-            size_t avail;
+            uint64_t avail;
             bool last_is_newline = false;
             while ((avail = fread(buf, 1, buf_size, m_is.get()))) {
-                for (size_t i = 0; i < avail; ++i) {
+                for (uint64_t i = 0; i < avail; ++i) {
                     if (buf[i] == '\n') lines += 1;
                 }
                 last_is_newline = (buf[avail - 1] == '\n');

@@ -27,7 +27,7 @@ namespace DEBRUJIN {
     }
 
 
-    void print_next(uint64_t kmer, PHASH_MAP &kmers, CONT &cont, unsigned int cutoff = 0) {
+    void print_next(uint64_t kmer, PHASH_MAP &kmers, CONT &cont, uint32_t cutoff = 0) {
         /*
         */
         cont.n = 0;
@@ -49,8 +49,8 @@ namespace DEBRUJIN {
         }
 
         cont.sum = cont.A + cont.C + cont.G + cont.T;
-        cont.n = (unsigned int) (bool) cont.A + (unsigned int) (bool) cont.C + (unsigned int) (bool) cont.G +
-                 (unsigned int) (bool) cont.T;
+        cont.n = (uint32_t) (bool) cont.A + (uint32_t) (bool) cont.C + (uint32_t) (bool) cont.G +
+                 (uint32_t) (bool) cont.T;
 
         if (cont.A >= cont.C && cont.A >= cont.G && cont.A >= cont.T) {
             cont.best_hit = 'A';
@@ -74,7 +74,7 @@ namespace DEBRUJIN {
         }
     }
 
-//    void print_next_findex(uint64_t kmer, uint16_t* positions, assembly_n, assembly_id, CONT &cont, unsigned int cutoff = 0) {
+//    void print_next_findex(uint64_t kmer, uint16_t* positions, assembly_n, assembly_id, CONT &cont, uint32_t cutoff = 0) {
 //        /*
 //        */
 //        cont.n = 0;
@@ -96,8 +96,8 @@ namespace DEBRUJIN {
 //        }
 //
 //        cont.sum = cont.A + cont.C + cont.G + cont.T;
-//        cont.n = (unsigned int) (bool) cont.A + (unsigned int) (bool) cont.C + (unsigned int) (bool) cont.G +
-//                 (unsigned int) (bool) cont.T;
+//        cont.n = (uint32_t) (bool) cont.A + (uint32_t) (bool) cont.C + (uint32_t) (bool) cont.G +
+//                 (uint32_t) (bool) cont.T;
 //
 //        if (cont.A >= cont.C && cont.A >= cont.G && cont.A >= cont.T) {
 //            cont.best_hit = 'A';
@@ -118,7 +118,7 @@ namespace DEBRUJIN {
 //    }
 
 
-    void print_prev(uint64_t kmer, PHASH_MAP &kmers, CONT &cont, unsigned int cutoff = 0) {
+    void print_prev(uint64_t kmer, PHASH_MAP &kmers, CONT &cont, uint32_t cutoff = 0) {
         /*
         */
         cont.n = 0;
@@ -162,25 +162,25 @@ namespace DEBRUJIN {
             cont.best_hit_tf = cont.T;
         }
 
-        cont.n = (unsigned int) (bool) cont.A + (unsigned int) (bool) cont.C + (unsigned int) (bool) cont.G +
-                 (unsigned int) (bool) cont.T;
+        cont.n = (uint32_t) (bool) cont.A + (uint32_t) (bool) cont.C + (uint32_t) (bool) cont.G +
+                 (uint32_t) (bool) cont.T;
     }
 
     void set_fm_for_read(READS::READ &read, PHASH_MAP &kmers) {
-        for (size_t i = 0; i < read.seq.length() - Settings::K + 1; i++) {
+        for (uint64_t i = 0; i < read.seq.length() - Settings::K + 1; i++) {
             std::string_view kmer = read.seq.substr(i, 23);
             read.fm[i] = kmers.get_freq(kmer);
         }
     }
 
-    void set_fm_for_read(READS::READ &read, PHASH_MAP &kmers, size_t from, size_t to) {
+    void set_fm_for_read(READS::READ &read, PHASH_MAP &kmers, uint64_t from, uint64_t to) {
         if (from > read.seq.length()) { // hot fix possible overflow
             from = 0;
         }
         if (to > read.seq.length()) {
             to = read.seq.length();
         }
-        for (size_t i = from; i < to; i++) {
+        for (uint64_t i = from; i < to; i++) {
             std::string_view kmer = read.seq.substr(i, Settings::K);
             read.fm[i] = kmers.get_freq(kmer);
         }

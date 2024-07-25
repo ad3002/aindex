@@ -18,25 +18,25 @@
 
 namespace Settings {
 
-    extern unsigned int MINIMAL_READ_LENGTH;
-    extern unsigned int TRUE_ERRORS;
-    extern unsigned int TRUE_NOT_ERRORS;
-    extern unsigned int TRUE_REF_ERRORS;
-    extern unsigned int PRE_ERRORS;
-    extern unsigned int K;
-    extern unsigned int JFK;
-    extern unsigned int MIN_Q;
-    extern unsigned int MIN_MI;
-    extern unsigned int MIN_MI_N;
-    extern unsigned int MAX_MA;
-    extern unsigned int TRIM_LOW_COV_TOLERANCE;
-    extern unsigned int STIRKA_FILL_OVERLAP;
-    extern unsigned int STIRKA_RESOLVE_SNP;
-    extern unsigned int VERBOSE;
-    extern unsigned int CORRECTION_LEVEL;
-    extern unsigned int COVERAGE;
-    extern unsigned int MERGE;
-    extern unsigned int INDEX_SIZE;
+    extern uint32_t MINIMAL_READ_LENGTH;
+    extern uint32_t TRUE_ERRORS;
+    extern uint32_t TRUE_NOT_ERRORS;
+    extern uint32_t TRUE_REF_ERRORS;
+    extern uint32_t PRE_ERRORS;
+    extern uint32_t K;
+    extern uint32_t JFK;
+    extern uint32_t MIN_Q;
+    extern uint32_t MIN_MI;
+    extern uint32_t MIN_MI_N;
+    extern uint32_t MAX_MA;
+    extern uint32_t TRIM_LOW_COV_TOLERANCE;
+    extern uint32_t STIRKA_FILL_OVERLAP;
+    extern uint32_t STIRKA_RESOLVE_SNP;
+    extern uint32_t VERBOSE;
+    extern uint32_t CORRECTION_LEVEL;
+    extern uint32_t COVERAGE;
+    extern uint32_t MERGE;
+    extern uint32_t INDEX_SIZE;
 
 }
 #endif //STIRKA_SETTINGS_H

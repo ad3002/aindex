@@ -18,7 +18,7 @@ namespace READS {
 
     std::mutex barrier;
 
-    void read_reads(std::string file_name, std::vector<READ *> &reads, size_t n) {
+    void read_reads(std::string file_name, std::vector<READ *> &reads, uint64_t n) {
         // Read fastq file into memory.
 
         barrier.lock();
@@ -27,7 +27,7 @@ namespace READS {
 
         std::ifstream infile(file_name);
         infile.seekg(0, std::ios::end);
-        size_t length = infile.tellg();
+        uint64_t length = infile.tellg();
         char *contents = new char[length + 1];
 
         infile.seekg(0, std::ios::beg);
@@ -43,7 +43,7 @@ namespace READS {
         std::string line_strand = "";
         std::string line_Q = "";
 
-        size_t loaded = 1;
+        uint64_t loaded = 1;
         while (std::getline(ss_contents, line_head)) {
             std::getline(ss_contents, line_seq);
             std::getline(ss_contents, line_strand);
@@ -74,7 +74,7 @@ namespace READS {
 
         std::ifstream infile(file_name);
         infile.seekg(0, std::ios::end);
-        size_t length = infile.tellg();
+        uint64_t length = infile.tellg();
         char *contents = new char[length + 1];
 
         infile.seekg(0, std::ios::beg);
@@ -112,7 +112,7 @@ namespace READS {
 
         std::ifstream infile(file_name);
         infile.seekg(0, std::ios::end);
-        size_t length = infile.tellg();
+        uint64_t length = infile.tellg();
         char *contents = new char[length + 1];
 
         infile.seekg(0, std::ios::beg);
@@ -125,7 +125,7 @@ namespace READS {
 
         std::string line_seq = "";
 
-        size_t loaded = 1;
+        uint64_t loaded = 1;
         while (std::getline(ss_contents, line_seq)) {
             SPRING *read = new SPRING(line_seq);
             loaded += 1;
@@ -161,7 +161,7 @@ namespace READS {
         return s;
     }
 
-    void read_spring_pairs(std::string file_name, std::vector<SPRING_PAIR *> &reads, size_t n_reads) {
+    void read_spring_pairs(std::string file_name, std::vector<SPRING_PAIR *> &reads, uint64_t n_reads) {
         // Read springs file into memory.
 
         barrier.lock();
@@ -170,7 +170,7 @@ namespace READS {
 
         std::ifstream infile(file_name, std::ios_base::binary);
         infile.seekg(0, std::ios::end);
-        size_t length = infile.tellg();
+        uint64_t length = infile.tellg();
 
         emphf::logger() << "Trying allocate (GB): " << (sizeof(char) * (length+1)) /(1024ll*1024*1024*8)  << std::endl;
         char *contents = new char[length + 1], *contents0 = contents;
@@ -192,7 +192,7 @@ namespace READS {
         char buff[1000];
         char **p = &contents;
 
-        size_t loaded = 0;
+        uint64_t loaded = 0;
         while(NULL != sgets(buff, sizeof(buff), p)) {
             line_seq = std::string(buff);
             SPRING_PAIR *read = new SPRING_PAIR(line_seq);
@@ -215,7 +215,7 @@ namespace READS {
     }
 
     template<typename T>
-    size_t read_simple_spring_pairs(std::string file_name, std::vector<T *> &reads) {
+    uint64_t read_simple_spring_pairs(std::string file_name, std::vector<T *> &reads) {
 
 
         barrier.lock();
@@ -224,7 +224,7 @@ namespace READS {
 
         std::ifstream infile(file_name, std::ios_base::binary);
         infile.seekg(0, std::ios::end);
-        size_t length = infile.tellg();
+        uint64_t length = infile.tellg();
 
         emphf::logger() << "Trying allocate (GB): " << (sizeof(char) * (length+1ll)) /(1024ll*1024*1024*8)  << std::endl;
 
@@ -247,7 +247,7 @@ namespace READS {
         char buff[1000];
         char **p = &contents;
 
-        size_t loaded = 0;
+        uint64_t loaded = 0;
         while(NULL != sgets(buff, sizeof(buff), p)) {
             line_seq = std::string(buff);
             T *read = new T(line_seq);
@@ -271,14 +271,14 @@ namespace READS {
 
     }
 
-//    size_t read_simple_stupid_spring_pairs(std::string file_name, std::vector<STUPID_SPRING_PAIR *> &reads) {
+//    uint64_t read_simple_stupid_spring_pairs(std::string file_name, std::vector<STUPID_SPRING_PAIR *> &reads) {
 //        barrier.lock();
 //        emphf::logger() << "Starting load springs..." << std::endl;
 //        barrier.unlock();
 //
 //        std::ifstream infile(file_name, std::ios_base::binary);
 //        infile.seekg(0, std::ios::end);
-//        size_t length = infile.tellg();
+//        uint64_t length = infile.tellg();
 //
 //        emphf::logger() << "Trying allocate (GB): " << (sizeof(char) * (length+1ll)) /(1024ll*1024*1024*8)  << std::endl;
 //
@@ -301,7 +301,7 @@ namespace READS {
 //        char buff[1000];
 //        char **p = &contents;
 //
-//        size_t loaded = 0;
+//        uint64_t loaded = 0;
 //        emphf::logger() << "Convert strings into read objects..."  << std::endl;
 //        while(NULL != sgets(buff, sizeof(buff), p)) {
 //            line_seq = std::string(buff);
@@ -343,7 +343,7 @@ namespace READS {
 
         std::ifstream fh1(file_name1);
         std::ifstream fh2(file_name2);
-        size_t n_reads = 0;
+        uint64_t n_reads = 0;
 
 
         while (std::getline(fh1, line_head1)) {
@@ -387,14 +387,14 @@ namespace READS {
         int i;
         char c;
         std::cout << "FM: ";
-        for (size_t p = 0; p < read.seq.length() - Settings::K + 1; p++) {
+        for (uint64_t p = 0; p < read.seq.length() - Settings::K + 1; p++) {
             i = read.fm[p];
             std::cout << i << " ";
         }
         std::cout << std::endl;
         read.set_am(coverage);
         std::cout << "AM: ";
-        for (size_t p = 0; p < read.seq.length() - Settings::K + 1; p++) {
+        for (uint64_t p = 0; p < read.seq.length() - Settings::K + 1; p++) {
             c = read.am[p];
             std::cout << c << " ";
         }
@@ -409,7 +409,7 @@ namespace READS {
         char cmeanq = (char) read.meanq;
         std::cout << "MeanQ : " << cmeanq << " (" << read.meanq << ")" << std::endl;
         std::cout << "Fixed: ";
-        for (size_t p = 0; p < read.fixed.size(); p++) {
+        for (uint64_t p = 0; p < read.fixed.size(); p++) {
             i = read.fixed[p];
             std::cout << i << " ";
         }
@@ -434,26 +434,26 @@ namespace READS {
             std::cout << *it << " ";
         }
         std::cout << std::endl;
-        for (size_t j = 0; j < read.seq.length(); j++) {
+        for (uint64_t j = 0; j < read.seq.length(); j++) {
             std::cout << (char) read.am[j];
         }
         std::cout << std::endl;
-        for (size_t j = 0; j < read.seq.length(); j++) {
+        for (uint64_t j = 0; j < read.seq.length(); j++) {
             std::cout << read.fm[j] << " ";
         }
         std::cout << std::endl;
     }
 
-    void print_read_fragment_view(READ &read, std::string &message, size_t start, size_t end) {
+    void print_read_fragment_view(READ &read, std::string &message, uint64_t start, uint64_t end) {
         std::cout << "From print_read_adapter_view: " << message << std::endl;
         std::cout << read.seq.substr(start, end - start) << std::endl;
         std::cout << read.Q.substr(start, end - start) << std::endl;
         std::cout << std::endl;
-        for (size_t j = start; j < end; j++) {
+        for (uint64_t j = start; j < end; j++) {
             std::cout << (char) read.am[j];
         }
         std::cout << std::endl;
-        for (size_t j = start; j < end; j++) {
+        for (uint64_t j = start; j < end; j++) {
             std::cout << read.fm[j] << " ";
         }
         std::cout << std::endl;

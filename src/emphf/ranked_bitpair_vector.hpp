@@ -21,7 +21,7 @@ namespace emphf {
 
             uint64_t cur_rank = 0;
             const auto& words = m_bv.data();
-            for (size_t i = 0; i < words.size(); ++i) {
+            for (uint64_t i = 0; i < words.size(); ++i) {
                 if (((i * 32) % pairs_per_block) == 0) {
                     m_block_ranks.push_back(cur_rank);
                 }
@@ -29,12 +29,12 @@ namespace emphf {
             }
         }
 
-        size_t size() const noexcept
+        uint64_t size() const noexcept
         {
             return m_bv.size();
         }
 
-        size_t mem_size() const noexcept
+        uint64_t mem_size() const noexcept
         {
             return m_bv.mem_size() + m_block_ranks.size() * sizeof(m_block_ranks[0]);
         }
