@@ -131,7 +131,7 @@ if __name__ == "__main__":
         
         if reads_type == "fasta":
             commands = [
-                f"{path_to_aindex}compute_reads.exe -i {reads_file} - -o {prefix}",
+                f"{path_to_aindex}compute_reads.exe -i {reads_file} - fasta {prefix}",
             ]
         if reads_type == "fastq":
             commands = [
