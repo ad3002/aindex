@@ -224,7 +224,7 @@ class AIndex(object):
         rkmer.value = s.encode("utf-8")
 
         tf = lib.AindexWrapper_get_kmer(self.obj, kid, kmer, rkmer)
-        return kmer.value, rkmer.value, tf
+        return kmer.value.decode("utf8"), rkmer.value.decode("utf8"), tf
 
     ### Getters for reads
 
