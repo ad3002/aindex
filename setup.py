@@ -5,6 +5,17 @@ import subprocess
 import os
 import glob
 import shutil
+import re
+
+def get_version():
+    version_file = os.path.join(os.path.dirname(__file__), 'aindex', '__init__.py')
+    with open(version_file, 'r') as f:
+        version_content = f.read()
+    # Используем регулярное выражение для поиска строки с версией
+    version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", version_content, re.M)
+    if version_match:
+        return version_match.group(1)
+    raise RuntimeError("Unable to find version string.")
 
 class build_ext(build_ext_orig):
     def run(self):
@@ -27,7 +38,7 @@ class CustomInstall(install):
 
 setup(
     name='aindex2',
-    version='1.1.3',
+    version=get_version(),
     description='Perfect hash based index for genome data.',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
