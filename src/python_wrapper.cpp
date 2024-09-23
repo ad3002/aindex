@@ -500,6 +500,15 @@ public:
         r[j] = 0;
     }
 
+    std::vector<uint64_t> get_positions_by_kid(uint64_t h1) const {
+        // Get read positions and save them to given r
+        std::vector<uint64_t> r;
+        for (uint64_t i=indices[h1]; i < indices[h1+1] && h1+1 < indices_length; ++i) {
+            r.push_back(positions[i]);
+        }
+        return r;
+    }
+
     std::vector<uint64_t> get_positions(const std::string& kmer) {
         // Get read positions and save them to given r
         std::vector<uint64_t> r;
