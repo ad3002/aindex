@@ -161,6 +161,11 @@ if __name__ == "__main__":
 
         runner(commands)
 
+        ### if {prefix}.23.dat is empty, then abort
+        if os.stat(f"{prefix}.23.dat").st_size == 0:
+            print(f"{prefix}.23.dat is empty, aborting")
+            exit(1)
+
         if sort_dat_file:
             commands = [
                 f"sort -k2nr {prefix}.23.dat > {prefix}.23.sdat",

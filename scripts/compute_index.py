@@ -53,6 +53,11 @@ if __name__ == "__main__":
 
     runner.run(commands)
 
+    ### if {prefix}.23.dat is empty, then abort
+    if os.stat(f"{prefix}.23.dat").st_size == 0:
+        print(f"{prefix}.23.dat is empty, aborting")
+        exit(1)
+
     commands = [
         f"cut -f1 {prefix}.23.dat > {prefix}.23.kmers",
         f"{path_to_aindex}compute_mphf_seq {prefix}.23.kmers {prefix}.23.pf",
