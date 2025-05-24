@@ -506,7 +506,7 @@ struct AtomicCounter {
     }
 };
 
-extern void load_hash(PHASH_MAP &hash_map, std::string &output_prefix, std::string &tf_file, std::string &hash_filename);
+extern void load_hash(PHASH_MAP &hash_map, const std::string &output_prefix, const std::string &tf_file, const std::string &hash_filename);
 extern void load_only_hash(PHASH_MAP &hash_map, std::string &hash_filename);
 void construct_hash_unordered_hash_illumina(std::string data_file, HASH_MAP13 &kmers);
 void load_hash_for_qkmer(PHASH_MAP &hash_map, uint64_t n, std::string &data_filename, std::string &hash_filename);

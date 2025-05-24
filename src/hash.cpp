@@ -364,7 +364,7 @@ HASHER construct_emphf_fast_wo_kmers(const char *dat_filename, const char* hash_
 }
 
 
-void load_hash(PHASH_MAP &hash_map, std::string &index_prefix, std::string &tf_file, std::string &hash_filename) {
+void load_hash(PHASH_MAP &hash_map, const std::string &index_prefix, const std::string &tf_file, const std::string &hash_filename) {
 
     barrier.lock();
     emphf::logger() << "Hash loading.." << std::endl;
