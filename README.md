@@ -11,6 +11,19 @@
 
 ## Installation
 
+**Quick install with pip:**
+```bash
+pip install aindex2
+```
+
+**For Google Colab users:**
+```python
+!pip uninstall -y cmake && !apt-get update && !apt-get install -y build-essential cmake git python3-dev
+!pip install aindex2
+```
+
+### Detailed Installation Instructions
+
 Requirements:
 
 [jellyfish 2](https://github.com/gmarcais/Jellyfish)
@@ -33,6 +46,39 @@ pip install .
 ```
 
 This will create the necessary executables in the `bin` directory.
+
+### Google Colab Installation
+
+For installation in Google Colab environment, there's a known cmake conflict that needs to be resolved first:
+
+```python
+# Quick fix for cmake conflict
+!pip uninstall -y cmake
+!apt-get update
+!apt-get install -y build-essential cmake git python3-dev
+
+# Clone and install aindex
+!git clone https://github.com/ad3002/aindex.git
+%cd aindex
+!pip install .
+```
+
+**Alternative: Use automatic installation script**
+
+```python
+# Download and run the installation script
+!wget https://raw.githubusercontent.com/ad3002/aindex/main/install_colab.py
+!python install_colab.py
+```
+
+**For troubleshooting**, use the diagnostic script:
+
+```python
+!wget https://raw.githubusercontent.com/ad3002/aindex/main/diagnose_colab.py
+!python diagnose_colab.py
+```
+
+> **Note**: Google Colab has a conflict between the Python `cmake` package and system cmake. The scripts above automatically resolve this issue.
 
 To uninstall:
 

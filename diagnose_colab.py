@@ -37,7 +37,19 @@ run_cmd("which g++")
 run_cmd("g++ --version | head -1")
 run_cmd("which make")
 run_cmd("make --version | head -1")
+
+# Check cmake - this is often problematic in Colab
+print("\n2.1. CMake Analysis:")
 run_cmd("which cmake")
+run_cmd("ls -la /usr/bin/cmake || echo 'System cmake not found'")
+run_cmd("ls -la /usr/local/bin/cmake || echo 'Local cmake not found'")
+if run_cmd("python3 -c 'import cmake' 2>/dev/null"):
+    print("⚠️  WARNING: Python cmake module is installed!")
+    print("This can conflict with system cmake. Consider:")
+    print("pip uninstall cmake && apt-get install cmake")
+else:
+    print("✓ No Python cmake module found")
+
 run_cmd("cmake --version | head -1")
 run_cmd("which git")
 run_cmd("git --version")
@@ -82,21 +94,35 @@ if os.path.exists("Makefile"):
     print("Found Makefile in current directory")
     run_cmd("make clean")
     
-    # Try to build external dependencies first  
-    print("Building external dependencies...")
-    if not run_cmd("timeout 300 make external"):
-        print("External build failed or timed out. Checking git config...")
-        run_cmd("git config --global http.timeout 300")
-        run_cmd("git config --global http.postBuffer 1048576000")
-        run_cmd("git config --global user.email 'test@example.com'")
-        run_cmd("git config --global user.name 'Test User'")
-        print("Retrying external build...")
-        run_cmd("timeout 300 make external")
+    # Check for cmake conflicts first
+    print("\n6.1. Resolving cmake conflicts...")
+    if run_cmd("python3 -c 'import cmake' 2>/dev/null"):
+        print("Found Python cmake module - this may cause conflicts!")
+        print("Removing Python cmake and installing system cmake...")
+        run_cmd("pip uninstall -y cmake || true")
+        run_cmd("apt-get update && apt-get install -y cmake")
     
-    print("Building main components...")
+    # Try to build external dependencies first  
+    print("\n6.2. Building external dependencies...")
+    if not run_cmd("timeout 300 make external"):
+        print("External build failed or timed out. Trying manual approach...")
+        run_cmd("mkdir -p external bin aindex/core")
+        
+        if not os.path.exists("external/emphf"):
+            run_cmd("cd external && git clone https://github.com/ad3002/emphf.git")
+        
+        print("Building emphf manually...")
+        run_cmd("cd external/emphf && ls -la")
+        if run_cmd("cd external/emphf && /usr/bin/cmake . && make"):
+            run_cmd("cp external/emphf/compute_mphf_seq bin/")
+            print("✓ emphf build successful")
+        else:
+            print("✗ emphf build failed")
+    
+    print("\n6.3. Building main components...")
     run_cmd("make all")
     
-    print("Checking build artifacts...")
+    print("\n6.4. Checking build artifacts...")
     run_cmd("find . -name '*.so' -o -name '*.exe' | head -10")
 else:
     print("No Makefile found in current directory")

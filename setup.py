@@ -6,6 +6,8 @@ import os
 import glob
 import shutil
 import re
+import sys
+import platform
 
 def get_version():
     version_file = os.path.join(os.path.dirname(__file__), 'aindex', '__init__.py')
@@ -17,16 +19,84 @@ def get_version():
         return version_match.group(1)
     raise RuntimeError("Unable to find version string.")
 
+def check_dependencies():
+    """Check if required build dependencies are available"""
+    missing_deps = []
+    
+    # Check for make
+    try:
+        subprocess.check_call(['make', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        missing_deps.append('make')
+    
+    # Check for cmake
+    try:
+        subprocess.check_call(['cmake', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        missing_deps.append('cmake')
+    
+    # Check for g++
+    try:
+        subprocess.check_call(['g++', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        missing_deps.append('g++')
+    
+    # Check for git
+    try:
+        subprocess.check_call(['git', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        missing_deps.append('git')
+    
+    return missing_deps
+
+def install_colab_dependencies():
+    """Install missing dependencies in Google Colab environment"""
+    print("Detected Google Colab environment. Installing build dependencies...")
+    
+    try:
+        # Install build essentials
+        subprocess.check_call(['apt-get', 'update'], stdout=subprocess.DEVNULL)
+        subprocess.check_call(['apt-get', 'install', '-y', 'build-essential', 'cmake', 'git'], 
+                            stdout=subprocess.DEVNULL)
+        print("Build dependencies installed successfully.")
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"Failed to install dependencies: {e}")
+        return False
+
 class build_ext(build_ext_orig):
     def run(self):
-        subprocess.check_call(['make', 'clean'])
-        subprocess.check_call(['make', 'all'])
+        # Check if we're in Google Colab
+        in_colab = 'google.colab' in sys.modules
+        
+        if in_colab:
+            print("Google Colab environment detected.")
+            missing_deps = check_dependencies()
+            if missing_deps:
+                print(f"Missing dependencies: {', '.join(missing_deps)}")
+                if not install_colab_dependencies():
+                    raise RuntimeError("Failed to install required build dependencies")
+        
+        try:
+            subprocess.check_call(['make', 'clean'])
+            subprocess.check_call(['make', 'all'])
+        except subprocess.CalledProcessError as e:
+            print(f"Build failed with error: {e}")
+            print("Attempting to build with verbose output...")
+            try:
+                subprocess.check_call(['make', 'clean'])
+                subprocess.check_call(['make', 'all', 'VERBOSE=1'])
+            except subprocess.CalledProcessError as e2:
+                raise RuntimeError(f"Failed to build C++ extensions: {e2}")
+        
         build_lib = self.build_lib
         package_dir = os.path.join(build_lib, 'aindex', 'core')
         os.makedirs(package_dir, exist_ok=True)
         so_files = glob.glob(os.path.join('aindex', 'core', 'python_wrapper*.so'))
         if so_files:
             shutil.copy(so_files[0], os.path.join(package_dir, 'python_wrapper.so'))
+        else:
+            print("Warning: No shared library found. Build may have failed.")
 
 class CustomInstall(install):
     def run(self):

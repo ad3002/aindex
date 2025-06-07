@@ -31,17 +31,45 @@ $(PACKAGE_DIR)/python_wrapper.so: $(SRC_DIR)/python_wrapper.o $(OBJECTS) | $(PAC
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $^
 
 external:
+	@echo "Setting up external dependencies..."
 	mkdir -p ${BIN_DIR}
 	mkdir -p external
 	mkdir -p $(PACKAGE_DIR)
-	mkdir -p $(INSTALL_DIR)
-	cd external && git clone https://github.com/ad3002/emphf.git
-	cd external/emphf && cmake .
-	cd external/emphf && make
-	cp external/emphf/compute_mphf_seq $(BIN_DIR)/
+	@if [ ! -d "external/emphf" ]; then \
+		echo "Cloning emphf repository..."; \
+		cd external && git clone https://github.com/ad3002/emphf.git || { \
+			echo "Failed to clone emphf repository. Please check your internet connection."; \
+			exit 1; \
+		}; \
+	fi
+	@echo "Building emphf..."
+	@echo "Checking for cmake..."
+	@if command -v /usr/bin/cmake >/dev/null 2>&1; then \
+		echo "Using system cmake: /usr/bin/cmake"; \
+		cd external/emphf && /usr/bin/cmake . && make; \
+	elif python3 -c "import cmake" >/dev/null 2>&1; then \
+		echo "Python cmake module found, installing system cmake..."; \
+		apt-get update && apt-get install -y cmake; \
+		cd external/emphf && /usr/bin/cmake . && make; \
+	else \
+		echo "Installing cmake..."; \
+		apt-get update && apt-get install -y cmake; \
+		cd external/emphf && cmake . && make; \
+	fi || { \
+		echo "Failed to build emphf. Trying alternative approach..."; \
+		echo "Removing Python cmake and installing system cmake..."; \
+		pip uninstall -y cmake || true; \
+		apt-get update && apt-get install -y cmake; \
+		cd external/emphf && cmake . && make; \
+	}
+	cp external/emphf/compute_mphf_seq $(BIN_DIR)/ || { \
+		echo "Failed to copy emphf binary. Build may have failed."; \
+		exit 1; \
+	}
 	cp scripts/compute_aindex.py $(BIN_DIR)/
 	cp scripts/compute_index.py $(BIN_DIR)/
 	cp scripts/reads_to_fasta.py $(BIN_DIR)/
+	@echo "External dependencies setup complete."
 
 install: all
 	mkdir -p ${BIN_DIR}
