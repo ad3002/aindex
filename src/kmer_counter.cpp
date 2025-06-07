@@ -1,7 +1,6 @@
 #include <iostream>
 #include <fstream>
 #include <string>
-#include <unordered_set>
 #include <unordered_map>
 #include <vector>
 #include <thread>
@@ -12,6 +11,11 @@
 #include <queue>
 #include <condition_variable>
 #include <cctype>
+#include <cstdint>
+#include <bitset>
+
+// Для k <= 32 используем uint64_t, для больших - uint128_t или вектор
+using kmer_t = uint64_t;
 
 class KmerCounter {
 private:
@@ -19,70 +23,90 @@ private:
     size_t num_threads;
     size_t min_count;
     bool use_canonical;
+    size_t max_k_supported = 32; // Для uint64_t максимум 32 нуклеотида
+    
     std::mutex result_mutex;
     std::mutex queue_mutex;
     std::condition_variable cv;
     std::queue<std::string> sequence_queue;
     std::atomic<bool> done_reading{false};
-    std::unordered_map<std::string, std::atomic<size_t>> kmer_counts;
+    std::unordered_map<kmer_t, std::atomic<size_t>> kmer_counts;
     std::mutex kmer_mutex;
-
-    // Получение обратного комплемента
-    char complement(char c) {
-        switch(std::toupper(c)) {
-            case 'A': return 'T';
-            case 'T': return 'A';
-            case 'C': return 'G';
-            case 'G': return 'C';
-            case 'U': return 'A'; // RNA
-            default: return 'N';
+    
+    // 2-битное кодирование: A=00, C=01, G=10, T/U=11
+    static constexpr uint8_t char_to_bits[256] = {
+        4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, // 0-15
+        4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, // 16-31
+        4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, // 32-47
+        4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, // 48-63
+        4, 0, 4, 1, 4, 4, 4, 2, 4, 4, 4, 4, 4, 4, 4, 4, // 64-79  (@, A, B, C, D, E, F, G...)
+        4, 4, 4, 4, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, // 80-95  (T, U)
+        4, 0, 4, 1, 4, 4, 4, 2, 4, 4, 4, 4, 4, 4, 4, 4, // 96-111  (a, b, c, d, e, f, g...)
+        4, 4, 4, 4, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, // 112-127 (t, u)
+        4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, // 128-143
+        4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, // 144-159
+        4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, // 160-175
+        4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, // 176-191
+        4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, // 192-207
+        4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, // 208-223
+        4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, // 224-239
+        4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4  // 240-255
+    };
+    
+    static constexpr char bits_to_char[4] = {'A', 'C', 'G', 'T'};
+    
+    // Преобразование строки в 2-битное представление
+    bool string_to_kmer(const std::string& seq, size_t pos, kmer_t& kmer) {
+        kmer = 0;
+        for (size_t i = 0; i < k; ++i) {
+            uint8_t bits = char_to_bits[(uint8_t)seq[pos + i]];
+            if (bits == 4) return false; // Недопустимый символ (N или другой)
+            kmer = (kmer << 2) | bits;
         }
+        return true;
     }
-
-    std::string reverse_complement(const std::string& seq) {
-        std::string rc(seq.length(), 'N');
-        for (size_t i = 0; i < seq.length(); ++i) {
-            rc[seq.length() - 1 - i] = complement(seq[i]);
+    
+    // Преобразование 2-битного представления обратно в строку
+    std::string kmer_to_string(kmer_t kmer) {
+        std::string result(k, 'N');
+        for (int i = k - 1; i >= 0; --i) {
+            result[i] = bits_to_char[kmer & 3];
+            kmer >>= 2;
+        }
+        return result;
+    }
+    
+    // Получение обратного комплемента в 2-битном представлении
+    kmer_t reverse_complement_bits(kmer_t kmer) {
+        kmer_t rc = 0;
+        for (size_t i = 0; i < k; ++i) {
+            uint8_t bits = kmer & 3;
+            // Комплемент: A(00)↔T(11), C(01)↔G(10)
+            bits = 3 - bits;
+            rc = (rc << 2) | bits;
+            kmer >>= 2;
         }
         return rc;
     }
-
+    
     // Получение канонической формы k-мера
-    std::string get_canonical(const std::string& kmer) {
+    kmer_t get_canonical(kmer_t kmer) {
         if (!use_canonical) return kmer;
-        std::string rc = reverse_complement(kmer);
+        kmer_t rc = reverse_complement_bits(kmer);
         return (kmer < rc) ? kmer : rc;
-    }
-
-    // Проверка, является ли последовательность валидной ДНК/РНК
-    bool is_valid_sequence(const std::string& seq) {
-        for (char c : seq) {
-            char upper = std::toupper(c);
-            if (upper != 'A' && upper != 'T' && upper != 'G' && 
-                upper != 'C' && upper != 'U' && upper != 'N') {
-                return false;
-            }
-        }
-        return true;
     }
 
     void process_sequence(const std::string& seq) {
         if (seq.length() < k) return;
         
-        // Преобразуем в верхний регистр
-        std::string upper_seq = seq;
-        std::transform(upper_seq.begin(), upper_seq.end(), upper_seq.begin(), ::toupper);
-        
         // Локальный набор для уменьшения блокировок
-        std::unordered_map<std::string, size_t> local_kmers;
+        std::unordered_map<kmer_t, size_t> local_kmers;
         
-        for (size_t i = 0; i <= upper_seq.length() - k; ++i) {
-            std::string kmer = upper_seq.substr(i, k);
+        for (size_t i = 0; i <= seq.length() - k; ++i) {
+            kmer_t kmer;
+            if (!string_to_kmer(seq, i, kmer)) continue; // Пропускаем k-меры с N
             
-            // Пропускаем k-меры с N
-            if (kmer.find('N') != std::string::npos) continue;
-            
-            std::string canonical_kmer = get_canonical(kmer);
+            kmer_t canonical_kmer = get_canonical(kmer);
             local_kmers[canonical_kmer]++;
         }
         
@@ -195,6 +219,10 @@ public:
         : k(k_value), num_threads(threads), min_count(min_count_filter), 
           use_canonical(canonical) {
         if (num_threads == 0) num_threads = 1;
+        if (k > max_k_supported) {
+            throw std::runtime_error("K-mer size > " + std::to_string(max_k_supported) + 
+                                   " not supported with current implementation");
+        }
     }
 
     void count_kmers_from_file(const std::string& filename) {
@@ -227,7 +255,7 @@ public:
             case FileFormat::PLAIN: std::cout << "Plain text" << std::endl; break;
         }
         
-        size_t sequence_count = 0;
+        std::cout << "Using 2-bit encoding (memory usage reduced ~4x)" << std::endl;
         
         switch (format) {
             case FileFormat::FASTA:
@@ -271,6 +299,10 @@ public:
             std::cout << "Applied minimum count filter: " << min_count << std::endl;
         }
         std::cout << "Found " << kmer_counts.size() << " unique " << k << "-mers" << std::endl;
+        
+        // Оценка использования памяти
+        size_t memory_mb = (kmer_counts.size() * (sizeof(kmer_t) + sizeof(std::atomic<size_t>) + 32)) / (1024 * 1024);
+        std::cout << "Estimated memory usage: ~" << memory_mb << " MB" << std::endl;
     }
 
     void save_kmers(const std::string& output_file, bool with_counts = true) {
@@ -281,7 +313,7 @@ public:
         }
         
         // Собираем k-меры в вектор для сортировки
-        std::vector<std::pair<std::string, size_t>> kmers;
+        std::vector<std::pair<kmer_t, size_t>> kmers;
         for (const auto& [kmer, count] : kmer_counts) {
             size_t c = count.load();
             if (c >= min_count) {
@@ -295,10 +327,11 @@ public:
         
         // Запись результатов
         for (const auto& [kmer, count] : kmers) {
+            std::string kmer_str = kmer_to_string(kmer);
             if (with_counts) {
-                out << kmer << "\t" << count << "\n";
+                out << kmer_str << "\t" << count << "\n";
             } else {
-                out << kmer << "\n";
+                out << kmer_str << "\n";
             }
         }
         
@@ -323,17 +356,64 @@ public:
         out.write(reinterpret_cast<const char*>(&num_kmers), sizeof(size_t));
         out.write(reinterpret_cast<const char*>(&k), sizeof(size_t));
         
-        // Записываем k-меры
+        // Записываем k-меры в компактном формате
         for (const auto& [kmer, count] : kmer_counts) {
             size_t c = count.load();
             if (c >= min_count) {
-                out.write(kmer.c_str(), k);
+                out.write(reinterpret_cast<const char*>(&kmer), sizeof(kmer_t));
                 out.write(reinterpret_cast<const char*>(&c), sizeof(size_t));
             }
         }
         
         out.close();
-        std::cout << "Binary results saved to " << output_file << std::endl;
+        std::cout << "Binary results saved to " << output_file 
+                  << " (2-bit encoded, ~" << (num_kmers * (sizeof(kmer_t) + sizeof(size_t))) / 1024 / 1024 
+                  << " MB)" << std::endl;
+    }
+
+    // Сохранение в компактном бинарном формате для perfect hash
+    void save_compact_binary(const std::string& output_file) {
+        std::ofstream out(output_file, std::ios::binary);
+        if (!out.is_open()) {
+            std::cerr << "Error: Cannot create compact binary file " << output_file << std::endl;
+            return;
+        }
+        
+        // Заголовок: магическое число, версия, k, количество k-меров
+        uint32_t magic = 0x4B4D4552; // "KMER"
+        uint32_t version = 1;
+        uint32_t k32 = k;
+        uint64_t num_kmers = 0;
+        
+        for (const auto& [kmer, count] : kmer_counts) {
+            if (count.load() >= min_count) num_kmers++;
+        }
+        
+        out.write(reinterpret_cast<const char*>(&magic), sizeof(uint32_t));
+        out.write(reinterpret_cast<const char*>(&version), sizeof(uint32_t));
+        out.write(reinterpret_cast<const char*>(&k32), sizeof(uint32_t));
+        out.write(reinterpret_cast<const char*>(&num_kmers), sizeof(uint64_t));
+        
+        // Сортируем k-меры по значению для лучшей локальности
+        std::vector<std::pair<kmer_t, uint32_t>> sorted_kmers;
+        for (const auto& [kmer, count] : kmer_counts) {
+            size_t c = count.load();
+            if (c >= min_count) {
+                sorted_kmers.emplace_back(kmer, std::min(c, (size_t)UINT32_MAX));
+            }
+        }
+        std::sort(sorted_kmers.begin(), sorted_kmers.end());
+        
+        // Записываем k-меры
+        for (const auto& [kmer, count] : sorted_kmers) {
+            out.write(reinterpret_cast<const char*>(&kmer), sizeof(kmer_t));
+            if (version == 1) { // В версии 1 сохраняем счетчики
+                out.write(reinterpret_cast<const char*>(&count), sizeof(uint32_t));
+            }
+        }
+        
+        out.close();
+        std::cout << "Compact binary saved to " << output_file << ".cbin" << std::endl;
     }
 
     // Метод для получения статистики
@@ -380,26 +460,13 @@ public:
         if (!counts.empty()) {
             std::cout << "Average frequency: " << (double)total_kmers / counts.size() << std::endl;
         }
-    }
-
-    // Сохранение для Jellyfish-совместимого формата
-    void save_jellyfish_format(const std::string& output_file) {
-        std::ofstream out(output_file);
-        if (!out.is_open()) {
-            std::cerr << "Error: Cannot create output file " << output_file << std::endl;
-            return;
-        }
         
-        out << ">jellyfish_k" << k << "_min" << min_count << "\n";
-        for (const auto& [kmer, count] : kmer_counts) {
-            size_t c = count.load();
-            if (c >= min_count) {
-                out << ">" << c << "\n" << kmer << "\n";
-            }
+        // Теоретический максимум k-меров
+        size_t theoretical_max = 1ULL << (2 * k);
+        if (theoretical_max > 0) {
+            double coverage = 100.0 * (kmer_counts.size() - filtered_count) / theoretical_max;
+            std::cout << "K-mer space coverage: " << coverage << "%" << std::endl;
         }
-        
-        out.close();
-        std::cout << "Jellyfish format saved to " << output_file << std::endl;
     }
 };
 
@@ -411,8 +478,9 @@ int main(int argc, char* argv[]) {
         std::cerr << "  -m <min_count>   Minimum k-mer count (default: 1)" << std::endl;
         std::cerr << "  -c               Use canonical k-mers (default: yes)" << std::endl;
         std::cerr << "  -n               Don't use canonical k-mers" << std::endl;
-        std::cerr << "  -j               Save in Jellyfish format" << std::endl;
-        std::cerr << "\nExample: " << argv[0] << " sequences.fasta 31 kmers.txt -t 8 -m 2" << std::endl;
+        std::cerr << "  -b               Save compact binary format (.cbin)" << std::endl;
+        std::cerr << "\nNote: Maximum k-mer size is 32 for 64-bit encoding" << std::endl;
+        std::cerr << "\nExample: " << argv[0] << " genome.fasta 31 kmers.txt -t 8 -m 2" << std::endl;
         return 1;
     }
     
@@ -424,7 +492,7 @@ int main(int argc, char* argv[]) {
     size_t threads = std::thread::hardware_concurrency();
     size_t min_count = 1;
     bool use_canonical = true;
-    bool save_jellyfish = false;
+    bool save_compact = false;
     
     // Парсинг опций
     for (int i = 4; i < argc; i++) {
@@ -437,34 +505,41 @@ int main(int argc, char* argv[]) {
             use_canonical = true;
         } else if (arg == "-n") {
             use_canonical = false;
-        } else if (arg == "-j") {
-            save_jellyfish = true;
+        } else if (arg == "-b") {
+            save_compact = true;
         }
     }
     
-    std::cout << "K-mer Counter Configuration:" << std::endl;
-    std::cout << "Input file: " << input_file << std::endl;
-    std::cout << "K-mer size: " << k << std::endl;
-    std::cout << "Output file: " << output_file << std::endl;
-    std::cout << "Threads: " << threads << std::endl;
-    std::cout << "Min count filter: " << min_count << std::endl;
-    std::cout << "Canonical k-mers: " << (use_canonical ? "yes" : "no") << std::endl << std::endl;
-    
-    KmerCounter counter(k, threads, min_count, use_canonical);
-    counter.count_kmers_from_file(input_file);
-    counter.print_statistics();
-    
-    // Сохраняем в текстовом формате
-    counter.save_kmers(output_file, true);
-    
-    // Сохраняем в бинарном формате для perfect hash
-    std::string binary_output = output_file + ".bin";
-    counter.save_kmers_binary(binary_output);
-    
-    // Опционально сохраняем в Jellyfish формате
-    if (save_jellyfish) {
-        std::string jf_output = output_file + ".jf";
-        counter.save_jellyfish_format(jf_output);
+    try {
+        std::cout << "K-mer Counter Configuration:" << std::endl;
+        std::cout << "Input file: " << input_file << std::endl;
+        std::cout << "K-mer size: " << k << std::endl;
+        std::cout << "Output file: " << output_file << std::endl;
+        std::cout << "Threads: " << threads << std::endl;
+        std::cout << "Min count filter: " << min_count << std::endl;
+        std::cout << "Canonical k-mers: " << (use_canonical ? "yes" : "no") << std::endl;
+        std::cout << "2-bit encoding: enabled (4x memory reduction)" << std::endl << std::endl;
+        
+        KmerCounter counter(k, threads, min_count, use_canonical);
+        counter.count_kmers_from_file(input_file);
+        counter.print_statistics();
+        
+        // Сохраняем в текстовом формате
+        counter.save_kmers(output_file, true);
+        
+        // Сохраняем в бинарном формате
+        std::string binary_output = output_file + ".bin";
+        counter.save_kmers_binary(binary_output);
+        
+        // Опционально сохраняем компактный бинарный формат
+        if (save_compact) {
+            std::string compact_output = output_file + ".cbin";
+            counter.save_compact_binary(compact_output);
+        }
+        
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return 1;
     }
     
     return 0;
