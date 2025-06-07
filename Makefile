@@ -10,7 +10,17 @@ PACKAGE_DIR = aindex/core
 PREFIX = $(CONDA_PREFIX)
 INSTALL_DIR = $(PREFIX)/bin
 
-all: clean external $(BIN_DIR) $(BIN_DIR)/compute_index.exe $(BIN_DIR)/compute_aindex.exe $(BIN_DIR)/compute_reads.exe $(PACKAGE_DIR)/python_wrapper.so
+# Detect OS for macOS-specific settings
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+    CXXFLAGS += -stdlib=libc++
+    LDFLAGS = -shared -Wl,-install_name,python_wrapper.so
+    MACOS = true
+else
+    MACOS = false
+endif
+
+all: clean external $(BIN_DIR) $(BIN_DIR)/compute_index.exe $(BIN_DIR)/compute_aindex.exe $(BIN_DIR)/compute_reads.exe $(BIN_DIR)/kmer_counter.exe $(PACKAGE_DIR)/python_wrapper.so
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
@@ -23,6 +33,9 @@ $(BIN_DIR)/compute_aindex.exe: $(SRC_DIR)/Compute_aindex.cpp $(OBJECTS) | $(BIN_
 
 $(BIN_DIR)/compute_reads.exe: $(SRC_DIR)/Compute_reads.cpp $(OBJECTS) | $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) $^ -o $@
+
+$(BIN_DIR)/kmer_counter.exe: $(SRC_DIR)/kmer_counter.cpp | $(BIN_DIR)
+	$(CXX) $(CXXFLAGS) $< -o $@
 
 %.o: %.cpp $(INCLUDES)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
@@ -78,9 +91,41 @@ install: all
 	cp bin/compute_index.exe $(INSTALL_DIR)/
 	cp bin/compute_aindex.exe $(INSTALL_DIR)/
 	cp bin/compute_reads.exe $(INSTALL_DIR)/
+	cp bin/kmer_counter.exe $(INSTALL_DIR)/
 
 clean:
 	rm -f $(OBJECTS) $(SRC_DIR)/*.so $(SRC_DIR)/*.o $(BIN_DIR)/*.exe $(PACKAGE_DIR)/python_wrapper.so
 	rm -rf external
 
-.PHONY: all clean external install
+# macOS-specific target for manual compilation
+macos: clean $(PACKAGE_DIR)
+	@echo "Building for macOS..."
+	@echo "Note: This target skips external dependencies due to ARM64 compatibility issues"
+	mkdir -p $(PACKAGE_DIR)
+	cd $(SRC_DIR) && \
+	g++ -c -std=c++11 -fPIC python_wrapper.cpp -o python_wrapper.o && \
+	g++ -c -std=c++11 -fPIC kmers.cpp -o kmers.o && \
+	g++ -c -std=c++11 -fPIC debrujin.cpp -o debrujin.o && \
+	g++ -c -std=c++11 -fPIC hash.cpp -o hash.o && \
+	g++ -c -std=c++11 -fPIC read.cpp -o read.o && \
+	g++ -c -std=c++11 -fPIC settings.cpp -o settings.o && \
+	g++ -c -std=c++11 -fPIC helpers.cpp -o helpers.o && \
+	g++ -shared -Wl,-install_name,python_wrapper.so -o ../$(PACKAGE_DIR)/python_wrapper.so \
+		python_wrapper.o kmers.o debrujin.o hash.o read.o settings.o helpers.o
+	@echo "macOS build complete! python_wrapper.so created in $(PACKAGE_DIR)/"
+
+# macOS simplified target for testing without emphf dependencies
+macos-simple: clean $(PACKAGE_DIR)
+	@echo "Building simplified version for macOS (testing only)..."
+	mkdir -p $(PACKAGE_DIR)
+	cd $(SRC_DIR) && \
+	g++ -c -std=c++11 -fPIC python_wrapper_simple.cpp -o python_wrapper_simple.o && \
+	g++ -shared -Wl,-install_name,python_wrapper.so -o ../$(PACKAGE_DIR)/python_wrapper.so \
+		python_wrapper_simple.o
+	@echo "macOS simplified build complete! python_wrapper.so created in $(PACKAGE_DIR)/"
+
+# Create package directory
+$(PACKAGE_DIR):
+	mkdir -p $(PACKAGE_DIR)
+
+.PHONY: all clean external install macos macos-simple
