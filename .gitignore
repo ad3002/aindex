@@ -43,3 +43,4 @@ cmake-build-debug/*
 build
 aindex2.egg-info
 dist
+external/emphf
