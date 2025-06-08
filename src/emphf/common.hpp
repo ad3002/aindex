@@ -59,10 +59,13 @@ namespace emphf {
         }
     };
 
-    class line_iterator
-        : public std::iterator<std::forward_iterator_tag, const std::string_view> {
-
+    class line_iterator {
     public:
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = const std::string_view;
+        using difference_type = std::ptrdiff_t;
+        using pointer = const std::string_view*;
+        using reference = const std::string_view&;
         line_iterator()
             : m_is(nullptr)
             , m_buf(nullptr)
@@ -130,7 +133,7 @@ namespace emphf {
         long m_pos;
         std::string_view m_line_view;
         char* m_buf;
-        uint64_t m_buf_len;
+        size_t m_buf_len;
     };
 
     class file_lines
