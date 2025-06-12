@@ -468,6 +468,36 @@ public:
             std::cout << "K-mer space coverage: " << coverage << "%" << std::endl;
         }
     }
+    
+    void save_kmers_only(const std::string& output_file) {
+        std::ofstream out(output_file);
+        if (!out.is_open()) {
+            std::cerr << "Error: Cannot create k-mers only file " << output_file << std::endl;
+            return;
+        }
+        
+        // Собираем k-меры в вектор для сортировки
+        std::vector<std::pair<kmer_t, size_t>> kmers;
+        for (const auto& [kmer, count] : kmer_counts) {
+            size_t c = count.load();
+            if (c >= min_count) {
+                kmers.emplace_back(kmer, c);
+            }
+        }
+        
+        // Сортировка по частоте (убывание) или можно по лексикографическому порядку
+        std::sort(kmers.begin(), kmers.end(), 
+                  [](const auto& a, const auto& b) { return a.first < b.first; }); // лексикографический порядок
+        
+        // Запись только k-меров без частот
+        for (const auto& [kmer, count] : kmers) {
+            std::string kmer_str = kmer_to_string(kmer);
+            out << kmer_str << "\n";
+        }
+        
+        out.close();
+        std::cout << "K-mers only saved to " << output_file << " (" << kmers.size() << " k-mers)" << std::endl;
+    }
 };
 
 int main(int argc, char* argv[]) {
@@ -526,6 +556,10 @@ int main(int argc, char* argv[]) {
         
         // Сохраняем в текстовом формате
         counter.save_kmers(output_file, true);
+        
+        // Сохраняем только k-меры для построения индекса
+        std::string kmers_only_output = output_file.substr(0, output_file.find_last_of('.')) + ".kmers";
+        counter.save_kmers_only(kmers_only_output);
         
         // Сохраняем в бинарном формате
         std::string binary_output = output_file + ".bin";
