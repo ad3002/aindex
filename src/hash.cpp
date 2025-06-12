@@ -364,7 +364,7 @@ HASHER construct_emphf_fast_wo_kmers(const char *dat_filename, const char* hash_
 }
 
 
-void load_hash(PHASH_MAP &hash_map, const std::string &index_prefix, const std::string &tf_file, const std::string &hash_filename) {
+void load_hash(PHASH_MAP &hash_map, const std::string &hash_filename, const std::string &tf_file, const std::string &kmers_bin_file, const std::string &kmers_text_file) {
 
     barrier.lock();
     emphf::logger() << "Hash loading.." << std::endl;
@@ -384,13 +384,13 @@ void load_hash(PHASH_MAP &hash_map, const std::string &index_prefix, const std::
 
     uint64_t pos = 0;
     if (Settings::K == 23) {
-        is.open(index_prefix+".kmers.bin", std::ios::binary);
+        is.open(kmers_bin_file, std::ios::binary);
         is.seekg(0, std::ios::end);
         uint64_t length = is.tellg();
         is.close();
         uint64_t n = length / sizeof(uint64_t);
 
-        std::cout << "\tfile: " << index_prefix+".kmers.bin" << " size: " << length*sizeof(uint64_t) << " n=" << n << std::endl;
+        std::cout << "\tfile: " << kmers_bin_file << " size: " << length << " n=" << n << std::endl;
         hash_map.n = n;
         hash_map.checker = new uint64_t[n];
 
@@ -398,7 +398,7 @@ void load_hash(PHASH_MAP &hash_map, const std::string &index_prefix, const std::
 
         emphf::logger() << "Loading kmers to checker..." << std::endl;
 
-        std::ifstream fout3(index_prefix+".kmers.bin", std::ios::in | std::ios::binary);
+        std::ifstream fout3(kmers_bin_file, std::ios::in | std::ios::binary);
         emphf::logger() << "\tkmer array size: " << hash_map.n <<  std::endl;
         while(fout3.read(reinterpret_cast<char *>(&f), sizeof(f))) {
             if (pos && pos % 100000000 == 0) {
@@ -415,12 +415,17 @@ void load_hash(PHASH_MAP &hash_map, const std::string &index_prefix, const std::
 
     } else {
         std::string kmer;
-        std::ifstream myfile(index_prefix+".kmers");
+        std::ifstream myfile(kmers_text_file);
+        if (!myfile) {
+            emphf::logger() << "Failed to open kmers text file: " << kmers_text_file << std::endl;
+            exit(10);
+        }
 
         while (std::getline(myfile, kmer)) {
             hash_map.checker_string.push_back(kmer);
         }
         hash_map.n = hash_map.checker_string.size();
+        myfile.close();
     }
 
     emphf::logger() << "Loading tf to hash..." << std::endl;
@@ -444,14 +449,14 @@ void load_hash(PHASH_MAP &hash_map, const std::string &index_prefix, const std::
 
 }
 
-void load_hash_only_pf(PHASH_MAP &hash_map, std::string &output_prefix, std::string &hash_filename, bool load_checker) {
+void load_hash_only_pf(PHASH_MAP &hash_map, std::string &kmers_bin_file, std::string &hash_filename, bool load_checker) {
 
     barrier.lock();
     emphf::logger() << "Hash loading.." << std::endl;
     barrier.unlock();
 
     std::ifstream is;
-    is.open(output_prefix+".kmers.bin", std::ios::binary);
+    is.open(kmers_bin_file, std::ios::binary);
     is.seekg(0, std::ios::end);
     uint64_t length = is.tellg();
     is.close();
@@ -463,7 +468,7 @@ void load_hash_only_pf(PHASH_MAP &hash_map, std::string &output_prefix, std::str
         hash_map.checker = new uint64_t[hash_map.n];
         uint64_t f = 0;
         uint64_t pos = 0;
-        std::ifstream fout3(output_prefix + ".kmers.bin", std::ios::in | std::ios::binary);
+        std::ifstream fout3(kmers_bin_file, std::ios::in | std::ios::binary);
         emphf::logger() << "Kmer array size: " << hash_map.n << std::endl;
         while (fout3.read(reinterpret_cast<char *>(&f), sizeof(f))) {
             hash_map.checker[pos] = f;

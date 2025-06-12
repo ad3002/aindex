@@ -31,7 +31,7 @@ uint64_t get_dna23_bitset(const std::string& dna_str);
 uint64_t get_dna23_bitset(const std::string_view& dna_str);
 uint64_t get_dna23_bitset(char* dna_str);
 
-uint32_t get_dna13_bitset(const std::string dna_str);
+uint32_t get_dna13_bitset(const std::string& dna_str);
 uint32_t get_dna13_bitset(char* dna_str);
 
 void get_revcomp(const std::string &input, std::string &output);

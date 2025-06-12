@@ -463,21 +463,21 @@ struct AIndexCompressed {
         }
     }
 
-    void save(std::string output_prefix, std::vector<uint64_t> start_positions, PHASH_MAP &hash_map) {
+    void save(std::string pos_bin_file, std::string index_bin_file, std::string indices_bin_file, std::vector<uint64_t> start_positions, PHASH_MAP &hash_map) {
         //
         emphf::logger() << "Saving pos.bin array..." << std::endl;
-        std::ofstream fout2(output_prefix + ".pos.bin", std::ios::out | std::ios::binary);
+        std::ofstream fout2(pos_bin_file, std::ios::out | std::ios::binary);
         fout2.write((char *) &start_positions[0], start_positions.size() * sizeof(uint64_t));
         fout2.close();
 
         emphf::logger() << "Saving index.bin array..." << std::endl;
-        std::ofstream fout3(output_prefix+ ".index.bin", std::ios::out | std::ios::binary);
+        std::ofstream fout3(index_bin_file, std::ios::out | std::ios::binary);
         emphf::logger() << "Positions array size: " << sizeof(uint64_t) * total_size << std::endl;
         fout3.write(reinterpret_cast<const char *> (positions), sizeof(uint64_t) * total_size);
         fout3.close();
 
         emphf::logger() << "Saving indices array..." << std::endl;
-        std::ofstream fout4(output_prefix+ ".indices.bin", std::ios::out | std::ios::binary);
+        std::ofstream fout4(indices_bin_file, std::ios::out | std::ios::binary);
         emphf::logger() << "Indices array size: " << sizeof(uint64_t) * total_size << std::endl;
         fout4.write(reinterpret_cast<const char *> (indices), sizeof(uint64_t) * (hash_map.n+1));
         fout4.close();
@@ -506,13 +506,13 @@ struct AtomicCounter {
     }
 };
 
-extern void load_hash(PHASH_MAP &hash_map, const std::string &output_prefix, const std::string &tf_file, const std::string &hash_filename);
+extern void load_hash(PHASH_MAP &hash_map, const std::string &hash_filename, const std::string &tf_file, const std::string &kmers_bin_file, const std::string &kmers_text_file);
 extern void load_only_hash(PHASH_MAP &hash_map, std::string &hash_filename);
 void construct_hash_unordered_hash_illumina(std::string data_file, HASH_MAP13 &kmers);
 void load_hash_for_qkmer(PHASH_MAP &hash_map, uint64_t n, std::string &data_filename, std::string &hash_filename);
 void index_hash(PHASH_MAP &hash_map, std::string &dat_filename, std::string &hash_filename);
 void index_hash_pp(PHASH_MAP &hash_map, std::string &dat_filename, std::string &hash_filename, int num_threads, int mock_dat=0);
-void load_hash_only_pf(PHASH_MAP &hash_map, std::string &output_prefix, std::string &hash_filename, bool load_checker=true);
+void load_hash_only_pf(PHASH_MAP &hash_map, std::string &kmers_bin_file, std::string &hash_filename, bool load_checker=true);
 void load_full_hash(PHASH_MAP &hash_map, std::string &hash_filename, int k, uint64_t n);
 void load_hash_full_tf(PHASH_MAP &hash_map, std::string &tf_file, std::string &hash_filename);
 
