@@ -51,7 +51,7 @@ if __name__ == "__main__":
         f"jellyfish histo -o {prefix}.23.histo {jf2_file}",
     ]
 
-    runner.run(commands)
+    runner(commands)
 
     ### if {prefix}.23.dat is empty, then abort
     if os.stat(f"{prefix}.23.dat").st_size == 0:
@@ -64,4 +64,4 @@ if __name__ == "__main__":
         f"{path_to_aindex}compute_index.exe {prefix}.23.dat {prefix}.23.pf {prefix}.23 {threads} 0",
         f"rm {prefix}.23.dat {prefix}.23.jf2",
     ]
-    runner.run(commands)
+    runner(commands)

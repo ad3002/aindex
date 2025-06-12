@@ -12,6 +12,7 @@
 #include <math.h>
 #include <mutex>
 #include <string_view>
+#include <filesystem>
 #include "emphf/common.hpp"
 #include "read.hpp"
 
@@ -28,6 +29,22 @@ int main(int argc, char** argv) {
     std::string file_name2 = argv[2];
     std::string read_type = argv[3];
     std::string output_prefix = argv[4];
+    
+    // Check and create output directory if needed
+    std::filesystem::path output_path(output_prefix);
+    std::filesystem::path output_dir = output_path.parent_path();
+    
+    if (!output_dir.empty() && !std::filesystem::exists(output_dir)) {
+        emphf::logger() << "Output directory does not exist. Creating: " << output_dir << std::endl;
+        try {
+            std::filesystem::create_directories(output_dir);
+            emphf::logger() << "Successfully created directory: " << output_dir << std::endl;
+        } catch (const std::filesystem::filesystem_error& e) {
+            std::cerr << "Error creating directory " << output_dir << ": " << e.what() << std::endl;
+            std::terminate();
+        }
+    }
+    
     std::string index_file = output_prefix + ".ridx";
     std::string header_file = output_prefix + ".header";
     std::string output_file = output_prefix + ".reads";
@@ -54,12 +71,11 @@ int main(int argc, char** argv) {
 
             uint64_t end_pos = start_pos + line1.size() + line2.size() + 1; // Adding 1 for the '~' separator
 
-            std::string_view rline2 = line2;
-            line2 = get_revcomp(rline2);
+            std::string revcomp_line2 = get_revcomp(line2);
 
             fout << line1;
             fout << "~";
-            fout << rline2;
+            fout << revcomp_line2;
             fout << "\n";
 
             fout_index << n_reads << "\t" << start_pos << "\t" << end_pos << "\n";
