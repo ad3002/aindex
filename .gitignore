@@ -64,3 +64,4 @@ tests/temp/test_kmer_counter.23.tf.bin
 tests/temp/test_kmer_counter.reads
 tests/temp/test_kmer_counter.ridx
 tests/temp/test_results.json
+temp

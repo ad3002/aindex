@@ -1,6 +1,6 @@
-#ifndef AINDEX_FILE_H
-#define AINDEX_FILE_H
-
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
+#include <pybind11/numpy.h>
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -9,6 +9,7 @@
 #include <sys/mman.h>
 #include <atomic>
 #include <mutex>
+#include <thread>
 #include "emphf/common.hpp"
 #include "hash.hpp"
 #include <string_view>
@@ -34,10 +35,8 @@
 //     end - end position of read in reads file
 //     local_start - start position of kmer in read
 
-
 typedef std::atomic<uint8_t> ATOMIC_BOOL;
 emphf::stl_string_adaptor str_adapter;
-
 
 // Define a structure for an interval
 struct Interval {
@@ -53,69 +52,70 @@ struct Interval {
 // Class to manage intervals
 class IntervalTree {
 public:
+    std::vector<Interval> intervals;
+
     void addInterval(uint64_t rid, uint64_t start, uint64_t end) {
-        intervals.insert({rid, start, end});
+        intervals.push_back({rid, start, end});
     }
 
-    // Finds the interval that contains the position
-    const Interval* findInterval(uint64_t pos) const {
-        auto it = intervals.lower_bound({0, pos, pos});
-        if (it != intervals.begin()) {
-            --it;
-            if (it->start <= pos && pos <= it->end) {
-                return &(*it);
+    void sort() {
+        std::sort(intervals.begin(), intervals.end());
+    }
+
+    std::vector<Interval> query(uint64_t start, uint64_t end) {
+        std::vector<Interval> result;
+        for (const auto& interval : intervals) {
+            if (interval.start <= end && interval.end >= start) {
+                result.push_back(interval);
             }
         }
-        return nullptr;
+        return result;
     }
-
-private:
-    std::set<Interval> intervals;
 };
 
 class UsedReads {
-public:
-
-    UsedReads(uint64_t n_reads) {
-        used_reads = new ATOMIC_BOOL[n_reads];
-        for (uint64_t i=0; i < n_reads; ++i) {
-            used_reads[i] = 0;
-        }
-    }
-
-    ~UsedReads() {
-        delete[] used_reads;
-    }
-
-    ATOMIC_BOOL get(uint64_t rid) {
-        return used_reads[rid].load();
-    }  
-
-    void set(uint64_t rid) {
-        used_reads[rid].store(true);
-    }
-
-    bool used_or_use(uint64_t rid) {
-        auto status = get(rid); // 1 is used // atomic
-        bool result = true;
-        if (status == 0) {
-            set(rid);
-            result = false;
-        }
-        return result;
-    }
-
-    bool used(uint64_t rid) {
-        auto status = get(rid); // 1 is used // atomic
-        bool result = true;
-        if (status == 0) {
-            result = false;
-        }
-        return result;
-    }
-
 private:
-    ATOMIC_BOOL* used_reads;
+    std::set<uint64_t> read_ids;
+    uint64_t read_count = 0;
+    uint64_t max_reads = 0;
+
+public:
+    UsedReads(uint64_t max_r) : max_reads(max_r) {}
+
+    bool add_read(uint64_t rid) {
+        if (read_count >= max_reads) {
+            return false;
+        }
+        
+        if (read_ids.find(rid) != read_ids.end()) {
+            return true; // Already exists, but we can continue
+        }
+        
+        read_ids.insert(rid);
+        read_count++;
+        return true;
+    }
+
+    bool is_full() const {
+        return read_count >= max_reads;
+    }
+
+    uint64_t size() const {
+        return read_count;
+    }
+
+    void clear() {
+        read_ids.clear();
+        read_count = 0;
+    }
+
+    bool contains(uint64_t rid) const {
+        return read_ids.find(rid) != read_ids.end();
+    }
+
+    std::set<uint64_t> get_reads() const {
+        return read_ids;
+    }
 };
 
 struct Hit {
@@ -128,20 +128,30 @@ struct Hit {
 };
 
 class AindexWrapper {
-
     uint64_t *positions = nullptr;
     uint64_t *indices = nullptr;
     uint64_t n = 0;
     uint32_t max_tf = 0;
     uint64_t indices_length = 0;
 
+    // 13-mer mode support
+    bool is_13mer_mode = false;
+    HASHER hasher_13mer;
+    uint32_t* tf_array_13mer = nullptr;  // Use uint32_t to match file format
+    static const uint32_t TOTAL_13MERS = 67108864; // 4^13
+    
+    // 13-mer AIndex support (positions)
+    uint64_t *positions_13mer = nullptr;
+    uint64_t *indices_13mer = nullptr;
+    uint64_t n_13mer = 0;
+    uint32_t max_tf_13mer = 0;
+    uint64_t indices_length_13mer = 0;
+    
 public:
-
     bool aindex_loaded = false;
     PHASH_MAP *hash_map;
     uint64_t n_reads = 0;
     uint64_t n_kmers = 0;
-
     
     uint64_t reads_size = 0;
     char *reads = nullptr;
@@ -152,40 +162,46 @@ public:
 
     IntervalTree pos_intervalTree;
     
-    AindexWrapper() {
-
-    }
+    AindexWrapper() {}
 
     ~AindexWrapper() {
-        // emphf::logger() << "NOTE: Calling aindex deconstructor..." << std::endl;
         if (positions != nullptr) munmap(positions, n*sizeof(uint64_t));
         if (indices != nullptr) munmap(indices, indices_length);
         if (reads != nullptr) munmap(reads, reads_size);
+        if (tf_array_13mer != nullptr) munmap(tf_array_13mer, TOTAL_13MERS * sizeof(uint32_t));
+        if (positions_13mer != nullptr) munmap(positions_13mer, indices_length_13mer);
+        if (indices_13mer != nullptr) munmap(indices_13mer, (TOTAL_13MERS + 1) * sizeof(uint64_t));
+        if (positions_13mer != nullptr) munmap(positions_13mer, n_13mer*sizeof(uint64_t));
+        if (indices_13mer != nullptr) munmap(indices_13mer, indices_length_13mer);
 
         delete hash_map;
 
         reads = nullptr;
         indices = nullptr;
         positions = nullptr;
+        tf_array_13mer = nullptr;
+        positions_13mer = nullptr;
+        indices_13mer = nullptr;
     }
 
-    void load(std::string index_prefix, std::string tf_file){
-
+    void load(std::string hash_filename, std::string tf_file, std::string kmers_bin_filename, std::string kmers_text_filename){
         hash_map = new PHASH_MAP();
         // Load perfect hash into hash_map into memory
         emphf::logger() << "Reading index and hash..." << std::endl;
-        std::string hash_filename = index_prefix + ".pf";
-        emphf::logger() << "...files: " << index_prefix << std::endl;
-        emphf::logger() << "...files: " << tf_file << std::endl;
         emphf::logger() << "...files: " << hash_filename << std::endl;
-        load_hash(*hash_map, index_prefix, tf_file, hash_filename);
+        emphf::logger() << "...files: " << tf_file << std::endl;
+        emphf::logger() << "...files: " << kmers_bin_filename << std::endl;
+        emphf::logger() << "...files: " << kmers_text_filename << std::endl;
+        load_hash(*hash_map, hash_filename, tf_file, kmers_bin_filename, kmers_text_filename);
         n_kmers = hash_map->n;
         emphf::logger() << "\tDone" << std::endl;
     }
 
-    void load_hash_file(std::string hash_filename) {
-        emphf::logger() << "Loading only hash..." << std::endl;
-        load_only_hash(*hash_map, hash_filename);
+    void load_hash_file(std::string hash_filename, std::string tf_file, std::string kmers_bin_filename, std::string kmers_text_filename) {
+        emphf::logger() << "Loading hash with all files..." << std::endl;
+        hash_map = new PHASH_MAP();
+        load_hash(*hash_map, hash_filename, tf_file, kmers_bin_filename, kmers_text_filename);
+        n_kmers = hash_map->n;
     }
 
     void load_reads_index(const std::string& index_file) {
@@ -230,7 +246,6 @@ public:
         std::string index_file = reads_file.substr(0, reads_file.find_last_of(".")) + ".ridx";
         load_reads_index(index_file);
         emphf::logger() << "\tDone" << std::endl;
-
     }
 
     void load_reads_in_memory(std::string reads_file) {
@@ -250,11 +265,6 @@ public:
         fin.read(reads, length);
         fin.close();
 
-        if (!reads) {
-            std::cerr << "Failed to allocate memory for reads" << std::endl;
-            exit(10);
-        }
-
         reads_size = length;
 
         emphf::logger() << "\tbuilding start pos index over reads: " << std::endl;
@@ -263,15 +273,11 @@ public:
         emphf::logger() << "\tDone" << std::endl;
     }
 
-    void load_aindex(std::string aindex_prefix, uint32_t _max_tf) {
+    void load_aindex(std::string pos_file, std::string index_file, std::string indices_file, uint32_t _max_tf) {
         // Load aindex.
 
         n = hash_map->n;
         max_tf = _max_tf;
-
-        std::string pos_file = aindex_prefix + ".pos.bin";
-        std::string index_file = aindex_prefix + ".index.bin";
-        std::string indices_file = aindex_prefix + ".indices.bin";
 
         emphf::logger() << "Reading aindex.indices.bin array..." << std::endl;
 
@@ -308,100 +314,229 @@ public:
         fclose(in);
         this->aindex_loaded = true;
         emphf::logger() << "\tDone" << std::endl;
-
     }
 
-    uint64_t get_reads_size() {
-        return reads_size;
-    }
-
-    uint64_t get_n() {
-        return hash_map->n;
-    }
-
-    uint64_t get_hash_size() {
-        return hash_map->n;
-    }
-
-    // Various getters for reads
-
-    const char* get_read(uint64_t start, uint64_t end, uint rev) {
-        // TODO: make it thread safe
-        if (start >= reads_size || end > reads_size || start >= end) {
-            return nullptr;  // Invalid range
-        }
-        static std::string read_str;
-        read_str = std::string(reads + start, end - start);
-        if (rev > 0) {
-            read_str = get_revcomp(read_str);
-        }
-        return read_str.c_str();
-    }
-
-    std::string get_read_by_rid(uint32_t rid) {
-        uint64_t start = start_positions[rid];
-        uint64_t end = start2end.at(start);
-        return std::string(reads + start, end - start);
-    }
-
-    const char * get_pointer_to_read_by_rid(uint64_t rid) {
-        // TODO: make it thread safe
-        if (rid >= start_positions.size()) {
-            std::cerr << "Read id " << rid << " not found." << std::endl;
+    void load_13mer_index(const std::string& hash_file, const std::string& tf_file) {
+        emphf::logger() << "Loading 13-mer index..." << std::endl;
+        emphf::logger() << "Hash file: " << hash_file << std::endl;
+        emphf::logger() << "TF file: " << tf_file << std::endl;
+        
+        // Load hash using ifstream
+        std::ifstream in(hash_file, std::ios::binary);
+        if (!in) {
+            std::cerr << "Failed to open hash file: " << hash_file << std::endl;
             std::terminate();
         }
-        uint64_t start = start_positions[rid];
-        uint64_t end = start2end.at(start);
-        static std::string read_str;
-        read_str = std::string(reads + start, end - start);
-        return read_str.c_str();
-    }
-
-    uint64_t get_start_by_pos(uint64_t pos) {
-        const Interval* interval = pos_intervalTree.findInterval(pos);
-        if (interval) {
-            return interval->start;
-        } else {
-            std::cerr << "Position " << pos << " not found in any interval." << std::endl;
+        hasher_13mer.load(in);
+        in.close();
+        
+        // Memory map tf array
+        FILE* tf_in = std::fopen(tf_file.c_str(), "rb");
+        if (!tf_in) {
+            std::cerr << "Failed to open tf file: " << tf_file << std::endl;
             std::terminate();
         }
-    }
-
-    uint64_t get_end_by_start(uint64_t start) {
-        return start2end.at(start);
-    }
-
-    std::string get_read_by_start(uint64_t start) const {
-        uint64_t end = start2end.at(start);
-        return std::string(reads + start, end - start);;
-    }
-
-    uint64_t get_rid(uint64_t pos) {
-        const Interval* interval = pos_intervalTree.findInterval(pos);
-        if (!interval) {
-            std::cerr << "Position " << pos << " not found in any interval." << std::endl;
+        
+        tf_array_13mer = (uint32_t*)mmap(NULL, TOTAL_13MERS * sizeof(uint32_t), 
+                                        PROT_READ, MAP_SHARED, fileno(tf_in), 0);
+        if (tf_array_13mer == MAP_FAILED) {
+            std::cerr << "Failed to mmap tf file" << std::endl;
             std::terminate();
         }
-        uint64_t start = interval->start;
-        return start2rid.at(start);
+        fclose(tf_in);
+        
+        is_13mer_mode = true;
+        n_kmers = TOTAL_13MERS;
+        emphf::logger() << "13-mer index loaded successfully" << std::endl;
     }
-
-    // Varios getters for kmers
-
-    uint64_t get(char* ckmer) {
-        // Return tf for given char * kmer
-        return get(std::string(ckmer));
+    
+    void load_13mer_aindex(const std::string& pos_file, const std::string& index_file, const std::string& indices_file) {
+        emphf::logger() << "Loading 13-mer AIndex files..." << std::endl;
+        emphf::logger() << "Pos file: " << pos_file << std::endl;
+        emphf::logger() << "Index file: " << index_file << std::endl;
+        emphf::logger() << "Indices file: " << indices_file << std::endl;
+        
+        // Load pos.bin file
+        std::ifstream pos_in(pos_file, std::ios::in | std::ios::binary);
+        if (!pos_in) {
+            std::cerr << "Failed to open pos file: " << pos_file << std::endl;
+            std::terminate();
+        }
+        pos_in.seekg(0, std::ios::end);
+        uint64_t pos_length = pos_in.tellg();
+        pos_in.close();
+        
+        n_13mer = pos_length / sizeof(uint64_t);
+        emphf::logger() << "\tPositions length: " << pos_length << " (" << n_13mer << " positions)" << std::endl;
+        
+        FILE* pos_fp = std::fopen(pos_file.c_str(), "rb");
+        if (!pos_fp) {
+            std::cerr << "Failed to open pos file for mmap: " << pos_file << std::endl;
+            std::terminate();
+        }
+        
+        positions_13mer = (uint64_t*)mmap(NULL, pos_length, PROT_READ, MAP_SHARED, fileno(pos_fp), 0);
+        if (positions_13mer == MAP_FAILED) {
+            std::cerr << "Failed to mmap pos file" << std::endl;
+            std::terminate();
+        }
+        fclose(pos_fp);
+        
+        // Load indices.bin file
+        std::ifstream indices_in(indices_file, std::ios::in | std::ios::binary);
+        if (!indices_in) {
+            std::cerr << "Failed to open indices file: " << indices_file << std::endl;
+            std::terminate();
+        }
+        indices_in.seekg(0, std::ios::end);
+        indices_length_13mer = indices_in.tellg();
+        indices_in.close();
+        
+        emphf::logger() << "\tIndices length: " << indices_length_13mer << std::endl;
+        
+        FILE* indices_fp = std::fopen(indices_file.c_str(), "rb");
+        if (!indices_fp) {
+            std::cerr << "Failed to open indices file for mmap: " << indices_file << std::endl;
+            std::terminate();
+        }
+        
+        indices_13mer = (uint64_t*)mmap(NULL, indices_length_13mer, PROT_READ, MAP_SHARED, fileno(indices_fp), 0);
+        if (indices_13mer == MAP_FAILED) {
+            std::cerr << "Failed to mmap indices file" << std::endl;
+            std::terminate();
+        }
+        fclose(indices_fp);
+        
+        emphf::logger() << "13-mer AIndex loaded successfully" << std::endl;
     }
-
-    uint64_t get(uint64_t ukmer) {
-        if (ukmer >= hash_map->n) {
+    
+    bool is_13mer(const std::string& kmer) const {
+        return kmer.length() == 13;
+    }
+    
+    bool is_23mer(const std::string& kmer) const {
+        return kmer.length() == 23;
+    }
+    
+    uint32_t get_tf_value_13mer(const std::string& kmer) {
+        if (!is_13mer_mode || !is_13mer(kmer)) {
             return 0;
         }
-        return hash_map->tf_values[ukmer];
+        
+        // Validate k-mer (only ATGC)
+        for (char c : kmer) {
+            if (c != 'A' && c != 'T' && c != 'G' && c != 'C') {
+                return 0;
+            }
+        }
+        
+        emphf::stl_string_adaptor str_adapter;
+        
+        // Try forward direction
+        uint64_t hash_id = hasher_13mer.lookup(kmer, str_adapter);
+        if (hash_id < TOTAL_13MERS) {
+            return tf_array_13mer[hash_id];
+        }
+        
+        // Try reverse complement
+        std::string rev_kmer = get_reverse_complement_13mer(kmer);
+        hash_id = hasher_13mer.lookup(rev_kmer, str_adapter);
+        if (hash_id < TOTAL_13MERS) {
+            return tf_array_13mer[hash_id];
+        }
+        
+        return 0;
+    }
+    
+    std::string get_reverse_complement_13mer(const std::string& kmer) {
+        std::string rc = kmer;
+        std::reverse(rc.begin(), rc.end());
+        for (char& c : rc) {
+            switch (c) {
+                case 'A': c = 'T'; break;
+                case 'T': c = 'A'; break;
+                case 'G': c = 'C'; break;
+                case 'C': c = 'G'; break;
+            }
+        }
+        return rc;
     }
 
-    uint64_t get(std::string& kmer) {
-        // Return tf for given kmer
+    std::vector<uint32_t> get_tf_values(std::vector<std::string> kmers) {
+        std::vector<uint32_t> tf_values;
+        
+        // Auto-detect mode from first k-mer
+        if (!kmers.empty()) {
+            if (is_13mer(kmers[0]) && is_13mer_mode) {
+                // Use 13-mer batch processing
+                tf_values.reserve(kmers.size());
+                
+                emphf::stl_string_adaptor str_adapter;
+                
+                for (const auto& kmer : kmers) {
+                    if (!is_13mer(kmer)) {
+                        tf_values.push_back(0);
+                        continue;
+                    }
+                    
+                    // Validate k-mer (only ATGC)
+                    bool valid = true;
+                    for (char c : kmer) {
+                        if (c != 'A' && c != 'T' && c != 'G' && c != 'C') {
+                            valid = false;
+                            break;
+                        }
+                    }
+                    
+                    if (!valid) {
+                        tf_values.push_back(0);
+                        continue;
+                    }
+                    
+                    // Try forward direction
+                    uint64_t hash_id = hasher_13mer.lookup(kmer, str_adapter);
+                    if (hash_id < TOTAL_13MERS) {
+                        tf_values.push_back(tf_array_13mer[hash_id]);
+                        continue;
+                    }
+                    
+                    // Try reverse complement
+                    std::string rev_kmer = get_reverse_complement_13mer(kmer);
+                    hash_id = hasher_13mer.lookup(rev_kmer, str_adapter);
+                    if (hash_id < TOTAL_13MERS) {
+                        tf_values.push_back(tf_array_13mer[hash_id]);
+                    } else {
+                        tf_values.push_back(0);
+                    }
+                }
+                return tf_values;
+            } else if (is_23mer(kmers[0]) && hash_map != nullptr) {
+                // Original 23-mer logic
+                for (const auto& kmer : kmers) {
+                    uint64_t kmer_id = hash_map->hasher.lookup(kmer, str_adapter);
+                    tf_values.push_back(hash_map->tf_values[kmer_id]);
+                }
+                return tf_values;
+            }
+        }
+        
+        // Default: return zeros for unknown k-mer sizes
+        tf_values.resize(kmers.size(), 0);
+        return tf_values;
+    }
+
+    uint32_t get_tf_value(std::string kmer) {
+        // Auto-detect mode based on k-mer length
+        if (is_13mer(kmer) && is_13mer_mode) {
+            return get_tf_value_13mer(kmer);
+        } else if (is_23mer(kmer) && hash_map != nullptr) {
+            return get_tf_value_23mer(kmer);
+        }
+        
+        return 0;
+    }
+    
+    uint32_t get_tf_value_23mer(const std::string& kmer) {
         uint64_t ukmer = get_dna23_bitset(kmer);
         auto h1 = hash_map->hasher.lookup(kmer, str_adapter);
         if (h1 >= hash_map->n || hash_map->checker[h1] != ukmer) {
@@ -420,8 +555,55 @@ public:
         return 0;
     }
 
-    uint64_t get(std::string_view kmer) const {
-        // Return tf for given kmer
+    std::vector<uint64_t> get_hash_values(std::vector<std::string> kmers) {
+        std::vector<uint64_t> hash_values;
+        for (const auto& kmer : kmers) {
+            uint64_t kmer_id = hash_map->hasher.lookup(kmer, str_adapter);
+            hash_values.push_back(kmer_id);
+        }
+        return hash_values;
+    }
+
+    uint64_t get_hash_value(std::string kmer) {
+        uint64_t kmer_id = hash_map->hasher.lookup(kmer, str_adapter);
+        return kmer_id;
+    }
+
+    std::string get_read_by_rid(uint64_t rid) {
+        if (start_positions.size() <= rid) {
+            return "";
+        }
+        uint64_t start = start_positions[rid];
+        uint64_t end = start2end[start];
+        
+        std::string read(reads + start, end - start + 1);
+        return read;
+    }
+
+    std::string get_read(uint64_t start, uint64_t end, bool revcomp = false) {
+        if (start >= reads_size || end >= reads_size || start > end) {
+            return "";
+        }
+        
+        std::string read(reads + start, end - start);
+        if (revcomp) {
+            std::string rev_read = "";
+            for (int i = read.length() - 1; i >= 0; i--) {
+                switch (read[i]) {
+                    case 'A': rev_read += 'T'; break;
+                    case 'T': rev_read += 'A'; break;
+                    case 'C': rev_read += 'G'; break;
+                    case 'G': rev_read += 'C'; break;
+                    case 'N': rev_read += 'N'; break;
+                    default: rev_read += read[i]; break;
+                }
+            }
+            return rev_read;
+        }
+        return read;
+    }
+
+    uint64_t get_kid_by_kmer(std::string kmer) {
         uint64_t ukmer = get_dna23_bitset(kmer);
         auto h1 = hash_map->hasher.lookup(kmer, str_adapter);
         if (h1 >= hash_map->n || hash_map->checker[h1] != ukmer) {
@@ -432,392 +614,432 @@ public:
             if (h2 >= hash_map->n || hash_map->checker[h2] != urev_kmer) {
                 return 0;
             } else {
-                return hash_map->tf_values[h2];
+                return h2;
             }
         } else {
-            return hash_map->tf_values[h1];
+            return h1;
         }
-        return 0;
     }
 
-    uint64_t get_hash_value(std::string_view kmer) {
-        // Return hash value for given kmer
-        return hash_map->get_pfid(kmer);
-    }
-
-    uint64_t get_strand(const std::string& kmer) {
-        uint64_t ukmer = get_dna23_bitset(kmer);
-        auto h1 = hash_map->hasher.lookup(kmer, str_adapter);
-        if (h1 >= hash_map->n || hash_map->checker[h1] != ukmer) {
-            std::string rev_kmer = "NNNNNNNNNNNNNNNNNNNNNNN";
-            uint64_t urev_kmer = reverseDNA(ukmer);
-            get_bitset_dna23(urev_kmer, rev_kmer);
-            auto h2 = hash_map->hasher.lookup(rev_kmer, str_adapter);
-            if (h2 >= hash_map->n || hash_map->checker[h2] != urev_kmer) {
-                return 0;
-            } else {
-                return 2;
-            }
-        } else {
-            return 1;
+    std::string get_kmer_by_kid(uint64_t kid) {
+        if (kid >= hash_map->n) {
+            return "";
         }
-        return 0;
-    }
-
-    void get_kmer_by_kid(uint64_t r, char* kmer) {
-            uint64_t ukmer = hash_map->checker[r];
-            get_bitset_dna23_c(ukmer, kmer, 23);            
-    }
-
-    uint64_t get_kmer(uint64_t kid, char* kmer, char* rkmer) {
-        // Get tf, kmer and rev_kmer stored in given arrays.
-        // TODO: fix this
         uint64_t ukmer = hash_map->checker[kid];
+        return get_bitset_dna23(ukmer);
+    }
+
+    uint64_t get_strand(std::string kmer) {
+        uint64_t ukmer = get_dna23_bitset(kmer);
+        auto h1 = hash_map->hasher.lookup(kmer, str_adapter);
+        if (h1 >= hash_map->n || hash_map->checker[h1] != ukmer) {
+            std::string rev_kmer = "NNNNNNNNNNNNNNNNNNNNNNN";
+            uint64_t urev_kmer = reverseDNA(ukmer);
+            get_bitset_dna23(urev_kmer, rev_kmer);
+            auto h2 = hash_map->hasher.lookup(rev_kmer, str_adapter);
+            if (h2 >= hash_map->n || hash_map->checker[h2] != urev_kmer) {
+                return 0; // NOT_FOUND
+            } else {
+                return 2; // REVERSE
+            }
+        } else {
+            return 1; // FORWARD
+        }
+    }
+
+    uint64_t get_kmer_info(uint64_t kid, std::string& kmer, std::string& rkmer) {
+        if (kid >= hash_map->n) {
+            return 0;
+        }
+        uint64_t ukmer = hash_map->checker[kid];
+        kmer = get_bitset_dna23(ukmer);
         uint64_t urev_kmer = reverseDNA(ukmer);
-        get_bitset_dna23_c(ukmer, kmer, 23);
-        get_bitset_dna23_c(urev_kmer, rkmer, 23);
+        rkmer = get_bitset_dna23(urev_kmer);
         return hash_map->tf_values[kid];
     }
 
-    uint64_t get_kid_by_kmer(std::string _kmer) {
-        uint64_t kmer = get_dna23_bitset(_kmer);
-        return hash_map->get_pfid_by_umer_safe(kmer);
-    }
-    
-    // Getters for positions
-
-    void get_positions(uint64_t* r, const std::string_view& kmer) {
-        // Get read positions and save them to given r
-        auto h1 = hash_map->get_pfid(kmer);
-        uint64_t j = 0;
-        for (uint64_t i=indices[h1]; i < indices[h1+1] && h1+1 < indices_length; ++i) {
-            if (j == max_tf - 1) {
-                break;
+    uint64_t get_rid(uint64_t pos) {
+        if (!aindex_loaded || pos_intervalTree.intervals.empty()) {
+            return 0;
+        }
+        
+        try {
+            std::vector<Interval> overlapping = pos_intervalTree.query(pos, pos + 1);
+            if (!overlapping.empty()) {
+                return overlapping[0].rid;
             }
-            r[j] = positions[i];
-            j += 1;
+        } catch (...) {
+            // Handle any exceptions in interval tree query
+            return 0;
         }
-        r[j] = 0;
+        return 0;
     }
 
-    std::vector<uint64_t> get_positions_by_kid(uint64_t h1) const {
-        // Get read positions and save them to given r
-        std::vector<uint64_t> r;
-        for (uint64_t i=indices[h1]; i < indices[h1+1] && h1+1 < indices_length; ++i) {
-            r.push_back(positions[i]);
+    uint64_t get_start(uint64_t pos) {
+        if (!aindex_loaded || pos_intervalTree.intervals.empty()) {
+            return 0;
         }
-        return r;
+        
+        try {
+            std::vector<Interval> overlapping = pos_intervalTree.query(pos, pos + 1);
+            if (!overlapping.empty()) {
+                return overlapping[0].start;
+            }
+        } catch (...) {
+            // Handle any exceptions in interval tree query
+            return 0;
+        }
+        return 0;
     }
 
     std::vector<uint64_t> get_positions(const std::string& kmer) {
-        // Get read positions and save them to given r
-        std::vector<uint64_t> r;
-        auto h1 = hash_map->get_pfid(kmer);
-        for (uint64_t i=indices[h1]; i < indices[h1+1] && h1+1 < indices_length; ++i) {
-            if (positions[i] == 0) {
-                continue;
+        // Route to appropriate function based on k-mer length
+        if (is_13mer(kmer)) {
+            return get_positions_13mer(kmer);
+        } else if (is_23mer(kmer)) {
+            // Use the original algorithm for 23-mers
+            std::vector<uint64_t> r;
+            if (!hash_map || !positions || !indices) {
+                return r;
             }
-            r.push_back(positions[i]-1);
-        }
-        return r;
-    }
-
-    // Aindex manipulation
-
-    void increase(char* ckmer) {
-        std::string kmer = std::string(ckmer);
-        hash_map->increase(kmer);
-    }
-
-    void decrease(char* ckmer) {
-        std::string kmer = std::string(ckmer);
-        hash_map->decrease(kmer);
-    }
-
-    void set_positions(uint64_t* r, const std::string& kmer) {
-        // Set read positions
-        // TODO: check borders
-        auto h1 = hash_map->get_pfid(kmer);
-        uint64_t j = 0;
-        for (uint64_t i=indices[h1]; i < indices[h1+1]; ++i) {
-            positions[i] = r[j];
-            j += 1;
-        }
-    }
-
-    // Consistency checks
-
-    void check_get_reads_se_by_kmer(std::string const kmer, uint64_t h1, bool* used_reads, std::vector<Hit> &hits) {
-
-        for (uint64_t i=indices[h1]; i < indices[h1+1]; ++i) {
-
-            if (positions[i] == 0) {
-                break;
-            }
-
-            uint64_t position = positions[i] - 1;
-            uint64_t start = get_start_by_pos(position);
-
-            uint64_t end = start;
-            uint64_t spring_pos = 0;
-
-            uint64_t pos = position - start;
-            std::string left_read;
-            std::string right_read;
-
-            while (true) {
-                if (reads[end] == '\n') {
-                    if (spring_pos > 0) {
-                        char rkmer[end-spring_pos];
-                        std::memcpy(rkmer, &reads[spring_pos+1], end-spring_pos-1);
-                        rkmer[end-spring_pos-1] = '\0';
-                        right_read = std::string(rkmer);
-                    }
-                    break;
-                } else if (reads[end] == '~') {
-                    char lkmer[end-start+1];
-                    std::memcpy(lkmer, &reads[start], end-start);
-                    lkmer[end-start] = '\0';
-                    left_read = std::string(lkmer);
-                    spring_pos = end;
-                }
-                end += 1;
-            }
-
-            uint64_t real_rid = start2rid[start];
-
-            Hit hit;
-            hit.rid = real_rid;
-            hit.start = start;
-            hit.local_pos = pos;
-            hit.rev = 0;
-            spring_pos = spring_pos - start;
-
-            if (pos < spring_pos) {
-                hit.read = left_read;
-                hit.ori = 0;
-
-                if (hit.read.substr(hit.local_pos, Settings::K) != kmer) {
-                    std::string rleft_read = hit.read;
-                    get_revcomp(hit.read, rleft_read);
-                    hit.local_pos = hit.read.length() - pos - Settings::K;
-                    if (rleft_read.substr(hit.local_pos, Settings::K) != kmer) {
-                        std::cout << rleft_read << std::endl;
-                        std::cout << left_read << std::endl;
-                        std::cout << right_read << std::endl;
-                        std::cout << kmer << " " << pos <<  std::endl;
-                        continue;
-                    }
-                    hit.read = rleft_read;
-                    hit.rev = 1;
-                }
-            } else {
-
-                if (hit.local_pos == spring_pos) {
-                    hit.local_pos = hit.local_pos - spring_pos;
-                    std::cout <<  left_read << std::endl;
-                    std::cout <<  right_read << std::endl;
-                    std::cout << kmer << std::endl;
-
-                } else {
-                    hit.local_pos = hit.local_pos - spring_pos - 1;
-                }
-
-                hit.read = right_read;
-                hit.ori = 1;
-
-                if (hit.read.substr(hit.local_pos, Settings::K) != kmer) {
-                    std::string rright_read = hit.read;
-                    get_revcomp(hit.read, rright_read);
-                    hit.local_pos = hit.read.length() - hit.local_pos - Settings::K;
-                    if (rright_read.substr(hit.local_pos, Settings::K) != kmer) {
-                        continue;
-                    }
-                    hit.read = rright_read;
-                    hit.rev = 1;
-                }
-
-            }
-
-            if (used_reads[2*hit.rid+hit.ori]) {
-                continue;
-            }
-            hits.push_back(hit);
-
-        }
-    }
-
-    void check_aindex() {
-
-        for (uint64_t h1=0; h1<hash_map->n; ++h1) {
-            uint64_t tf = hash_map->tf_values[h1];
-            uint64_t xtf = 0;
-
-            if (h1 && h1 % 1000000 == 0) {
-                std::cout << "Completed: " << h1 << "/" << hash_map->n << std::endl;
-            }
-
-            for (uint64_t i=indices[h1]; i < indices[h1+1]; ++i) {
+            auto h1 = hash_map->get_pfid(kmer);
+            for (uint64_t i=indices[h1]; i < indices[h1+1] && h1+1 < indices_length; ++i) {
                 if (positions[i] == 0) {
-                    break;
+                    continue;
                 }
-
-                xtf += 1;
-
-                uint64_t pos = positions[i]-1;
-
-                char ckmer[Settings::K];
-
-                std::memcpy(ckmer, &reads[pos], Settings::K);
-                ckmer[Settings::K] = '\0';
-                std::string data_kmer = std::string(ckmer);
-
-                uint64_t h1_kmer = hash_map->checker[h1];
-                std::string kmer = get_bitset_dna23(h1_kmer);
-                if (data_kmer != kmer) {
-                    uint64_t rh1 = reverseDNA(h1_kmer);
-                    std::string rkmer = get_bitset_dna23(rh1);
-                    if (data_kmer != rkmer) {
-                        std::cout << h1 << " " << i << " " << tf << " " << xtf << " " <<  data_kmer << " " << kmer << " " << rkmer << std::endl;
-                    }
-                }
+                r.push_back(positions[i]-1);
             }
-            if (tf != xtf) {
-                std::cout << tf << " " << xtf << std::endl;
+            return r;
+        } else {
+            // Unsupported k-mer length
+            return std::vector<uint64_t>();
+        }
+    }
 
+    uint64_t get_hash_size() {
+        return hash_map ? hash_map->n : 0;
+    }
+
+    uint64_t get_reads_size() {
+        return n_reads;
+    }
+
+    void check_get_reads_se_by_kmer(uint64_t kmer_id, UsedReads& used_reads, std::vector<Hit>& hits) {
+        if (!aindex_loaded) {
+            emphf::logger() << "Aindex not loaded!" << std::endl;
+            return;
+        }
+
+        uint64_t start_pos = positions[kmer_id];
+        uint64_t end_pos = (kmer_id == n - 1) ? indices_length : positions[kmer_id + 1];
+        
+        for (uint64_t i = start_pos; i < end_pos; i++) {
+            uint64_t pos = indices[i];
+            
+            std::vector<Interval> overlapping = pos_intervalTree.query(pos, pos + Settings::K - 1);
+            
+            for (const auto& interval : overlapping) {
+                if (used_reads.is_full()) {
+                    return;
+                }
+                
+                if (!used_reads.add_read(interval.rid)) {
+                    continue;
+                }
+                
+                std::string read = get_read_by_rid(interval.rid);
+                if (read.empty()) continue;
+                
+                uint64_t local_pos = pos - interval.start;
+                if (local_pos + Settings::K <= read.length()) {
+                    Hit hit;
+                    hit.rid = interval.rid;
+                    hit.start = interval.start;
+                    hit.read = read;
+                    hit.local_pos = local_pos;
+                    hit.ori = 1;
+                    hit.rev = false;
+                    hits.push_back(hit);
+                }
             }
         }
     }
 
-    void check_aindex_reads() {
+    std::vector<std::string> get_reads_se_by_kmer(std::string kmer, uint64_t max_reads) {
+        std::vector<std::string> result;
+        UsedReads used_reads(max_reads);
+        std::vector<Hit> hits;
+        
+        uint64_t kmer_id = hash_map->hasher.lookup(kmer, str_adapter);
+        check_get_reads_se_by_kmer(kmer_id, used_reads, hits);
+        
+        for (const auto& hit : hits) {
+            result.push_back(hit.read);
+        }
+        
+        return result;
+    }
 
-        bool* used_reads = new bool[1];
+    void debug_kmer_tf_values() {
+        std::vector<uint64_t> h1_values = {1, 10, 100, 1000, 10000, 100000};
+        UsedReads used_reads(100);
         std::vector<Hit> hits;
 
-        for (uint64_t h1=0; h1<hash_map->n; ++h1) {
-
-            if (h1 && h1 % 1000000 == 0) {
-                std::cout << "Completed: " << h1 << "/" << hash_map->n << std::endl;
-            }
+        for (uint64_t h1: h1_values) {
+            if (h1 >= n_kmers) continue;
 
             uint64_t h1_kmer = hash_map->checker[h1];
             std::string kmer = get_bitset_dna23(h1_kmer);
             hits.clear();
-            check_get_reads_se_by_kmer(kmer, h1, used_reads, hits);
+            check_get_reads_se_by_kmer(h1, used_reads, hits);
 
             uint64_t max_pos = 0;
 
             for (auto hit: hits) {
-                std::max(max_pos, hit.local_pos);
+                max_pos = std::max(max_pos, hit.local_pos);
                 std::string subkmer = hit.read.substr(hit.local_pos, Settings::K);
                 assert(subkmer == kmer);
                 std::cout << kmer << " " << subkmer << " " << h1 << " " << hash_map->tf_values[h1] << std::endl;
             }
         }
     }
-
-    // Deconstructors
-
-    void freeme(char* ptr)
-    {
-        std::cout << "freeing address: " << ptr << std::endl;
-        free(ptr);
+    
+    // Additional 13-mer functions
+    std::vector<uint32_t> get_tf_values_13mer(const std::vector<std::string>& kmers) {
+        std::vector<uint32_t> tf_values;
+        tf_values.reserve(kmers.size());
+        
+        if (!is_13mer_mode) {
+            // Fill with zeros if not in 13-mer mode
+            tf_values.resize(kmers.size(), 0);
+            return tf_values;
+        }
+        
+        emphf::stl_string_adaptor str_adapter;
+        
+        for (const auto& kmer : kmers) {
+            if (!is_13mer(kmer)) {
+                tf_values.push_back(0);
+                continue;
+            }
+            
+            // Validate k-mer (only ATGC)
+            bool valid = true;
+            for (char c : kmer) {
+                if (c != 'A' && c != 'T' && c != 'G' && c != 'C') {
+                    valid = false;
+                    break;
+                }
+            }
+            
+            if (!valid) {
+                tf_values.push_back(0);
+                continue;
+            }
+            
+            // Try forward direction
+            uint64_t hash_id = hasher_13mer.lookup(kmer, str_adapter);
+            if (hash_id < TOTAL_13MERS) {
+                tf_values.push_back(tf_array_13mer[hash_id]);
+                continue;
+            }
+            
+            // Try reverse complement
+            std::string rev_kmer = get_reverse_complement_13mer(kmer);
+            hash_id = hasher_13mer.lookup(rev_kmer, str_adapter);
+            if (hash_id < TOTAL_13MERS) {
+                tf_values.push_back(tf_array_13mer[hash_id]);
+            } else {
+                tf_values.push_back(0);
+            }
+        }
+        
+        return tf_values;
+    }
+    
+    // Direct access to 13-mer tf array
+    std::vector<uint32_t> get_13mer_tf_array() {
+        if (!is_13mer_mode) {
+            return std::vector<uint32_t>();
+        }
+        
+        std::vector<uint32_t> result(tf_array_13mer, tf_array_13mer + TOTAL_13MERS);
+        return result;
+    }
+    
+    // Get tf value by direct array index (for 13-mers)
+    uint32_t get_tf_by_index_13mer(uint64_t index) {
+        if (!is_13mer_mode || index >= TOTAL_13MERS) {
+            return 0;
+        }
+        return tf_array_13mer[index];
+    }
+    
+    // Get statistics about loaded index
+    std::string get_index_info() {
+        std::string info = "Index Info:\n";
+        if (is_13mer_mode && tf_array_13mer != nullptr) {
+            info += "Mode: 13-mer\n";
+            info += "Total k-mers: " + std::to_string(TOTAL_13MERS) + "\n";
+            
+            // Count non-zero entries (with safety check)
+            uint64_t non_zero_count = 0;
+            uint64_t total_count = 0;
+            for (uint64_t i = 0; i < TOTAL_13MERS; i++) {
+                if (tf_array_13mer[i] > 0) {
+                    non_zero_count++;
+                    total_count += tf_array_13mer[i];  // uint32_t automatically promotes to uint64_t
+                }
+            }
+            info += "Non-zero entries: " + std::to_string(non_zero_count) + "\n";
+            info += "Total k-mer count: " + std::to_string(total_count) + "\n";
+        } else if (hash_map != nullptr) {
+            info += "Mode: 23-mer\n";
+            info += "Total k-mers: " + std::to_string(hash_map->n) + "\n";
+        } else {
+            info += "Mode: No index loaded\n";
+        }
+        
+        if (aindex_loaded) {
+            info += "AIndex: Loaded\n";
+            info += "Reads: " + std::to_string(n_reads) + "\n";
+        } else {
+            info += "AIndex: Not loaded\n";
+        }
+        
+        return info;
+    }
+    
+    std::vector<uint64_t> get_positions_13mer(const std::string& kmer) {
+        std::vector<uint64_t> result;
+        
+        if (!is_13mer_mode || !is_13mer(kmer) || positions_13mer == nullptr || indices_13mer == nullptr) {
+            return result;
+        }
+        
+        // Validate k-mer (only ATGC)
+        for (char c : kmer) {
+            if (c != 'A' && c != 'T' && c != 'G' && c != 'C') {
+                return result;
+            }
+        }
+        
+        emphf::stl_string_adaptor str_adapter;
+        
+        // Try forward direction
+        uint64_t hash_id = hasher_13mer.lookup(kmer, str_adapter);
+        if (hash_id < TOTAL_13MERS) {
+            // Get positions for this k-mer
+            uint64_t start_idx = indices_13mer[hash_id];
+            uint64_t end_idx = indices_13mer[hash_id + 1];
+            
+            for (uint64_t i = start_idx; i < end_idx && i < n_13mer; ++i) {
+                if (positions_13mer[i] > 0) {
+                    result.push_back(positions_13mer[i] - 1); // Convert from 1-based to 0-based
+                }
+            }
+            return result;
+        }
+        
+        // Try reverse complement
+        std::string rev_kmer = get_reverse_complement_13mer(kmer);
+        hash_id = hasher_13mer.lookup(rev_kmer, str_adapter);
+        if (hash_id < TOTAL_13MERS) {
+            // Get positions for reverse complement
+            uint64_t start_idx = indices_13mer[hash_id];
+            uint64_t end_idx = indices_13mer[hash_id + 1];
+            
+            for (uint64_t i = start_idx; i < end_idx && i < n_13mer; ++i) {
+                if (positions_13mer[i] > 0) {
+                    result.push_back(positions_13mer[i] - 1); // Convert from 1-based to 0-based
+                }
+            }
+        }
+        
+        return result;
     }
 };
 
-AindexWrapper load_aindex(
-                const std::string index_prefix,
-                const std::string tf_prefix,
-                const std::string input_reads_file,
-                const std::string aindex_prefix,
-                const uint64_t max_tf,
-                bool in_memory = false
-                ) {
-    AindexWrapper aindex = AindexWrapper();
-    std::string tf_file = tf_prefix + ".tf.bin";
-    aindex.load(index_prefix, tf_file);
-    if (in_memory) {
-        aindex.load_reads_in_memory(input_reads_file);
-    } else {
-        aindex.load_reads(input_reads_file);
-    }
-    aindex.load_aindex(aindex_prefix, max_tf);
-    return aindex;
-}
+namespace py = pybind11;
 
-AindexWrapper load_index(
-                const std::string index_prefix,
-                const std::string tf_prefix
-                ) {
-    AindexWrapper aindex = AindexWrapper();
-    std::string tf_file = tf_prefix + ".tf.bin";
-    aindex.load(index_prefix, tf_file);
-    return aindex;
-}
-
-extern "C" {
-
-    AindexWrapper* AindexWrapper_new(){ return new AindexWrapper(); }
-
-    void AindexWrapper_load(AindexWrapper* foo, char* index_prefix, char* tf_file){ foo->load(index_prefix, tf_file); }
-
-    void AindexWrapper_freeme(AindexWrapper* foo, char* ptr){ foo->freeme(ptr); }
-
-    void AindexWrapper_load_hash_file(AindexWrapper* foo, char* hash_filename, char* tf_file){ foo->load(hash_filename, tf_file); }
-
-    void AindexWrapper_load_reads(AindexWrapper* foo, char* reads_file){ foo->load_reads(reads_file); }
-
-    void AindexWrapper_load_reads_index(AindexWrapper* foo, char* index_file){ foo->load_reads_index(index_file); }
-
-    void AindexWrapper_load_index(AindexWrapper* foo, char* index_prefix, uint32_t max_tf){ foo->load_aindex(index_prefix, max_tf); }
+PYBIND11_MODULE(aindex_cpp, m) {
+    m.doc() = "Aindex C++ bindings using pybind11";
     
-    void AindexWrapper_increase(AindexWrapper* foo, char* kmer){ foo->increase(kmer); }
-
-    void AindexWrapper_decrease(AindexWrapper* foo, char* kmer){ foo->decrease(kmer); }
-
-    uint64_t AindexWrapper_get_kid_by_kmer(AindexWrapper* foo, char* kmer){ return foo->get_kid_by_kmer(kmer); }
-
-    void AindexWrapper_get_kmer_by_kid(AindexWrapper* foo, uint64_t kid, char* kmer){ foo->get_kmer_by_kid(kid, kmer); }
-
-    uint64_t AindexWrapper_get(AindexWrapper* foo, char* kmer){ return foo->get(kmer); }
-
-    uint64_t AindexWrapper_get_n(AindexWrapper* foo){ return foo->get_n(); }
-
-    uint64_t AindexWrapper_get_rid(AindexWrapper* foo, uint64_t pos){ return foo->get_rid(pos); }
-
-    uint64_t AindexWrapper_get_start(AindexWrapper* foo, uint64_t pos){ return foo->get_start_by_pos(pos); }
-
-    const char*  AindexWrapper_get_read(AindexWrapper* foo, uint64_t start, uint64_t end, uint rev){ return foo->get_read(start, end, rev); }
-
-    const char*  AindexWrapper_get_read_by_rid(AindexWrapper* foo, uint64_t rid){ return foo->get_pointer_to_read_by_rid(rid); }
-
-    void AindexWrapper_get_positions(AindexWrapper* foo, uint64_t* r, char* kmer){ foo->get_positions(r, kmer); }
-
-    void AindexWrapper_set_positions(AindexWrapper* foo, uint64_t* r, char* kmer){ foo->set_positions(r, kmer); }
-
-    uint64_t AindexWrapper_get_kmer(AindexWrapper* foo, uint64_t p, char* kmer, char* rkmer){ return foo->get_kmer(p, kmer, rkmer); }
-
-    uint64_t AindexWrapper_get_strand(AindexWrapper* foo, char* kmer){ return foo->get_strand(kmer); }
-
-    uint64_t AindexWrapper_get_hash_size(AindexWrapper* foo){ return foo->get_hash_size(); }
-
-    uint64_t AindexWrapper_get_reads_size(AindexWrapper* foo){ return foo->get_reads_size(); }
-
-    void AindexWrapper_load_reads_in_memory(AindexWrapper* foo, char* reads_file){ foo->load_reads_in_memory(reads_file); }
-
-    void AindexWrapper_load_aindex(AindexWrapper* foo, char* aindex_prefix, uint32_t max_tf){ foo->load_aindex(aindex_prefix, max_tf); }
-
-    uint64_t AindexWrapper_get_start_by_pos(AindexWrapper* foo, uint64_t pos) { return foo->get_start_by_pos(pos); }
-
-    uint64_t AindexWrapper_get_end_by_start(AindexWrapper* foo, uint64_t start) { return foo->get_end_by_start(start); }
-
-    const char* AindexWrapper_get_pointer_to_read_by_rid(AindexWrapper* foo, uint64_t rid) { return foo->get_pointer_to_read_by_rid(rid); }
-
-    uint64_t AindexWrapper_get_hash_value(AindexWrapper* foo, char* kmer) { return foo->get_hash_value(kmer); }
-
-    void AindexWrapper_check_aindex(AindexWrapper* foo) { foo->check_aindex(); }
-
-    void AindexWrapper_check_aindex_reads(AindexWrapper* foo) { foo->check_aindex_reads(); }
+    // Wrap the AindexWrapper class
+    py::class_<AindexWrapper>(m, "AindexWrapper")
+        .def(py::init<>())
+        
+        // Loading functions with new signature
+        .def("load", &AindexWrapper::load,
+             "Load index from hash file, tf file, kmers bin file, and kmers text file")
+        .def("load_hash_file", &AindexWrapper::load_hash_file,
+             "Load hash file, tf file, kmers bin file, and kmers text file") 
+        .def("load_reads", &AindexWrapper::load_reads,
+             "Load reads file")
+        .def("load_reads_index", &AindexWrapper::load_reads_index,
+             "Load reads index file")
+        .def("load_reads_in_memory", &AindexWrapper::load_reads_in_memory,
+             "Load reads file into memory")
+        .def("load_aindex", &AindexWrapper::load_aindex,
+             "Load aindex file")
+        .def("load_13mer_index", &AindexWrapper::load_13mer_index,
+             "Load 13-mer index from hash file and tf file")
+        .def("load_13mer_aindex", &AindexWrapper::load_13mer_aindex,
+             "Load 13-mer position index from pos, index, and indices files")
+        .def("load_13mer_aindex", &AindexWrapper::load_13mer_aindex,
+             "Load 13-mer AIndex files")
+        
+        // Query functions
+        .def("get_tf_values", &AindexWrapper::get_tf_values,
+             "Get term frequency values for kmers")
+        .def("get_tf_value", &AindexWrapper::get_tf_value,
+             "Get term frequency value for a kmer")
+        .def("get_hash_values", &AindexWrapper::get_hash_values,
+             "Get hash values for kmers")
+        .def("get_hash_value", &AindexWrapper::get_hash_value,
+             "Get hash value for a kmer")
+        .def("get_read_by_rid", &AindexWrapper::get_read_by_rid,
+             "Get read by read ID")
+        .def("get_read", &AindexWrapper::get_read,
+             "Get read by start and end positions", py::arg("start"), py::arg("end"), py::arg("revcomp") = false)
+        .def("get_reads_se_by_kmer", &AindexWrapper::get_reads_se_by_kmer,
+             "Get reads containing a specific kmer")
+        .def("get_kid_by_kmer", &AindexWrapper::get_kid_by_kmer,
+             "Get kmer ID by kmer")
+        .def("get_kmer_by_kid", &AindexWrapper::get_kmer_by_kid,
+             "Get kmer by kmer ID")
+        .def("get_strand", &AindexWrapper::get_strand,
+             "Get strand for kmer")
+        .def("get_kmer_info", &AindexWrapper::get_kmer_info,
+             "Get kmer info by kmer ID")
+        .def("get_rid", &AindexWrapper::get_rid,
+             "Get read ID by position")
+        .def("get_start", &AindexWrapper::get_start,
+             "Get start position by position")
+        .def("get_positions", &AindexWrapper::get_positions,
+             "Get positions for kmer")
+        .def("get_hash_size", &AindexWrapper::get_hash_size,
+             "Get hash size")
+        .def("get_reads_size", &AindexWrapper::get_reads_size,
+             "Get reads size")
+        
+        // Properties
+        .def_readwrite("aindex_loaded", &AindexWrapper::aindex_loaded)
+        .def_readwrite("n_reads", &AindexWrapper::n_reads)
+        .def_readwrite("n_kmers", &AindexWrapper::n_kmers)
+        .def_readwrite("reads_size", &AindexWrapper::reads_size)
+        
+        // Debug function
+        .def("debug_kmer_tf_values", &AindexWrapper::debug_kmer_tf_values,
+             "Debug kmer tf values")
+        .def("get_tf_values_13mer", &AindexWrapper::get_tf_values_13mer,
+             "Get term frequency values for 13-mers")
+        .def("get_13mer_tf_array", &AindexWrapper::get_13mer_tf_array,
+             "Get direct access to 13-mer tf array")
+        .def("get_tf_by_index_13mer", &AindexWrapper::get_tf_by_index_13mer,
+             "Get tf value by direct array index for 13-mers")
+        .def("get_index_info", &AindexWrapper::get_index_info,
+             "Get statistics about loaded index")
+        .def("get_positions_13mer", &AindexWrapper::get_positions_13mer,
+             "Get positions for 13-mers using the position index");
 }
-
-#endif

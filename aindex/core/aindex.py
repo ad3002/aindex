@@ -4,13 +4,19 @@
 # @created: 07.03.2015
 # @author: Aleksey Komissarov
 # @contact: ad3002@gmail.com
+# """
+Aindex Python API using pybind11 bindings
+This replaces the ctypes-based API with a safer, more Pythonic interface
+All file paths must be provided explicitly - no automatic name generation
+"""
 
+from typing import Optional, Dict, Any, List, Tuple
+try:
+    from . import aindex_cpp
+except ImportError:
+    import aindex_cpp
 import os
-import ctypes
-from ctypes import cdll, c_void_p, c_char_p, c_uint64, c_uint32
-import mmap
 from collections import defaultdict
-import importlib.resources as pkg_resources
 from enum import IntEnum
 from intervaltree import IntervalTree
 from editdistance import eval as edit_distance
@@ -18,72 +24,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-# Note: Logging handlers should be configured in the main application.
-
-# Load the shared library
-with pkg_resources.path('aindex.core', 'python_wrapper.so') as dll_path:
-    dll_path = str(dll_path)
-
-if not os.path.exists(dll_path):
-    logger.error(f"aindex's DLL was not found: {dll_path}")
-    raise FileNotFoundError(f"aindex's DLL was not found: {dll_path}")
-
-lib = cdll.LoadLibrary(dll_path)
-
-# Define argument and return types for the shared library functions
-lib.AindexWrapper_new.argtypes = []
-lib.AindexWrapper_new.restype = c_void_p
-
-lib.AindexWrapper_load.argtypes = [c_void_p, c_char_p, c_char_p]
-lib.AindexWrapper_load.restype = None
-
-lib.AindexWrapper_get.argtypes = [c_void_p, c_char_p]
-lib.AindexWrapper_get.restype = c_uint64
-
-lib.AindexWrapper_get_kid_by_kmer.argtypes = [c_void_p, c_char_p]
-lib.AindexWrapper_get_kid_by_kmer.restype = c_uint64
-
-lib.AindexWrapper_get_kmer_by_kid.argtypes = [c_void_p, c_uint64, c_char_p]
-lib.AindexWrapper_get_kmer_by_kid.restype = None
-
-lib.AindexWrapper_load_index.argtypes = [c_void_p, c_char_p, c_uint32]
-lib.AindexWrapper_load_index.restype = None
-
-lib.AindexWrapper_load_reads.argtypes = [c_void_p, c_char_p]
-lib.AindexWrapper_load_reads.restype = None
-
-lib.AindexWrapper_load_reads_index.argtypes = [c_void_p, c_char_p]
-lib.AindexWrapper_load_reads_index.restype = None
-
-lib.AindexWrapper_get_hash_size.argtypes = [c_void_p]
-lib.AindexWrapper_get_hash_size.restype = c_uint64
-
-lib.AindexWrapper_get_reads_size.argtypes = [c_void_p]
-lib.AindexWrapper_get_reads_size.restype = c_uint64
-
-lib.AindexWrapper_get_read.argtypes = [c_void_p, c_uint64, c_uint64, c_uint32]
-lib.AindexWrapper_get_read.restype = c_char_p
-
-lib.AindexWrapper_get_read_by_rid.argtypes = [c_void_p, c_uint64]
-lib.AindexWrapper_get_read_by_rid.restype = c_char_p
-
-lib.AindexWrapper_get_rid.argtypes = [c_void_p, c_uint64]
-lib.AindexWrapper_get_rid.restype = c_uint64
-
-lib.AindexWrapper_get_start.argtypes = [c_void_p, c_uint64]
-lib.AindexWrapper_get_start.restype = c_uint64
-
-lib.AindexWrapper_get_strand.argtypes = [c_void_p, c_char_p]
-lib.AindexWrapper_get_strand.restype = c_uint64
-
-lib.AindexWrapper_get_kmer.argtypes = [c_void_p, c_uint64, c_char_p, c_char_p]
-lib.AindexWrapper_get_kmer.restype = c_uint64
-
-lib.AindexWrapper_get_positions.argtypes = [c_void_p, ctypes.POINTER(c_uint64), c_char_p]
-lib.AindexWrapper_get_positions.restype = None
-
-lib.AindexWrapper_set_positions.argtypes = [c_void_p, ctypes.POINTER(c_uint64), c_char_p]
-lib.AindexWrapper_set_positions.restype = None
 
 class Strand(IntEnum):
     NOT_FOUND = 0
@@ -91,12 +31,12 @@ class Strand(IntEnum):
     REVERSE = 2
 
 def get_revcomp(sequence: str) -> str:
-    '''Return reverse complementary sequence.
+    """Return reverse complementary sequence.
 
     >>> get_revcomp('ATCGN')
     'NCGAT'
 
-    '''
+    """
     complement = str.maketrans('ATCGNatcgn~[]', 'TAGCNtagcn~][')
     return sequence.translate(complement)[::-1]
 
@@ -105,53 +45,60 @@ def hamming_distance(s1: str, s2: str) -> int:
     return sum(i != j for i, j in zip(s1, s2) if i != 'N' and j != 'N')
 
 class AIndex:
-    '''Wrapper for C++ AIndex implementation.'''
-
-    def __init__(self, index_prefix: str):
-        '''Initialize AIndex wrapper and load perfect hash.'''
-        self.obj = lib.AindexWrapper_new()
+    """
+    Python wrapper for the Aindex C++ library using pybind11
+    All file paths must be provided explicitly - no automatic name generation
+    """
+    
+    def __init__(self):
+        self._wrapper = aindex_cpp.AindexWrapper()
+        self._loaded = False
+        self.reads_size = 0
         self.loaded_header = False
         self.loaded_intervals = False
         self.loaded_reads = False
-        self.reads_size = 0
-
-        required_files = [index_prefix + ext for ext in [".pf", ".tf.bin", ".kmers.bin"]]
-        missing_files = [f for f in required_files if not os.path.isfile(f)]
-        if missing_files:
-            logger.error(f"One or more index files were not found: {', '.join(missing_files)}")
-            raise FileNotFoundError(f"One or more index files were not found: {', '.join(missing_files)}")
-
-        tf_file = index_prefix + ".tf.bin"
-        lib.AindexWrapper_load(self.obj, index_prefix.encode('utf-8'), tf_file.encode('utf-8'))
-
-    def load(self, index_prefix: str, max_tf: int):
-        '''Load AIndex with a maximum term frequency limit.'''
-        logger.info(f"Loading AIndex: {index_prefix}.*")
-
-        required_files = [index_prefix + ext for ext in [".pf", ".tf.bin", ".kmers.bin", ".index.bin", ".indices.bin", ".pos.bin"]]
-        missing_files = [f for f in required_files if not os.path.isfile(f)]
-        if missing_files:
-            logger.error(f"One or more index files were not found: {', '.join(missing_files)}")
-            raise FileNotFoundError(f"One or more index files were not found: {', '.join(missing_files)}")
-
-        self.max_tf = max_tf
-
-        tf_file = index_prefix + ".tf.bin"
-        lib.AindexWrapper_load_index(self.obj, index_prefix.encode('utf-8'), c_uint32(max_tf))
-
+        self.max_tf = 0
+        
+    def load_hash(self, hash_file: str, tf_file: str, kmers_bin_file: str, kmers_text_file: str):
+        """
+        Load hash index from explicit file paths
+        All files must exist and be provided explicitly
+        """
+        # Validate required files exist
+        for fname, fpath in [('hash', hash_file), ('tf', tf_file), 
+                           ('kmers_bin', kmers_bin_file)]:
+            if not os.path.exists(fpath):
+                raise FileNotFoundError(f"{fname} file not found: {fpath}")
+        
+        # Only check kmers_text_file if it's not empty
+        if kmers_text_file and not os.path.exists(kmers_text_file):
+            raise FileNotFoundError(f"kmers_text file not found: {kmers_text_file}")
+        
+        self._wrapper.load(hash_file, tf_file, kmers_bin_file, kmers_text_file)
+        self._loaded = True
+    
+    def load_hash_file(self, hash_file: str, tf_file: str, kmers_bin_file: str, kmers_text_file: str):
+        """
+        Load hash file with explicit paths (alias for load_hash)
+        """
+        self.load_hash(hash_file, tf_file, kmers_bin_file, kmers_text_file)
+        
     def load_reads(self, reads_file: str):
-        '''Load reads using the shared library.'''
-        if not os.path.isfile(reads_file):
-            logger.error(f"Reads file was not found: {reads_file}")
-            raise FileNotFoundError(f"Reads file was not found: {reads_file}")
-
-        logger.info(f"Loading reads: {reads_file}")
-        lib.AindexWrapper_load_reads(self.obj, reads_file.encode('utf-8'))
-        self.reads_size = lib.AindexWrapper_get_reads_size(self.obj)
-        logger.info(f"Loaded {self.reads_size} reads.")
-
+        """Load reads file"""
+        if not os.path.exists(reads_file):
+            raise FileNotFoundError(f"Reads file not found: {reads_file}")
+        self._wrapper.load_reads(reads_file)
+        self.reads_size = self._wrapper.reads_size
+        
+    def load_aindex(self, pos_file: str, index_file: str, indices_file: str, max_tf: int):
+        """Load aindex files with explicit paths"""
+        for fname, fpath in [('pos', pos_file), ('index', index_file), ('indices', indices_file)]:
+            if not os.path.exists(fpath):
+                raise FileNotFoundError(f"{fname} file not found: {fpath}")
+        self._wrapper.load_aindex(pos_file, index_file, indices_file, max_tf)
+        
     def load_reads_index(self, index_file: str, header_file: str = None):
-        '''Load reads index and optional headers.'''
+        """Load reads index and optional headers."""
         logger.info(f"Loading reads index: {index_file}")
         self.rid2start = {}
         self.IT = IntervalTree()
@@ -181,69 +128,147 @@ class AIndex:
                     self.IT.addi(start, start + length, head)
             self.loaded_header = True
 
-    def get_hash_size(self) -> int:
-        '''Get hash size.'''
-        return lib.AindexWrapper_get_hash_size(self.obj)
-
-    def __len__(self):
-        '''Get number of kmers.'''
-        return self.get_hash_size()
-
-    def __getitem__(self, kmer: str) -> int:
-        '''Return term frequency for kmer.'''
-        return lib.AindexWrapper_get(self.obj, kmer.encode('utf-8'))
-
-    def get_strand(self, kmer: str) -> Strand:
-        '''Return strand for kmer.'''
-        result = lib.AindexWrapper_get_strand(self.obj, kmer.encode('utf-8'))
-        return Strand(result)
-
+    def get_tf_value(self, kmer: str) -> int:
+        """Get term frequency for a kmer"""
+        if not self._loaded:
+            return 0  # Return 0 if no index is loaded
+        return self._wrapper.get_tf_value(kmer)
+        
+    def get_tf_values(self, kmers: List[str]) -> List[int]:
+        """Get term frequencies for multiple kmers"""
+        if not self._loaded:
+            return [0] * len(kmers)  # Return zeros if no index is loaded
+        return self._wrapper.get_tf_values(kmers)
+        
+    def get_tf_values_13mer(self, kmers: List[str]) -> List[int]:
+        """Get term frequency values for 13-mers using batch processing"""
+        if not self._loaded:
+            return [0] * len(kmers)
+        return self._wrapper.get_tf_values_13mer(kmers)
+        
+    def get_hash_value(self, kmer: str) -> int:
+        """Get hash value for a kmer"""
+        if not self._loaded:
+            raise RuntimeError("Index not loaded")
+        return self._wrapper.get_hash_value(kmer)
+        
+    def get_hash_values(self, kmers: List[str]) -> List[int]:
+        """Get hash values for multiple kmers"""
+        if not self._loaded:
+            raise RuntimeError("Index not loaded")
+        return self._wrapper.get_hash_values(kmers)
+        
+    def get_reads_by_kmer(self, kmer: str, max_reads: int = 100) -> List[str]:
+        """Get reads containing a specific kmer"""
+        if not self._wrapper.aindex_loaded:
+            raise RuntimeError("Aindex not loaded")
+        return self._wrapper.get_reads_se_by_kmer(kmer, max_reads)
+        
+    def get_read_by_rid(self, rid: int) -> str:
+        """Get read by read ID"""
+        return self._wrapper.get_read_by_rid(rid)
+        
+    def get_read(self, start: int, end: int, revcomp: bool = False) -> str:
+        """Get read by start and end positions"""
+        return self._wrapper.get_read(start, end, revcomp)
+        
     def get_kid_by_kmer(self, kmer: str) -> int:
-        '''Return kmer ID for kmer.'''
-        return lib.AindexWrapper_get_kid_by_kmer(self.obj, kmer.encode('utf-8'))
-
-    def get_kmer_by_kid(self, kid: int, k: int = 23) -> str:
-        '''Return kmer by kmer ID.'''
-        kmer = ctypes.create_string_buffer(k)
-        lib.AindexWrapper_get_kmer_by_kid(self.obj, c_uint64(kid), kmer)
-        return kmer.value.decode('utf-8')
-
-    def get_kmer_info_by_kid(self, kid: int, k: int = 23):
-        '''Get kmer, reverse complement kmer, and corresponding term frequency for a given kmer ID.'''
-        kmer = ctypes.create_string_buffer(k)
-        rkmer = ctypes.create_string_buffer(k)
-        tf = lib.AindexWrapper_get_kmer(self.obj, c_uint64(kid), kmer, rkmer)
-        return kmer.value.decode('utf-8'), rkmer.value.decode('utf-8'), tf
-
+        """Get kmer ID by kmer"""
+        if not self._loaded:
+            raise RuntimeError("Index not loaded")
+        return self._wrapper.get_kid_by_kmer(kmer)
+        
+    def get_kmer_by_kid(self, kid: int) -> str:
+        """Get kmer by kmer ID"""
+        if not self._loaded:
+            raise RuntimeError("Index not loaded")
+        return self._wrapper.get_kmer_by_kid(kid)
+        
+    def get_strand(self, kmer: str) -> Strand:
+        """Return strand for kmer."""
+        if not self._loaded:
+            raise RuntimeError("Index not loaded")
+        result = self._wrapper.get_strand(kmer)
+        return Strand(result)
+        
+    def get_kmer_info(self, kid: int) -> Tuple[str, str, int]:
+        """Get kmer info by kmer ID (kmer, rkmer, tf)"""
+        if not self._loaded:
+            raise RuntimeError("Index not loaded")
+            
+        # C++/Python string references don't work as expected for output parameters
+        # We need to get the kmer directly from the kid using get_kmer_by_kid
+        # and then compute its reverse complement for the return values
+        kmer = self.get_kmer_by_kid(kid)
+        from Bio.Seq import Seq
+        rkmer = str(Seq(kmer).reverse_complement())
+        tf = self.get_tf_value(kmer)
+        return kmer, rkmer, tf
+        
+    def get_rid(self, pos: int) -> int:
+        """Get read ID by position"""
+        if not self._wrapper.aindex_loaded:
+            raise RuntimeError("Aindex not loaded")
+        return self._wrapper.get_rid(pos)
+        
+    def get_start(self, pos: int) -> int:
+        """Get start position by position"""
+        if not self._wrapper.aindex_loaded:
+            raise RuntimeError("Aindex not loaded")
+        return self._wrapper.get_start(pos)
+        
+    def get_positions(self, kmer: str) -> List[int]:
+        """Get positions for kmer (supports both 13-mers and 23-mers)"""
+        if len(kmer) == 13:
+            # For 13-mers, require 13-mer aindex to be loaded
+            # The C++ wrapper will handle routing to the appropriate function
+            return self._wrapper.get_positions(kmer)
+        elif len(kmer) == 23:
+            # For 23-mers, require traditional aindex to be loaded
+            if not self._wrapper.aindex_loaded:
+                raise RuntimeError("23-mer Aindex not loaded")
+            return self._wrapper.get_positions(kmer)
+        else:
+            raise ValueError(f"Unsupported k-mer length: {len(kmer)}. Only 13-mers and 23-mers are supported.")
+        
+    def get_positions_13mer(self, kmer: str) -> List[int]:
+        """Get positions for 13-mers (direct method)"""
+        return self._wrapper.get_positions_13mer(kmer)
+        
+    def get_hash_size(self) -> int:
+        """Get hash size"""
+        if not self._loaded:
+            raise RuntimeError("Index not loaded")
+        return self._wrapper.get_hash_size()
+        
+    def get_reads_size(self) -> int:
+        """Get reads size"""
+        return self._wrapper.get_reads_size()
+        
+    def __len__(self) -> int:
+        """Get number of kmers"""
+        return self.get_hash_size()
+        
+    def __getitem__(self, kmer: str) -> int:
+        """Return term frequency for kmer"""
+        return self.get_tf_value(kmer)
+        
     def __contains__(self, kmer: str) -> bool:
-        """Check if a kmer exists in the index."""
+        """Check if a kmer exists in the index"""
         return self[kmer] > 0
-
+        
     def get(self, kmer: str, default: int = 0) -> int:
-        """Get term frequency for kmer, return default if not found."""
+        """Get term frequency for kmer, return default if not found"""
         tf = self[kmer]
         return tf if tf > 0 else default
 
-    def get_rid(self, pos: int) -> int:
-        '''Get read ID by position in read file.'''
-        return lib.AindexWrapper_get_rid(self.obj, c_uint64(pos))
-
-    def get_start(self, pos: int) -> int:
-        '''Get start position of read by position in read file.'''
-        return lib.AindexWrapper_get_start(self.obj, c_uint64(pos))
-
-    def get_read_by_rid(self, rid: int) -> str:
-        '''Get read sequence as string by read ID.'''
-        read = lib.AindexWrapper_get_read_by_rid(self.obj, c_uint64(rid))
-        return read.decode('utf-8') if read else ''
-
-    def get_read(self, start: int, end: int, revcomp: bool = False) -> str:
-        '''Get read by start and end positions.'''
-        read = lib.AindexWrapper_get_read(self.obj, c_uint64(start), c_uint64(end), int(revcomp))
-        return read.decode('utf-8') if read else ''
+    def get_kmer_info_by_kid(self, kid: int, k: int = 23):
+        """Get kmer, reverse complement kmer, and corresponding term frequency for a given kmer ID."""
+        kmer, rkmer, tf = self.get_kmer_info(kid)
+        return kmer, rkmer, tf
 
     def iter_reads(self):
-        '''Iterate over reads and yield (read_id, read).'''
+        """Iterate over reads and yield (read_id, read)."""
         if self.reads_size == 0:
             logger.error("Reads were not loaded.")
             raise RuntimeError("Reads were not loaded.")
@@ -252,7 +277,7 @@ class AIndex:
             yield rid, self.get_read_by_rid(rid)
 
     def iter_reads_se(self):
-        '''Iterate over reads and yield (read_id, subread_index, subread).'''
+        """Iterate over reads and yield (read_id, subread_index, subread)."""
         if self.reads_size == 0:
             logger.error("Reads were not loaded.")
             raise RuntimeError("Reads were not loaded.")
@@ -264,14 +289,11 @@ class AIndex:
                 yield rid, idx, subread
 
     def pos(self, kmer: str) -> list:
-        '''Return list of positions for a given kmer.'''
-        n = self.max_tf
-        r = (c_uint64 * n)()
-        lib.AindexWrapper_get_positions(self.obj, r, kmer.encode('utf-8'))
-        return [r[i] - 1 for i in range(n) if r[i] > 0]
+        """Return list of positions for a given kmer."""
+        return self.get_positions(kmer)
 
     def get_header(self, pos: int) -> str:
-        '''Get header information for a position.'''
+        """Get header information for a position."""
         if not self.loaded_header:
             return None
         intervals = self.IT[pos]
@@ -281,7 +303,7 @@ class AIndex:
         return ''
 
     def iter_sequence_kmers(self, sequence: str, k: int = 23):
-        '''Iterate over kmers in a sequence and yield (kmer, term_frequency).'''
+        """Iterate over kmers in a sequence and yield (kmer, term_frequency)."""
         for i in range(len(sequence) - k + 1):
             kmer = sequence[i:i + k]
             if '\n' in kmer or '~' in kmer:
@@ -289,8 +311,8 @@ class AIndex:
             yield kmer, self[kmer]
 
     def get_sequence_coverage(self, seq: str, cutoff: int = 0, k: int = 23) -> list:
-        '''Get coverage of a sequence based on kmers.'''
-        coverage = [0] * len(seq)
+        """Get coverage of a sequence based on kmers."""
+        coverage = [0] * (len(seq) - k + 1)
         for i in range(len(seq) - k + 1):
             kmer = seq[i:i + k]
             tf = self[kmer]
@@ -299,15 +321,16 @@ class AIndex:
         return coverage
 
     def print_sequence_coverage(self, seq: str, cutoff: int = 0):
-        '''Print sequence coverage and return list of term frequencies for each kmer.'''
+        """Print sequence coverage and return list of term frequencies for each kmer."""
         coverage = self.get_sequence_coverage(seq, cutoff)
         for i, tf in enumerate(coverage):
+            # Only print complete k-mers (avoid printing shorter k-mers at the end)
             kmer = seq[i:i + 23]
             print(f"{i}\t{kmer}\t{tf}")
         return coverage
 
     def get_rid2poses(self, kmer: str) -> dict:
-        '''Return a mapping from read ID to positions in read for a given kmer.'''
+        """Return a mapping from read ID to positions in read for a given kmer."""
         poses = self.pos(kmer)
         hits = defaultdict(list)
         for pos in poses:
@@ -316,228 +339,230 @@ class AIndex:
             hits[rid].append(pos - start)
         return hits
 
-    def set(self, poses_array: list, kmer: str, batch_size: int):
-        '''Update kmer batch (this function is not fully implemented).'''
-        logger.warning("WARNING: called a function with the fixed batch size.")
-        n = batch_size * 2
-        r = (c_uint64 * n)()
-        for i, (rid, pos) in enumerate(poses_array):
-            r[i + batch_size] = c_uint64(rid)
-            r[i] = c_uint64(pos)
-        lib.AindexWrapper_set_positions(self.obj, r, kmer.encode('utf-8'))
+        
+    @property
+    def n_reads(self) -> int:
+        """Number of reads"""
+        return self._wrapper.n_reads
+        
+    @property 
+    def n_kmers(self) -> int:
+        """Number of kmers"""
+        return self._wrapper.n_kmers
+        
+    @property
+    def aindex_loaded(self) -> bool:
+        """Whether aindex is loaded"""
+        return self._wrapper.aindex_loaded
 
-def get_aindex(prefix_path: str, skip_aindex: bool = False, max_tf: int = 1_000_000) -> AIndex:
-    required_files = [
-        f"{prefix_path}.23.pf",
-        f"{prefix_path}.23.tf.bin",
-        f"{prefix_path}.23.kmers.bin",
-    ]
-    if not skip_aindex:
-        required_files.extend([
-            f"{prefix_path}.23.index.bin",
-            f"{prefix_path}.23.indices.bin",
-            f"{prefix_path}.23.pos.bin",
-            f"{prefix_path}.reads",
-            f"{prefix_path}.ridx",
-        ])
+    def load_13mer_index(self, hash_file: str, tf_file: str):
+        """
+        Load 13-mer index (hash and term frequencies) from explicit file paths
+        """
+        if not os.path.exists(hash_file):
+            raise FileNotFoundError(f"13-mer hash file not found: {hash_file}")
+        if not os.path.exists(tf_file):
+            raise FileNotFoundError(f"13-mer tf file not found: {tf_file}")
+        
+        self._wrapper.load_13mer_index(hash_file, tf_file)
+        self._loaded = True
+        
+    def load_13mer_aindex(self, pos_file: str, index_file: str, indices_file: str):
+        """
+        Load 13-mer position index from explicit file paths
+        """
+        for fname, fpath in [('pos', pos_file), ('index', index_file), ('indices', indices_file)]:
+            if not os.path.exists(fpath):
+                raise FileNotFoundError(f"13-mer {fname} file not found: {fpath}")
+        
+        self._wrapper.load_13mer_aindex(pos_file, index_file, indices_file)
+        
+    @staticmethod
+    def load_13mer_index_static(hash_file: str, tf_file: str) -> 'AIndex':
+        """
+        Load 13-mer index with automatic mode detection
+    
+        Args:
+            hash_file: Path to .hash file (from build_13mer_hash)
+            tf_file: Path to .tf.bin file (from count_kmers13)
+    
+        Returns:
+            AIndex instance configured for 13-mer mode
+            
+        Example:
+            >>> index = load_13mer_index('13mers.hash', '13mers.tf.bin')
+            >>> tf_value = index.get_tf_value('ATCGATCGATCGA')
+            >>> all_counts = index.get_13mer_tf_array()
+        """
+        index = AIndex()
+        index.load_13mer_index(hash_file, tf_file)
+        return index
 
-    missing_files = [file for file in required_files if not os.path.isfile(file)]
-    if missing_files:
-        logger.error(f"Required files not found: {', '.join(missing_files)}")
-        raise FileNotFoundError(f"Required files not found: {', '.join(missing_files)}")
+    @staticmethod
+    def load_23mer_index(hash_file: str, tf_file: str, kmers_bin_file: str, kmers_text_file: str = "") -> 'AIndex':
+        """
+        Load traditional 23-mer index
+    
+        Args:
+            hash_file: Path to hash file
+            tf_file: Path to tf file  
+            kmers_bin_file: Path to binary kmers file
+            kmers_text_file: Path to text kmers file (optional)
+    
+        Returns:
+            AIndex instance configured for 23-mer mode
+        """
+        index = AIndex()
+        index.load_hash(hash_file, tf_file, kmers_bin_file, kmers_text_file)
+        return index
 
-    settings = {
-        "index_prefix": f"{prefix_path}.23",
-        "aindex_prefix": f"{prefix_path}.23",
-        "reads_file": f"{prefix_path}.reads",
-        "max_tf": max_tf,
-    }
-
-    return load_aindex(settings, skip_reads=skip_aindex, skip_aindex=skip_aindex)
-
-def load_aindex(settings: dict, prefix: str = None, reads: str = None, aindex_prefix: str = None, skip_reads: bool = False, skip_aindex: bool = False) -> AIndex:
-    '''Load AIndex, including optional reads and aindex data.'''
-    if prefix is None:
-        prefix = settings.get("index_prefix")
-    if reads is None and not skip_reads:
-        reads = settings.get("reads_file")
-
-    max_tf = settings.get("max_tf", 10000)
-    if aindex_prefix is None and not skip_aindex:
-        aindex_prefix = settings.get("aindex_prefix")
-
-    aindex = AIndex(prefix)
-    aindex.max_tf = max_tf
-
-    if not skip_reads:
-        aindex.load_reads(reads)
-    if not skip_aindex:
-        aindex.load(aindex_prefix, max_tf)
-
-    return aindex
-
-def get_srandness(kmer: str, aindex: AIndex, k: int = 23) -> tuple:
-    '''Return the number of plus and minus strand occurrences for a kmer.'''
-    poses = aindex.pos(kmer)
-    plus = minus = 0
-    for pos in poses:
-        read_kmer = aindex.get_read(pos, pos + k)
-        if kmer == read_kmer:
-            plus += 1
-        else:
-            minus += 1
-    return plus, minus, len(poses)
-
-def iter_reads_by_kmer(kmer: str, aindex: AIndex, used_reads: set = None, skip_multiple: bool = False, k: int = 23):
-    '''Yield reads containing the given kmer.'''
-    if used_reads is None:
-        used_reads = set()
-    rid2poses = aindex.get_rid2poses(kmer)
-    for rid, poses in rid2poses.items():
-        if rid in used_reads:
-            continue
-        used_reads.add(rid)
-        read = aindex.get_read_by_rid(rid)
-        if skip_multiple and len(poses) > 1:
-            continue
-        for pos in poses:
-            if not read[pos:pos + k] == kmer:
-                read = get_revcomp(read)
-                poses = [len(read) - x - k for x in poses]
-                pos = poses[0]
-            yield [rid, pos, read, poses]
-
-def iter_reads_by_sequence(sequence: str, aindex: AIndex, hd: int = None, ed: int = None, used_reads: set = None, skip_multiple: bool = False, k: int = 23):
-    '''Yield reads containing the given sequence.'''
-    if len(sequence) >= k:
-        kmer = sequence[:k]
-        n = len(sequence)
-        for rid, pos, read, poses in iter_reads_by_kmer(kmer, aindex, used_reads=used_reads, skip_multiple=skip_multiple, k=k):
-            for pos in poses:
-                if not hd and sequence in read:
-                    yield rid, pos, read, poses
-                elif hd:
-                    fragment = read[pos:pos + n]
-                    if len(fragment) == n and hamming_distance(fragment, sequence) <= hd:
-                        yield rid, pos, read, poses, hd
-                elif ed:
-                    fragment = read[pos:pos + n]
-                    if len(fragment) == n and edit_distance(fragment, sequence) <= ed:
-                        yield rid, pos, read, poses, ed
-    else:
-        yield None
-
-def iter_reads_se_by_kmer(kmer: str, aindex: AIndex, used_reads: set = None, k: int = 23):
-    '''Yield split reads containing the given kmer.'''
-    if used_reads is None:
-        used_reads = set()
-    for rid, pos, read, poses in iter_reads_by_kmer(kmer, aindex, used_reads=used_reads, k=k):
-        spring_pos = read.find("~")
-        if spring_pos == -1:
-            yield [rid, pos, read, -1]
-            continue
-        left, right = read.split("~")
-        if pos < spring_pos:
-            read = left
-            pos = pos
-            yield [rid, pos, read, 0]
-        else:
-            read = right
-            pos = pos - spring_pos - 1
-            yield [rid, pos, read, 1]
-
-def get_left_right_distances(left_kmer: str, right_kmer: str, aindex: AIndex, k: int = 23):
-    '''Return distances between left and right kmers in reads.'''
-    hits = defaultdict(list)
-    for pos in aindex.pos(left_kmer):
-        rid = aindex.get_rid(pos)
-        hits[rid].append((0, pos))
-    for pos in aindex.pos(right_kmer):
-        rid = aindex.get_rid(pos)
-        hits[rid].append((1, pos))
-    for rid, hit_list in hits.items():
-        if len(hit_list) != 2:
-            continue
-        hit_list.sort()
-        (type1, pos1), (type2, pos2) = hit_list
-        if type1 == type2:
-            continue
-        start, end = sorted([pos1, pos2])
-        fragment = aindex.get_read(start, end + k)
-        reversed_read = False
-        if not fragment:
-            fragment = aindex.get_read(end, start + k, revcomp=True)
-            reversed_read = True
-        has_spring = '~' in fragment
-        yield rid, start, end, len(fragment), fragment, has_spring, reversed_read
-
-def get_layout_from_reads(kmer: str, aindex: AIndex, used_reads: set = None, k: int = 23, space: str = "N"):
-    '''Get layout and flanking reads for a given kmer.'''
-    if used_reads is None:
-        used_reads = set()
-    max_pos = 0
-    reads = []
-    lefts = []
-    rights = []
-    rids = []
-    starts = []
-    for rid, pos, read, poses in iter_reads_by_kmer(kmer, aindex, used_reads, k=k):
-        spring_pos = read.find("~")
-        if spring_pos > -1:
-            left, right = read.split("~")
-            if pos < spring_pos:
-                lefts.append("")
-                rights.append(right)
-                read = left
+    @staticmethod
+    def load_from_prefix(prefix: str, kmer_size: Optional[int] = None, max_tf: Optional[int] = None, 
+                        load_aindex: bool = True, load_reads: bool = False) -> 'AIndex':
+        """
+        Load index from prefix with auto-detection or manual specification
+        
+        Args:
+            prefix: File prefix (e.g., 'reads.23', 'reads.13', 'mydata')
+            kmer_size: Manual k-mer size specification (13 or 23). If None, auto-detect from files
+            max_tf: Maximum term frequency for aindex loading (23-mers only)
+            load_aindex: Whether to load position index (default: True)
+            load_reads: Whether to load reads file (default: False)
+            
+        Returns:
+            AIndex instance configured for detected/specified mode
+            
+        Examples:
+            >>> # Auto-detect from files
+            >>> index = AIndex.load_from_prefix('reads.23')
+            >>> index = AIndex.load_from_prefix('reads.13')
+            
+            >>> # Manual specification
+            >>> index = AIndex.load_from_prefix('mydata', kmer_size=23, max_tf=100)
+            >>> index = AIndex.load_from_prefix('mydata', kmer_size=13)
+            
+            >>> # Load without aindex
+            >>> index = AIndex.load_from_prefix('reads.23', load_aindex=False)
+            
+            >>> # Load with reads
+            >>> index = AIndex.load_from_prefix('reads.23', load_reads=True)
+        """
+        index = AIndex()
+        
+        # Auto-detect k-mer size if not specified
+        if kmer_size is None:
+            # Check for 13-mer files
+            hash_13_file = f"{prefix}.hash"
+            tf_13_file = f"{prefix}.tf.bin"
+            
+            # Check for 23-mer files  
+            pf_23_file = f"{prefix}.pf"
+            tf_23_file = f"{prefix}.tf.bin"
+            kmers_bin_file = f"{prefix}.kmers.bin"
+            
+            if os.path.exists(hash_13_file) and os.path.exists(tf_13_file):
+                kmer_size = 13
+                logger.info(f"Auto-detected 13-mer mode from files: {hash_13_file}, {tf_13_file}")
+            elif os.path.exists(pf_23_file) and os.path.exists(tf_23_file) and os.path.exists(kmers_bin_file):
+                kmer_size = 23
+                logger.info(f"Auto-detected 23-mer mode from files: {pf_23_file}, {tf_23_file}, {kmers_bin_file}")
             else:
-                lefts.append(left)
-                rights.append("")
-                pos = pos - len(left) - 1
-                read = right
-        max_pos = max(max_pos, pos)
-        reads.append(read)
-        starts.append(pos)
-        rids.append(rid)
-    max_length = max(len(read) + max_pos - starts[i] for i, read in enumerate(reads))
-    aligned_reads = [space * (max_pos - starts[i]) + read + space * (max_length - (max_pos - starts[i]) - len(read)) for i, read in enumerate(reads)]
-    return max_pos, aligned_reads, lefts, rights, rids, starts
+                raise FileNotFoundError(
+                    f"Could not auto-detect k-mer size for prefix '{prefix}'. "
+                    f"Expected either:\n"
+                    f"  13-mer: {hash_13_file} + {tf_13_file}\n"
+                    f"  23-mer: {pf_23_file} + {tf_23_file} + {kmers_bin_file}"
+                )
+        
+        # Determine reads file path if loading reads
+        reads_file = ""
+        if load_reads:
+            reads_file = f"{prefix}.reads"
+            if not os.path.exists(reads_file):
+                logger.warning(f"Reads file not found: {reads_file}")
+                reads_file = ""
+        
+        # Load based on kmer size
+        if kmer_size == 13:
+            index.load_from_prefix_13mer(prefix, load_aindex=load_aindex, reads_file=reads_file)
+        elif kmer_size == 23:
+            if max_tf is None:
+                max_tf = 100  # Default value for 23-mers
+            index.load_from_prefix_23mer(prefix, max_tf=max_tf, load_aindex=load_aindex, reads_file=reads_file)
+        else:
+            raise ValueError(f"Unsupported kmer size: {kmer_size}. Only 13 and 23 are supported.")
+        
+        return index
 
-### Assembly-by-extension
+    def load_from_prefix_23mer(self, prefix: str, max_tf: int = 100, load_aindex: bool = True, reads_file: str = ""):
+        """
+        Load 23-mer index and optionally aindex from prefix
+        
+        Args:
+            prefix: File prefix
+            max_tf: Maximum term frequency for aindex loading
+            load_aindex: Whether to load position index
+            reads_file: Optional path to reads file (if not provided, no reads will be loaded)
+        """
+        # Load hash index
+        self._wrapper.load_from_prefix_23mer(prefix, reads_file)
+        self._loaded = True
+        
+        # Load aindex if requested
+        if load_aindex:
+            try:
+                self._wrapper.load_aindex_from_prefix_23mer(prefix, max_tf, reads_file)
+                logger.info(f"23-mer AIndex loaded from prefix: {prefix}")
+            except Exception as e:
+                logger.warning(f"Could not load 23-mer AIndex from prefix {prefix}: {e}")
 
-# def get_reads_for_assemby_by_kmer(kmer2tf, kmer, used_reads, compute_cov=True, k=23, mode=None):
-#     ''' Get reads prepared for assembly-by-extension.
-#         Return sorted by pos list of (pos, read, rid, poses, cov)
-#         Mode: left, right
-#     '''
-#     to_assembly = []
-#     for rid, poses in kmer2tf.get_rid2poses(kmer).items():
-#         if rid in used_reads:
-#             continue
-#         used_reads.add(rid)
-#         read = kmer2tf.get_read_by_rid(rid)
+    def load_from_prefix_13mer(self, prefix: str, load_aindex: bool = True, reads_file: str = ""):
+        """
+        Load 13-mer index and optionally aindex from prefix
+        
+        Args:
+            prefix: File prefix
+            load_aindex: Whether to load position index
+            reads_file: Optional path to reads file (if not provided, no reads will be loaded)
+        """
+        # Load hash index
+        self._wrapper.load_from_prefix_13mer(prefix, reads_file)
+        self._loaded = True
+        
+        # Load aindex if requested
+        if load_aindex:
+            try:
+                self._wrapper.load_aindex_from_prefix_13mer(prefix, reads_file)
+                logger.info(f"13-mer AIndex loaded from prefix: {prefix}")
+            except Exception as e:
+                logger.warning(f"Could not load 13-mer AIndex from prefix {prefix}: {e}")
 
-#         spring_pos = None
-#         if mode:
-#             spring_pos = read.find("~")
+    def get_13mer_tf_array(self) -> List[int]:
+        """
+        Get direct access to 13-mer tf array
+        
+        Returns:
+            List of term frequencies for all possible 13-mers (4^13 = 67,108,864 elements)
+        """
+        return self._wrapper.get_13mer_tf_array()
 
-#         ori_poses = poses
-#         if not read[poses[0]:poses[0]+k] == kmer:
-#             read = get_revcomp(read)
-#             poses = [x for x in map(lambda x: len(read)-x-k, poses)][::-1]
+    def get_tf_by_index_13mer(self, index: int) -> int:
+        """
+        Get tf value by direct array index for 13-mers
+        
+        Args:
+            index: Array index (0 to 4^13-1)
+            
+        Returns:
+            Term frequency value
+        """
+        return self._wrapper.get_tf_by_index_13mer(index)
 
-#         if mode == "left":
-#             read = read.split("~")[0]
-#             poses = [x for x in poses if x < spring_pos]
-#         elif mode == "right":
-#             read = read.split("~")[-1]
-#             poses = [x for x in poses if x > spring_pos]
-
-#         if not poses:
-#             continue
-
-#         cov = None
-#         if compute_cov:
-#             cov = [kmer2tf[read[i:i+k]] for i in range(len(read)-k+1)]
-#         to_assembly.append((poses[0], read, rid, ori_poses, cov))
-#     to_assembly.sort(reverse=True)
-#     return to_assembly
+    def get_index_info(self) -> str:
+        """
+        Get statistics about loaded index
+        
+        Returns:
+            String with index information including mode, k-mer counts, etc.
+        """
+        return self._wrapper.get_index_info()
