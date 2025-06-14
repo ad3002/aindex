@@ -125,7 +125,7 @@ jobs:
           
           # Test wheels
           CIBW_TEST_COMMAND: |
-            python -c "import aindex; ai = aindex.AIndex(); print('AIndex imported and instantiated successfully')"
+            python -c "from aindex.core.aindex import AIndex; ai = AIndex(); print('AIndex imported and instantiated successfully')"
           
           # Environment variables
           CIBW_ENVIRONMENT_LINUX: MAKEFLAGS="-j$(nproc)"
