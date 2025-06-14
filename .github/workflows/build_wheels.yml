@@ -42,7 +42,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install setuptools==69.5.1 wheel==0.43.0 cibuildwheel
+          pip install cibuildwheel
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.19.2
@@ -109,38 +109,23 @@ jobs:
           
           # Platform-specific before_build commands
           CIBW_BEFORE_BUILD: |
-            pip install --upgrade pip
-            pip install setuptools==69.5.1 wheel==0.43.0
-            pip install cmake pybind11 numpy
             python -c "import sys; print(f'Building for Python {sys.version}')"
-            python -c "import pybind11; print(f'pybind11 include: {pybind11.get_include()}')"
           
           CIBW_BEFORE_BUILD_LINUX: |
-            pip install --upgrade pip
-            pip install setuptools==69.5.1 wheel==0.43.0
-            pip install cmake pybind11 numpy
             python -c "import sys; print(f'Python: {sys.executable}')"
-            python -c "import pybind11; print(f'pybind11: {pybind11.get_include()}')"
             # Set environment variable for cibuildwheel detection
             export CIBUILDWHEEL=1
             # Only build pybind11 extension, binaries are already built in BEFORE_ALL
             make pybind11
           
           CIBW_BEFORE_BUILD_MACOS: |
-            pip install --upgrade pip
-            pip install setuptools==69.5.1 wheel==0.43.0
-            pip install cmake pybind11 numpy
             python -c "import sys; print(f'Python: {sys.executable}')"
-            python -c "import pybind11; print(f'pybind11: {pybind11.get_include()}')"
             # Set environment variable for cibuildwheel detection
             export CIBUILDWHEEL=1
             # Only build pybind11 extension, binaries are already built in BEFORE_ALL
             make pybind11
           
           CIBW_BEFORE_BUILD_WINDOWS: |
-            pip install --upgrade pip
-            pip install setuptools==69.5.1 wheel==0.43.0
-            pip install cmake pybind11 numpy
             python setup.py build_ext --inplace
           
           # Repair wheels (Linux only) - simplified macOS repair
@@ -197,7 +182,6 @@ jobs:
       - name: Build sdist
         run: |
           pip install --upgrade pip
-          pip install setuptools==69.5.1 wheel==0.43.0 pybind11 numpy
           python setup.py sdist
 
       - uses: actions/upload-artifact@v4
