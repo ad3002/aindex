@@ -64,6 +64,7 @@ ifeq ($(UNAME_S),Darwin)
     MACOS = true
 else
     CXXFLAGS += -I$(PYTHON_INCLUDE) $(PYTHON_HEADERS)
+    LDFLAGS = -shared
     MACOS = false
 endif
 
@@ -127,7 +128,7 @@ pybind11: $(OBJECTS) $(SRC_DIR)/python_wrapper.cpp | $(PACKAGE_DIR)
 		exit 1; \
 	else \
 		echo "pybind11 include path: $$PYBIND11_INCLUDE"; \
-		$(CXX) $(CXXFLAGS) -I$$PYBIND11_INCLUDE $(LDFLAGS) -o $(PACKAGE_DIR)/aindex_cpp$(PYTHON_SUFFIX) $(SRC_DIR)/python_wrapper.cpp $(OBJECTS); \
+		$(CXX) $(CXXFLAGS) -I$$PYBIND11_INCLUDE -I./external $(LDFLAGS) -o $(PACKAGE_DIR)/aindex_cpp$(PYTHON_SUFFIX) $(SRC_DIR)/python_wrapper.cpp $(OBJECTS); \
 	fi
 
 $(PACKAGE_DIR)/python_wrapper.so: $(SRC_DIR)/python_wrapper.o $(OBJECTS) | $(PACKAGE_DIR)
