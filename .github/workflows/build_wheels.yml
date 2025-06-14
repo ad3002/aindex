@@ -42,7 +42,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install setuptools wheel cibuildwheel
+          pip install setuptools==69.5.1 wheel==0.43.0 cibuildwheel
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.19.2
@@ -109,11 +109,15 @@ jobs:
           
           # Platform-specific before_build commands
           CIBW_BEFORE_BUILD: |
+            pip install --upgrade pip
+            pip install setuptools==69.5.1 wheel==0.43.0
             pip install cmake pybind11 numpy
             python -c "import sys; print(f'Building for Python {sys.version}')"
             python -c "import pybind11; print(f'pybind11 include: {pybind11.get_include()}')"
           
           CIBW_BEFORE_BUILD_LINUX: |
+            pip install --upgrade pip
+            pip install setuptools==69.5.1 wheel==0.43.0
             pip install cmake pybind11 numpy
             python -c "import sys; print(f'Python: {sys.executable}')"
             python -c "import pybind11; print(f'pybind11: {pybind11.get_include()}')"
@@ -123,6 +127,8 @@ jobs:
             make pybind11
           
           CIBW_BEFORE_BUILD_MACOS: |
+            pip install --upgrade pip
+            pip install setuptools==69.5.1 wheel==0.43.0
             pip install cmake pybind11 numpy
             python -c "import sys; print(f'Python: {sys.executable}')"
             python -c "import pybind11; print(f'pybind11: {pybind11.get_include()}')"
@@ -132,6 +138,8 @@ jobs:
             make pybind11
           
           CIBW_BEFORE_BUILD_WINDOWS: |
+            pip install --upgrade pip
+            pip install setuptools==69.5.1 wheel==0.43.0
             pip install cmake pybind11 numpy
             python setup.py build_ext --inplace
           
@@ -156,8 +164,9 @@ jobs:
             python -c "import aindex; print('✓ Import successful')"
           
           # Environment variables
-          CIBW_ENVIRONMENT_LINUX: MAKEFLAGS="-j$(nproc)"
-          CIBW_ENVIRONMENT_MACOS: MAKEFLAGS="-j$(sysctl -n hw.ncpu)"
+          CIBW_ENVIRONMENT_LINUX: MAKEFLAGS="-j$(nproc)" SETUPTOOLS_USE_DISTUTILS=stdlib
+          CIBW_ENVIRONMENT_MACOS: MAKEFLAGS="-j$(sysctl -n hw.ncpu)" SETUPTOOLS_USE_DISTUTILS=stdlib
+          CIBW_ENVIRONMENT_WINDOWS: SETUPTOOLS_USE_DISTUTILS=stdlib
           
         with:
           package-dir: .
@@ -187,7 +196,8 @@ jobs:
 
       - name: Build sdist
         run: |
-          pip install setuptools wheel pybind11 numpy
+          pip install --upgrade pip
+          pip install setuptools==69.5.1 wheel==0.43.0 pybind11 numpy
           python setup.py sdist
 
       - uses: actions/upload-artifact@v4
