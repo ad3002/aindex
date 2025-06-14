@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aindex2"
-version = "1.3.23"
+version = "1.3.24"
 description = "Perfect hash based index for genome data."
 authors = [{name = "Aleksey Komissarov", email = "ad3002@gmail.com"}]
 readme = "README.md"

@@ -112,7 +112,7 @@ $(BIN_DIR)/compute_reads$(BIN_EXT): $(SRC_DIR)/compute_reads.cpp $(OBJECTS) | $(
 	$(CXX) $(OBJ_CXXFLAGS) $^ -o $@
 
 $(BIN_DIR)/kmer_counter$(BIN_EXT): $(SRC_DIR)/count_kmers.cpp | $(BIN_DIR)
-	$(CXX) $(OBJ_CXXFLAGS) -fopenmp $< -o $@ -fopenmp
+	$(CXX) $(OBJ_CXXFLAGS) $< -o $@
 
 $(BIN_DIR)/generate_all_13mers$(BIN_EXT): $(SRC_DIR)/generate_all_13mers.cpp $(OBJ_DIR)/kmers.o | $(BIN_DIR)
 	$(CXX) $(OBJ_CXXFLAGS) $^ -o $@
