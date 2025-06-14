@@ -114,17 +114,41 @@ class build_ext(build_ext_orig):
         pkg_bin_dir = os.path.join(build_lib, 'aindex', 'bin')
         os.makedirs(pkg_bin_dir, exist_ok=True)
         
-        if os.path.exists('bin'):
-            for file in glob.glob('bin/*'):
-                if os.path.isfile(file):  # Only copy files, not directories
-                    dest_file = os.path.join(pkg_bin_dir, os.path.basename(file))
-                    shutil.copy2(file, dest_file)
-                    # Make executable on Unix-like systems
-                    if not file.endswith('.py'):
-                        os.chmod(dest_file, 0o755)
-                    print(f"Copied binary to package: {os.path.basename(file)}")
-        else:
-            print("Warning: No bin directory found for copying binaries.")
+        # Try multiple sources for binaries
+        binary_sources = ['bin', 'aindex/bin']
+        binaries_copied = 0
+        
+        for source_dir in binary_sources:
+            if os.path.exists(source_dir):
+                for file in glob.glob(os.path.join(source_dir, '*')):
+                    if os.path.isfile(file):  # Only copy files, not directories
+                        dest_file = os.path.join(pkg_bin_dir, os.path.basename(file))
+                        shutil.copy2(file, dest_file)
+                        # Make executable on Unix-like systems
+                        if not file.endswith('.py'):
+                            os.chmod(dest_file, 0o755)
+                        print(f"Copied binary to package: {os.path.basename(file)} from {source_dir}")
+                        binaries_copied += 1
+        
+        if binaries_copied == 0:
+            print("Warning: No binaries found to copy from bin/ or aindex/bin/")
+            # In CI, try to ensure binaries exist in aindex/bin
+            if in_cibw or os.environ.get('CI'):
+                print("CI environment detected, ensuring binaries are copied to aindex/bin")
+                if os.path.exists('bin'):
+                    # Copy from bin to aindex/bin and then to package
+                    os.makedirs('aindex/bin', exist_ok=True)
+                    for file in glob.glob('bin/*'):
+                        if os.path.isfile(file):
+                            dest_in_source = os.path.join('aindex/bin', os.path.basename(file))
+                            shutil.copy2(file, dest_in_source)
+                            # Now copy to build directory
+                            dest_file = os.path.join(pkg_bin_dir, os.path.basename(file))
+                            shutil.copy2(file, dest_file)
+                            if not file.endswith('.py'):
+                                os.chmod(dest_file, 0o755)
+                            print(f"CI: Copied binary {os.path.basename(file)}")
+                            binaries_copied += 1
         
         # Old method - copy to separate pkg_bin_dir (kept for compatibility)
         pkg_bin_dir_old = os.path.join(build_lib, 'aindex', 'bin')

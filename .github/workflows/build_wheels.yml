@@ -74,6 +74,10 @@ jobs:
             echo "Available binaries:"
             ls -la bin/ || echo "No bin directory"
             ls -la external/emphf/ || echo "No emphf directory"
+            echo "Copying binaries to aindex/bin for packaging..."
+            mkdir -p aindex/bin
+            cp bin/* aindex/bin/ 2>/dev/null || echo "No binaries to copy"
+            ls -la aindex/bin/ || echo "No aindex/bin directory"
           
           CIBW_BEFORE_ALL_MACOS: |
             echo "Building external dependencies on macOS..."
@@ -97,6 +101,10 @@ jobs:
             echo "Available binaries:"
             ls -la bin/ || echo "No bin directory"
             ls -la external/emphf/ || echo "No emphf directory"
+            echo "Copying binaries to aindex/bin for packaging..."
+            mkdir -p aindex/bin
+            cp bin/* aindex/bin/ 2>/dev/null || echo "No binaries to copy"
+            ls -la aindex/bin/ || echo "No aindex/bin directory"
           
           CIBW_BEFORE_ALL_WINDOWS: |
             mkdir external
