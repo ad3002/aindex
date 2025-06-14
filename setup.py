@@ -77,15 +77,29 @@ class build_ext(build_ext_orig):
                 if not install_colab_dependencies():
                     raise RuntimeError("Failed to install required build dependencies")
         
+        # Check if we're in a cibuildwheel environment or if binaries already exist
+        in_cibw = os.environ.get('CIBUILDWHEEL', '0') == '1'
+        
         try:
-            subprocess.check_call(['make', 'clean'])
-            subprocess.check_call(['make', 'all'])  # Build everything including binaries
+            if in_cibw:
+                # In cibuildwheel, external dependencies should be built in BEFORE_ALL
+                # We only need to build the pybind11 extension
+                print("Building in cibuildwheel environment - building only pybind11 extension")
+                subprocess.check_call(['make', 'clean'])
+                subprocess.check_call(['make', 'pybind11'])
+            else:
+                # Regular build - build everything
+                subprocess.check_call(['make', 'clean'])
+                subprocess.check_call(['make', 'all'])  # Build everything including binaries
         except subprocess.CalledProcessError as e:
             print(f"Build failed with error: {e}")
             print("Attempting to build with verbose output...")
             try:
                 subprocess.check_call(['make', 'clean'])
-                subprocess.check_call(['make', 'all', 'VERBOSE=1'])
+                if in_cibw:
+                    subprocess.check_call(['make', 'pybind11', 'VERBOSE=1'])
+                else:
+                    subprocess.check_call(['make', 'all', 'VERBOSE=1'])
             except subprocess.CalledProcessError as e2:
                 raise RuntimeError(f"Failed to build C++ extensions: {e2}")
         

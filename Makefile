@@ -60,7 +60,17 @@ else
     MACOS = false
 endif
 
-all: clean external $(BIN_DIR) $(OBJ_DIR) $(BIN_DIR)/compute_index.exe $(BIN_DIR)/compute_aindex.exe $(BIN_DIR)/compute_reads.exe $(BIN_DIR)/kmer_counter.exe $(BIN_DIR)/generate_all_13mers.exe $(BIN_DIR)/Build_13mer_hash.exe $(BIN_DIR)/count_kmers13.exe $(BIN_DIR)/compute_aindex13.exe pybind11
+# Platform-specific binary extensions
+ifeq ($(UNAME_S),Windows_NT)
+    BIN_EXT = .exe
+else
+    BIN_EXT = 
+endif
+
+# Binary targets with platform-appropriate extensions
+BINARIES = $(BIN_DIR)/compute_index$(BIN_EXT) $(BIN_DIR)/compute_aindex$(BIN_EXT) $(BIN_DIR)/compute_reads$(BIN_EXT) $(BIN_DIR)/kmer_counter$(BIN_EXT) $(BIN_DIR)/generate_all_13mers$(BIN_EXT) $(BIN_DIR)/build_13mer_hash$(BIN_EXT) $(BIN_DIR)/count_kmers13$(BIN_EXT) $(BIN_DIR)/compute_aindex13$(BIN_EXT)
+
+all: clean external $(BIN_DIR) $(OBJ_DIR) $(BINARIES) pybind11
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
@@ -68,28 +78,28 @@ $(BIN_DIR):
 $(OBJ_DIR):
 	mkdir -p $(OBJ_DIR)
 
-$(BIN_DIR)/compute_index.exe: $(SRC_DIR)/Compute_index.cpp $(OBJECTS) | $(BIN_DIR)
+$(BIN_DIR)/compute_index$(BIN_EXT): $(SRC_DIR)/Compute_index.cpp $(OBJECTS) | $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-$(BIN_DIR)/compute_aindex.exe: $(SRC_DIR)/Compute_aindex.cpp $(OBJECTS) | $(BIN_DIR)
+$(BIN_DIR)/compute_aindex$(BIN_EXT): $(SRC_DIR)/Compute_aindex.cpp $(OBJECTS) | $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-$(BIN_DIR)/compute_reads.exe: $(SRC_DIR)/Compute_reads.cpp $(OBJECTS) | $(BIN_DIR)
+$(BIN_DIR)/compute_reads$(BIN_EXT): $(SRC_DIR)/Compute_reads.cpp $(OBJECTS) | $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-$(BIN_DIR)/kmer_counter.exe: $(SRC_DIR)/Count_kmers.cpp | $(BIN_DIR)
+$(BIN_DIR)/kmer_counter$(BIN_EXT): $(SRC_DIR)/Count_kmers.cpp | $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) $< -o $@
 
-$(BIN_DIR)/generate_all_13mers.exe: $(SRC_DIR)/generate_all_13mers.cpp $(OBJ_DIR)/kmers.o | $(BIN_DIR)
+$(BIN_DIR)/generate_all_13mers$(BIN_EXT): $(SRC_DIR)/generate_all_13mers.cpp $(OBJ_DIR)/kmers.o | $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-$(BIN_DIR)/Build_13mer_hash.exe: $(SRC_DIR)/Build_13mer_hash.cpp $(OBJECTS) | $(BIN_DIR)
+$(BIN_DIR)/build_13mer_hash$(BIN_EXT): $(SRC_DIR)/Build_13mer_hash.cpp $(OBJECTS) | $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) -I./external $^ -o $@
 
-$(BIN_DIR)/count_kmers13.exe: $(SRC_DIR)/count_kmers13.cpp $(OBJECTS) | $(BIN_DIR)
+$(BIN_DIR)/count_kmers13$(BIN_EXT): $(SRC_DIR)/count_kmers13.cpp $(OBJECTS) | $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) -I./external $^ -o $@
 
-$(BIN_DIR)/compute_aindex13.exe: $(SRC_DIR)/Compute_aindex13.cpp $(OBJECTS) | $(BIN_DIR)
+$(BIN_DIR)/compute_aindex13$(BIN_EXT): $(SRC_DIR)/Compute_aindex13.cpp $(OBJECTS) | $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) $(INC) -I./external $< $(OBJECTS) -o $@
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(INCLUDES) | $(OBJ_DIR)

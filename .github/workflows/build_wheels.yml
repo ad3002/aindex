@@ -54,14 +54,26 @@ jobs:
           # Platform-specific before_all commands
           CIBW_BEFORE_ALL_LINUX: |
             yum install -y cmake make gcc-c++ git || apt-get update && apt-get install -y cmake make build-essential git
+            echo "Building external dependencies..."
             mkdir -p external
             cd external
-            git clone https://github.com/ad3002/emphf.git
+            if [ ! -d "emphf" ]; then
+              git clone https://github.com/ad3002/emphf.git
+            fi
             cd emphf
             patch -p1 < ../../patches/emphf_cmake_version.patch || true
             cmake .
             make
             cd ../../
+            echo "Building all C++ binaries..."
+            mkdir -p bin obj aindex/core
+            make clean || true
+            make external || true  # This should copy emphf binary
+            # Build all non-pybind11 binaries
+            make bin/compute_index.exe bin/compute_aindex.exe bin/compute_reads.exe bin/kmer_counter.exe bin/generate_all_13mers.exe bin/build_13mer_hash.exe bin/count_kmers13.exe bin/compute_aindex13.exe || true
+            echo "Available binaries:"
+            ls -la bin/ || echo "No bin directory"
+            ls -la external/emphf/ || echo "No emphf directory"
           
           CIBW_BEFORE_ALL_MACOS: |
             mkdir -p external
@@ -90,11 +102,16 @@ jobs:
           
           CIBW_BEFORE_BUILD_LINUX: |
             pip install cmake pybind11 numpy
-            make clean || true
+            python -c "import sys; print(f'Python: {sys.executable}')"
+            python -c "import pybind11; print(f'pybind11: {pybind11.get_include()}')"
+            # Set environment variable for cibuildwheel detection
+            export CIBUILDWHEEL=1
+            # Only build pybind11 extension, binaries are already built in BEFORE_ALL
             make pybind11
           
           CIBW_BEFORE_BUILD_MACOS: |
             pip install cmake pybind11 numpy
+            export CIBUILDWHEEL=1
             make clean || true
             python setup.py build_ext --inplace
           
