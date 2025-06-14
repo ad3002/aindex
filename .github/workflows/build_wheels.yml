@@ -69,8 +69,8 @@ jobs:
             mkdir -p bin obj aindex/core
             make clean || true
             make external || true  # This should copy emphf binary
-            # Build all non-pybind11 binaries
-            make bin/compute_index.exe bin/compute_aindex.exe bin/compute_reads.exe bin/kmer_counter.exe bin/generate_all_13mers.exe bin/build_13mer_hash.exe bin/count_kmers13.exe bin/compute_aindex13.exe || true
+            # Build all binaries with simplified make command
+            make || true
             echo "Available binaries:"
             ls -la bin/ || echo "No bin directory"
             ls -la external/emphf/ || echo "No emphf directory"
@@ -96,8 +96,8 @@ jobs:
             mkdir -p bin obj aindex/core
             make clean || true
             make external || true  # This should copy emphf binary
-            # Build all non-pybind11 binaries (without .exe extension on macOS)
-            make bin/compute_index bin/compute_aindex bin/compute_reads bin/kmer_counter bin/generate_all_13mers bin/build_13mer_hash bin/count_kmers13 bin/compute_aindex13 || true
+            # Build all binaries with simplified make command
+            make || true
             echo "Available binaries:"
             ls -la bin/ || echo "No bin directory"
             ls -la external/emphf/ || echo "No emphf directory"

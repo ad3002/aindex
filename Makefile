@@ -80,6 +80,9 @@ BINARIES = $(BIN_DIR)/compute_index$(BIN_EXT) $(BIN_DIR)/compute_aindex$(BIN_EXT
 
 all: clean external $(BIN_DIR) $(OBJ_DIR) $(BINARIES) pybind11 copy-to-package
 
+# Alternative simplified all target that matches what's used in setup.py
+simple-all: clean external-safe $(BIN_DIR) $(OBJ_DIR) $(BINARIES) pybind11 copy-to-package
+
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
 
@@ -291,16 +294,19 @@ debug-platform:
 help:
 	@echo "Available targets:"
 	@echo "  all              - Build all binaries and Python extension"
+	@echo "  simple-all       - Build with safe external dependencies"
 	@echo "  clean            - Clean build artifacts"
 	@echo "  pybind11         - Build only the Python extension"
-	@echo "  test         - Run Python API tests"
+	@echo "  test             - Run Python API tests"
 	@echo "  test-all         - Run Python API tests"
 	@echo "  debug-platform   - Display platform and build environment information"
 	@echo "  install          - Install binaries to system (requires CONDA_PREFIX)"
 	@echo "  help             - Show this help message"
 	@echo ""
 	@echo "Recommended usage:"
-	@echo "  make test-all    - Complete test suite for new users/CI (optimized - no rebuild)"
+	@echo "  make all         - Complete build (external dependencies + binaries + Python)"
+	@echo "  make simple-all  - Safe build for problematic platforms"
+	@echo "  make test-all    - Complete test suite for new users/CI"
 	@echo ""
 	@echo "Cross-platform debugging:"
 	@echo "  make debug-platform - Show platform information"
@@ -322,4 +328,4 @@ debug-vars:
 	@echo "PYTHON_HEADERS: $(PYTHON_HEADERS)"
 	@echo "PYTHON_SUFFIX: $(PYTHON_SUFFIX)"
 
-.PHONY: all clean external external-safe install macos macos-simple test test-all debug-platform help debug-vars copy-to-package
+.PHONY: all simple-all clean external external-safe install macos macos-simple test test-all debug-platform help debug-vars copy-to-package

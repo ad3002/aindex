@@ -11,7 +11,7 @@ import platform
 
 # Important: define package metadata at the beginning of the file
 PACKAGE_NAME = "aindex2"
-PACKAGE_VERSION = "1.3.18"
+PACKAGE_VERSION = "1.3.20"
 
 def check_dependencies():
     """Check if required build dependencies are available"""
@@ -84,7 +84,7 @@ class build_ext(build_ext_orig):
             else:
                 # Regular build - build everything
                 subprocess.check_call(['make', 'clean'])
-                subprocess.check_call(['make', 'all'])  # Build everything including binaries
+                subprocess.check_call(['make'])  # Simplified make call
         except subprocess.CalledProcessError as e:
             print(f"Build failed with error: {e}")
             print("Attempting to build with verbose output...")
@@ -93,7 +93,7 @@ class build_ext(build_ext_orig):
                 if in_cibw:
                     subprocess.check_call(['make', 'pybind11', 'VERBOSE=1'])
                 else:
-                    subprocess.check_call(['make', 'all', 'VERBOSE=1'])
+                    subprocess.check_call(['make', 'VERBOSE=1'])  # Simplified make call
             except subprocess.CalledProcessError as e2:
                 raise RuntimeError(f"Failed to build C++ extensions: {e2}")
         

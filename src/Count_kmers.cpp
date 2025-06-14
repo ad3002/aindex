@@ -13,6 +13,7 @@
 #include <cctype>
 #include <cstdint>
 #include <bitset>
+#include <iomanip>
 
 // Для k <= 32 используем uint64_t, для больших - uint128_t или вектор
 using kmer_t = uint64_t;
@@ -32,6 +33,17 @@ private:
     std::atomic<bool> done_reading{false};
     std::unordered_map<kmer_t, std::atomic<size_t>> kmer_counts;
     std::mutex kmer_mutex;
+    
+    // Progress tracking
+    std::atomic<size_t> sequences_processed{0};
+    std::atomic<size_t> total_sequences{0};
+    std::atomic<size_t> total_kmers_processed{0};
+    std::atomic<bool> show_progress{true};
+    
+    // Thread performance monitoring - use regular variables with mutex
+    std::vector<size_t> thread_work_counts;
+    std::vector<size_t> thread_work_times_ms;
+    std::mutex performance_mutex;
     
     // 2-битное кодирование: A=00, C=01, G=10, T/U=11
     static constexpr uint8_t char_to_bits[256] = {
@@ -96,11 +108,17 @@ private:
         return (kmer < rc) ? kmer : rc;
     }
 
-    void process_sequence(const std::string& seq) {
-        if (seq.length() < k) return;
+    void process_sequence(const std::string& seq, size_t thread_id) {
+        auto start_time = std::chrono::high_resolution_clock::now();
+        
+        if (seq.length() < k) {
+            sequences_processed++;
+            return;
+        }
         
         // Локальный набор для уменьшения блокировок
         std::unordered_map<kmer_t, size_t> local_kmers;
+        size_t local_kmer_count = 0;
         
         for (size_t i = 0; i <= seq.length() - k; ++i) {
             kmer_t kmer;
@@ -108,16 +126,32 @@ private:
             
             kmer_t canonical_kmer = get_canonical(kmer);
             local_kmers[canonical_kmer]++;
+            local_kmer_count++;
         }
         
-        // Обновляем глобальную карту
-        std::lock_guard<std::mutex> lock(kmer_mutex);
-        for (const auto& [kmer, count] : local_kmers) {
-            kmer_counts[kmer].fetch_add(count);
+        // Обновляем глобальную карту (batch update для лучшей производительности)
+        {
+            std::lock_guard<std::mutex> lock(kmer_mutex);
+            for (const auto& [kmer, count] : local_kmers) {
+                kmer_counts[kmer].fetch_add(count);
+            }
         }
+        
+        // Update thread statistics
+        auto end_time = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+        
+        {
+            std::lock_guard<std::mutex> lock(performance_mutex);
+            thread_work_counts[thread_id]++;
+            thread_work_times_ms[thread_id] += duration.count();
+        }
+        
+        total_kmers_processed.fetch_add(local_kmer_count);
+        sequences_processed++;
     }
 
-    void worker_thread() {
+    void worker_thread(size_t thread_id) {
         while (true) {
             std::string seq;
             
@@ -136,9 +170,60 @@ private:
             }
             
             if (!seq.empty()) {
-                process_sequence(seq);
+                process_sequence(seq, thread_id);
             }
         }
+    }
+    
+    void progress_monitor() {
+        const int progress_width = 50;
+        const auto update_interval = std::chrono::milliseconds(500); // Update every 500ms
+        
+        auto last_update = std::chrono::steady_clock::now();
+        size_t last_processed = 0;
+        
+        while (!done_reading || sequences_processed.load() < total_sequences.load()) {
+            std::this_thread::sleep_for(update_interval);
+            
+            auto now = std::chrono::steady_clock::now();
+            auto time_diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_update);
+            
+            size_t current_processed = sequences_processed.load();
+            size_t current_total = total_sequences.load();
+            
+            if (current_total == 0) continue;
+            
+            // Calculate processing rate
+            double rate = 0.0;
+            if (time_diff.count() > 0) {
+                rate = (current_processed - last_processed) * 1000.0 / time_diff.count();
+            }
+            
+            // Progress percentage
+            double progress = std::min(100.0, (double)current_processed / current_total * 100.0);
+            int pos = (int)(progress_width * progress / 100.0);
+            
+            // Clear line and draw progress bar
+            std::cout << "\r[";
+            for (int i = 0; i < progress_width; ++i) {
+                if (i < pos) std::cout << "=";
+                else if (i == pos) std::cout << ">";
+                else std::cout << " ";
+            }
+            std::cout << "] " << std::fixed << std::setprecision(1) << progress << "% ("
+                      << current_processed << "/" << current_total << ") "
+                      << std::setprecision(0) << rate << " seq/s";
+            std::cout.flush();
+            
+            last_update = now;
+            last_processed = current_processed;
+        }
+        
+        // Final progress line
+        std::cout << "\r[";
+        for (int i = 0; i < progress_width; ++i) std::cout << "=";
+        std::cout << "] 100.0% (" << sequences_processed.load() << "/" 
+                  << total_sequences.load() << ") Complete!" << std::endl;
     }
 
     enum class FileFormat {
@@ -163,26 +248,66 @@ private:
 
     void read_plain_file(std::ifstream& input) {
         std::string line;
+        size_t count = 0;
+        
+        // First pass: count sequences
+        while (std::getline(input, line)) {
+            if (!line.empty()) count++;
+        }
+        total_sequences = count;
+        
+        // Reset file and read sequences
+        input.clear();
+        input.seekg(0);
+        
         while (std::getline(input, line)) {
             if (!line.empty()) {
-                std::lock_guard<std::mutex> lock(queue_mutex);
-                sequence_queue.push(line);
+                {
+                    std::lock_guard<std::mutex> lock(queue_mutex);
+                    sequence_queue.push(line);
+                }
                 cv.notify_one();
+                
+                // Prevent queue from growing too large
+                while (sequence_queue.size() > num_threads * 10) {
+                    std::this_thread::sleep_for(std::chrono::microseconds(100));
+                }
             }
         }
     }
 
     void read_fasta_file(std::ifstream& input) {
         std::string line, sequence;
+        size_t count = 0;
+        
+        // First pass: count sequences
+        auto pos = input.tellg();
+        while (std::getline(input, line)) {
+            if (line.empty()) continue;
+            if (line[0] == '>') count++;
+        }
+        total_sequences = count;
+        
+        // Reset file and read sequences
+        input.clear();
+        input.seekg(pos);
+        
         while (std::getline(input, line)) {
             if (line.empty()) continue;
             
             if (line[0] == '>') {
                 if (!sequence.empty()) {
-                    std::lock_guard<std::mutex> lock(queue_mutex);
-                    sequence_queue.push(sequence);
+                    {
+                        std::lock_guard<std::mutex> lock(queue_mutex);
+                        sequence_queue.push(sequence);
+                    }
                     cv.notify_one();
                     sequence.clear();
+                    
+                    // Prevent queue overflow
+                    while (sequence_queue.size() > num_threads * 10) {
+                        std::this_thread::sleep_for(std::chrono::microseconds(100));
+                    }
                 }
             } else {
                 sequence += line;
@@ -191,25 +316,83 @@ private:
         
         // Добавляем последнюю последовательность
         if (!sequence.empty()) {
-            std::lock_guard<std::mutex> lock(queue_mutex);
-            sequence_queue.push(sequence);
+            {
+                std::lock_guard<std::mutex> lock(queue_mutex);
+                sequence_queue.push(sequence);
+            }
             cv.notify_one();
         }
     }
 
     void read_fastq_file(std::ifstream& input) {
         std::string line;
+        size_t count = 0;
+        
+        // First pass: count sequences
+        auto pos = input.tellg();
         int line_number = 0;
+        while (std::getline(input, line)) {
+            if (line_number % 4 == 0 && !line.empty() && line[0] == '@') count++;
+            line_number++;
+        }
+        total_sequences = count;
+        
+        // Reset file and read sequences
+        input.clear();
+        input.seekg(pos);
+        line_number = 0;
         
         while (std::getline(input, line)) {
             if (line_number % 4 == 1) { // Строка с последовательностью
                 if (!line.empty()) {
-                    std::lock_guard<std::mutex> lock(queue_mutex);
-                    sequence_queue.push(line);
+                    {
+                        std::lock_guard<std::mutex> lock(queue_mutex);
+                        sequence_queue.push(line);
+                    }
                     cv.notify_one();
+                    
+                    // Prevent queue overflow
+                    while (sequence_queue.size() > num_threads * 10) {
+                        std::this_thread::sleep_for(std::chrono::microseconds(100));
+                    }
                 }
             }
             line_number++;
+        }
+    }
+    
+    void print_thread_performance() {
+        std::cout << "\n=== Thread Performance ===" << std::endl;
+        size_t total_work = 0;
+        size_t total_time_ms = 0;
+        
+        std::lock_guard<std::mutex> lock(performance_mutex);
+        
+        for (size_t i = 0; i < num_threads; ++i) {
+            size_t work = thread_work_counts[i];
+            size_t time_ms = thread_work_times_ms[i];
+            total_work += work;
+            total_time_ms += time_ms;
+            
+            std::cout << "Thread " << i << ": " << work << " sequences, " 
+                      << time_ms << "ms";
+            if (work > 0) {
+                std::cout << " (" << std::setprecision(2) << (double)time_ms / work << "ms/seq)";
+            }
+            std::cout << std::endl;
+        }
+        
+        if (total_work > 0 && total_time_ms > 0) {
+            size_t max_work = *std::max_element(thread_work_counts.begin(), 
+                                               thread_work_counts.end());
+            if (max_work > 0) {
+                double efficiency = 100.0 * total_work / (num_threads * max_work);
+                std::cout << "Thread efficiency: " << std::setprecision(1) << efficiency << "%" << std::endl;
+            }
+            
+            std::cout << "Average processing rate: " << std::setprecision(0) 
+                      << (double)sequences_processed.load() * 1000.0 / total_time_ms 
+                      << " sequences/second" << std::endl;
         }
     }
 
@@ -223,6 +406,14 @@ public:
             throw std::runtime_error("K-mer size > " + std::to_string(max_k_supported) + 
                                    " not supported with current implementation");
         }
+        
+        // Initialize thread performance counters
+        thread_work_counts.resize(num_threads, 0);
+        thread_work_times_ms.resize(num_threads, 0);
+    }
+
+    void set_progress_display(bool enabled) {
+        show_progress = enabled;
     }
 
     void count_kmers_from_file(const std::string& filename) {
@@ -231,7 +422,13 @@ public:
         // Запускаем рабочие потоки
         std::vector<std::thread> workers;
         for (size_t i = 0; i < num_threads; ++i) {
-            workers.emplace_back(&KmerCounter::worker_thread, this);
+            workers.emplace_back(&KmerCounter::worker_thread, this, i);
+        }
+        
+        // Start progress monitor
+        std::thread progress_thread;
+        if (show_progress) {
+            progress_thread = std::thread(&KmerCounter::progress_monitor, this);
         }
         
         // Определяем формат файла и читаем
@@ -241,6 +438,7 @@ public:
             done_reading = true;
             cv.notify_all();
             for (auto& t : workers) t.join();
+            if (progress_thread.joinable()) progress_thread.join();
             return;
         }
         
@@ -256,6 +454,7 @@ public:
         }
         
         std::cout << "Using 2-bit encoding (memory usage reduced ~4x)" << std::endl;
+        std::cout << "Starting k-mer counting with " << num_threads << " threads...\n" << std::endl;
         
         switch (format) {
             case FileFormat::FASTA:
@@ -278,8 +477,13 @@ public:
             t.join();
         }
         
+        if (progress_thread.joinable()) {
+            progress_thread.join();
+        }
+        
         // Фильтруем по минимальной частоте
         if (min_count > 1) {
+            std::cout << "Applying minimum count filter..." << std::endl;
             auto it = kmer_counts.begin();
             while (it != kmer_counts.end()) {
                 if (it->second.load() < min_count) {
@@ -293,7 +497,8 @@ public:
         auto end_time = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
         
-        std::cout << "Processing completed in " << duration.count() << " ms" << std::endl;
+        std::cout << "\nProcessing completed in " << duration.count() << " ms" << std::endl;
+        std::cout << "Total k-mers processed: " << total_kmers_processed.load() << std::endl;
         std::cout << "Using " << (use_canonical ? "canonical" : "non-canonical") << " k-mers" << std::endl;
         if (min_count > 1) {
             std::cout << "Applied minimum count filter: " << min_count << std::endl;
@@ -303,6 +508,9 @@ public:
         // Оценка использования памяти
         size_t memory_mb = (kmer_counts.size() * (sizeof(kmer_t) + sizeof(std::atomic<size_t>) + 32)) / (1024 * 1024);
         std::cout << "Estimated memory usage: ~" << memory_mb << " MB" << std::endl;
+        
+        // Print thread performance
+        print_thread_performance();
     }
 
     void save_kmers(const std::string& output_file, bool with_counts = true) {
@@ -509,6 +717,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "  -c               Use canonical k-mers (default: yes)" << std::endl;
         std::cerr << "  -n               Don't use canonical k-mers" << std::endl;
         std::cerr << "  -b               Save compact binary format (.cbin)" << std::endl;
+        std::cerr << "  -q               Quiet mode (no progress bar)" << std::endl;
         std::cerr << "\nNote: Maximum k-mer size is 32 for 64-bit encoding" << std::endl;
         std::cerr << "\nExample: " << argv[0] << " genome.fasta 31 kmers.txt -t 8 -m 2" << std::endl;
         return 1;
@@ -523,6 +732,7 @@ int main(int argc, char* argv[]) {
     size_t min_count = 1;
     bool use_canonical = true;
     bool save_compact = false;
+    bool quiet_mode = false;
     
     // Парсинг опций
     for (int i = 4; i < argc; i++) {
@@ -537,6 +747,8 @@ int main(int argc, char* argv[]) {
             use_canonical = false;
         } else if (arg == "-b") {
             save_compact = true;
+        } else if (arg == "-q") {
+            quiet_mode = true;
         }
     }
     
@@ -548,9 +760,14 @@ int main(int argc, char* argv[]) {
         std::cout << "Threads: " << threads << std::endl;
         std::cout << "Min count filter: " << min_count << std::endl;
         std::cout << "Canonical k-mers: " << (use_canonical ? "yes" : "no") << std::endl;
-        std::cout << "2-bit encoding: enabled (4x memory reduction)" << std::endl << std::endl;
+        std::cout << "2-bit encoding: enabled (4x memory reduction)" << std::endl;
+        std::cout << "Progress display: " << (quiet_mode ? "disabled" : "enabled") << std::endl << std::endl;
         
         KmerCounter counter(k, threads, min_count, use_canonical);
+        if (quiet_mode) {
+            counter.set_progress_display(false);
+        }
+        
         counter.count_kmers_from_file(input_file);
         counter.print_statistics();
         
