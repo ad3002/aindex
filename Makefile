@@ -121,16 +121,14 @@ pybind11: $(OBJECTS) $(SRC_DIR)/python_wrapper.cpp | $(PACKAGE_DIR)
 	@echo "Extension suffix: $(PYTHON_SUFFIX)"
 	@echo "CIBUILDWHEEL env: $$CIBUILDWHEEL"
 	@$(PYTHON_CMD) -c "import sys; print(f'Active Python: {sys.executable}')"
-	@$(PYTHON_CMD) -c "import pybind11; print('pybind11 found:', pybind11.get_include())" || echo "pybind11 import failed"
-	@if [ -z "$(PYTHON_INCLUDE)" ]; then \
+	@PYBIND11_INCLUDE=$$($(PYTHON_CMD) -c "import pybind11; print(pybind11.get_include())" 2>/dev/null) && \
+	if [ -z "$$PYBIND11_INCLUDE" ]; then \
 		echo "Error: pybind11 not found. Please install pybind11: pip install pybind11"; \
-		echo "Debug: PYTHON_CMD=$(PYTHON_CMD)"; \
-		echo "Debug: Trying to find pybind11..."; \
-		$(PYTHON_CMD) -c "import pybind11; print(pybind11.get_include())" || echo "pybind11 import failed"; \
 		exit 1; \
+	else \
+		echo "pybind11 include path: $$PYBIND11_INCLUDE"; \
+		$(CXX) $(CXXFLAGS) -I$$PYBIND11_INCLUDE $(LDFLAGS) -o $(PACKAGE_DIR)/aindex_cpp$(PYTHON_SUFFIX) $(SRC_DIR)/python_wrapper.cpp $(OBJECTS); \
 	fi
-	@echo "pybind11 include path: $(PYTHON_INCLUDE)"
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $(PACKAGE_DIR)/aindex_cpp$(PYTHON_SUFFIX) $(SRC_DIR)/python_wrapper.cpp $(OBJECTS)
 
 $(PACKAGE_DIR)/python_wrapper.so: $(SRC_DIR)/python_wrapper.o $(OBJECTS) | $(PACKAGE_DIR)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $^
