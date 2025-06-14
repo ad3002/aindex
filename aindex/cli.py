@@ -62,10 +62,26 @@ def get_bin_path():
 def run_executable(exe_name, args):
     """Run a binary executable from bin directory"""
     bin_dir = get_bin_path()
-    exe_path = bin_dir / exe_name
     
-    if not exe_path.exists():
+    # Try different executable extensions based on platform
+    candidates = [exe_name]
+    if exe_name.endswith('.exe'):
+        # If requested with .exe, also try without extension
+        candidates.append(exe_name[:-4])
+    else:
+        # If requested without extension, also try with .exe
+        candidates.append(exe_name + '.exe')
+    
+    exe_path = None
+    for candidate in candidates:
+        candidate_path = bin_dir / candidate
+        if candidate_path.exists():
+            exe_path = candidate_path
+            break
+    
+    if exe_path is None:
         print(f"Error: Executable {exe_name} not found in {bin_dir}")
+        print(f"Tried: {[str(bin_dir / c) for c in candidates]}")
         return 1
     
     try:
@@ -73,7 +89,7 @@ def run_executable(exe_name, args):
         result = subprocess.run([str(exe_path)] + args, check=False)
         return result.returncode
     except Exception as e:
-        print(f"Error running {exe_name}: {e}")
+        print(f"Error running {exe_path.name}: {e}")
         return 1
 
 
@@ -157,9 +173,9 @@ def cmd_compute_index(args):
 
 
 def cmd_compute_reads(args):
-    """Process reads using compute_reads.exe"""
+    """Process reads using compute_reads"""
     print("Processing reads...")
-    return run_executable('compute_reads.exe', args)
+    return run_executable('compute_reads', args)
 
 
 def cmd_count_kmers(args):
@@ -179,11 +195,11 @@ def cmd_count_kmers(args):
         print(f"Counting 13-mers in {parsed_args.input}")
         # Use specialized 13-mer counter if available
         exe_args = [parsed_args.input, parsed_args.output, str(parsed_args.threads)]
-        return run_executable('count_kmers13.exe', exe_args)
+        return run_executable('count_kmers13', exe_args)
     else:
         print(f"Counting {parsed_args.kmer_size}-mers in {parsed_args.input}")
         exe_args = [parsed_args.input, parsed_args.output, str(parsed_args.kmer_size), str(parsed_args.threads)]
-        return run_executable('kmer_counter.exe', exe_args)
+        return run_executable('kmer_counter', exe_args)
 
 
 def cmd_build_hash(args):
@@ -202,7 +218,7 @@ def cmd_build_hash(args):
     if parsed_args.kmer_size == 13:
         print(f"Building 13-mer hash for {parsed_args.input}")
         exe_args = [parsed_args.input, parsed_args.output, str(parsed_args.threads)]
-        return run_executable('build_13mer_hash.exe', exe_args)
+        return run_executable('build_13mer_hash', exe_args)
     else:
         print(f"Building hash for {parsed_args.kmer_size}-mers")
         # Use general purpose hash builder
@@ -224,7 +240,7 @@ def cmd_generate_kmers(args):
     if parsed_args.kmer_size == 13:
         print(f"Generating all 13-mers to {parsed_args.output}")
         exe_args = [parsed_args.output]
-        return run_executable('generate_all_13mers.exe', exe_args)
+        return run_executable('generate_all_13mers', exe_args)
     else:
         print(f"Generating all {parsed_args.kmer_size}-mers is not supported (too many combinations)")
         return 1
@@ -245,7 +261,7 @@ def cmd_version(args):
         # Show available tools
         bin_dir = get_bin_path()
         if bin_dir.exists():
-            executables = [f.name for f in bin_dir.iterdir() if f.is_file() and not f.name.endswith('.py')]
+            executables = [f.name for f in bin_dir.iterdir() if f.is_file() and not f.name.endswith('.py') and not f.name.startswith('__')]
             if executables:
                 print(f"Available executables in {bin_dir}:")
                 for exe in sorted(executables):
@@ -297,7 +313,7 @@ def cmd_info(args):
             print(f"Bin files: {len(files)} files")
             
             # Show executables
-            executables = [f.name for f in files if f.is_file() and (f.suffix == '.exe' or not f.suffix)]
+            executables = [f.name for f in files if f.is_file() and not f.name.endswith('.py') and not f.name.startswith('__')]
             if executables:
                 print("Executables:", ", ".join(sorted(executables)))
         
