@@ -135,9 +135,12 @@ jobs:
             pip install cmake pybind11 numpy
             python setup.py build_ext --inplace
           
-          # Repair wheels (Linux only)
+          # Repair wheels (Linux only) - skip macOS due to arch issues
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: >
             auditwheel repair -w {dest_dir} {wheel}
+          
+          CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
+            delocate-wheel -w {dest_dir} {wheel}
           
           # Test wheels - simplified for cross-platform compatibility
           CIBW_TEST_COMMAND_LINUX: |
