@@ -53,17 +53,18 @@ endif
 
 # Safely get pybind11 include path
 PYTHON_INCLUDE := $(shell $(PYTHON_CMD) -c "try: import pybind11; print(pybind11.get_include());\nexcept: print('')" 2>/dev/null)
-PYTHON_HEADERS := $(shell $(PYTHON_CONFIG) --includes)
-PYTHON_SUFFIX := $(shell $(PYTHON_CONFIG) --extension-suffix)
+
+# Get Python headers - fallback to sysconfig if config command fails
+PYTHON_HEADERS := $(shell $(PYTHON_CONFIG) --includes 2>/dev/null || $(PYTHON_CMD) -c "import sysconfig; print('-I' + sysconfig.get_path('include'))")
+PYTHON_SUFFIX := $(shell $(PYTHON_CONFIG) --extension-suffix 2>/dev/null || $(PYTHON_CMD) -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX') or '.so')")
 
 # Detect OS for macOS-specific settings
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
-    CXXFLAGS += -stdlib=libc++ -I$(PYTHON_INCLUDE) $(PYTHON_HEADERS)
+    CXXFLAGS += -stdlib=libc++
     LDFLAGS = -shared -undefined dynamic_lookup
     MACOS = true
 else
-    CXXFLAGS += -I$(PYTHON_INCLUDE) $(PYTHON_HEADERS)
     LDFLAGS = -shared
     MACOS = false
 endif
@@ -119,6 +120,7 @@ pybind11: $(OBJECTS) $(SRC_DIR)/python_wrapper.cpp | $(PACKAGE_DIR)
 	@echo "Python command: $(PYTHON_CMD)"
 	@echo "Python version: $(PYTHON_VERSION)"
 	@echo "Python config: $(PYTHON_CONFIG)"
+	@echo "Python headers: $(PYTHON_HEADERS)"
 	@echo "Extension suffix: $(PYTHON_SUFFIX)"
 	@echo "CIBUILDWHEEL env: $$CIBUILDWHEEL"
 	@$(PYTHON_CMD) -c "import sys; print(f'Active Python: {sys.executable}')"
@@ -128,7 +130,8 @@ pybind11: $(OBJECTS) $(SRC_DIR)/python_wrapper.cpp | $(PACKAGE_DIR)
 		exit 1; \
 	else \
 		echo "pybind11 include path: $$PYBIND11_INCLUDE"; \
-		$(CXX) $(CXXFLAGS) -I$$PYBIND11_INCLUDE -I./external $(LDFLAGS) -o $(PACKAGE_DIR)/aindex_cpp$(PYTHON_SUFFIX) $(SRC_DIR)/python_wrapper.cpp $(OBJECTS); \
+		set -x; \
+		$(CXX) $(CXXFLAGS) -I$$PYBIND11_INCLUDE $(PYTHON_HEADERS) -I./external $(LDFLAGS) -o $(PACKAGE_DIR)/aindex_cpp$(PYTHON_SUFFIX) $(SRC_DIR)/python_wrapper.cpp $(OBJECTS); \
 	fi
 
 $(PACKAGE_DIR)/python_wrapper.so: $(SRC_DIR)/python_wrapper.o $(OBJECTS) | $(PACKAGE_DIR)
@@ -150,7 +153,29 @@ external:
 	fi
 	@echo "Building emphf using original build process..."
 	@echo "Platform: $(shell uname -s) $(shell uname -m)"
-	cd external/emphf && env -i PATH="$$PATH" HOME="$$HOME" cmake . && env -i PATH="$$PATH" HOME="$$HOME" make
+	@echo "Detecting cmake..."
+	@CMAKE_CMD=$$(which cmake 2>/dev/null || which /usr/bin/cmake 2>/dev/null || which /usr/local/bin/cmake 2>/dev/null || echo ""); \
+	if [ -z "$$CMAKE_CMD" ]; then \
+		echo "Error: cmake not found in system PATH. Please install cmake."; \
+		echo "On Ubuntu/Debian: apt-get install cmake"; \
+		echo "On CentOS/RHEL: yum install cmake"; \
+		echo "On macOS: brew install cmake"; \
+		exit 1; \
+	fi; \
+	echo "Using cmake: $$CMAKE_CMD"; \
+	if $$CMAKE_CMD --version 2>/dev/null | grep -q "cmake version"; then \
+		echo "✓ Found valid cmake binary"; \
+	else \
+		echo "Warning: cmake command found but may be Python wrapper. Trying system paths..."; \
+		CMAKE_CMD=$$(ls /usr/bin/cmake /usr/local/bin/cmake 2>/dev/null | head -1); \
+		if [ -z "$$CMAKE_CMD" ]; then \
+			echo "Error: No system cmake found. Please install cmake system package."; \
+			exit 1; \
+		fi; \
+		echo "Using system cmake: $$CMAKE_CMD"; \
+	fi; \
+	$$CMAKE_CMD --version; \
+	cd external/emphf && env -i PATH="/usr/local/bin:/usr/bin:/bin" HOME="$$HOME" $$CMAKE_CMD . && env -i PATH="/usr/local/bin:/usr/bin:/bin" HOME="$$HOME" make
 	@echo "Copying emphf binaries to our bin directory..."
 	@if [ -f "external/emphf/compute_mphf_seq" ]; then \
 		echo "✓ compute_mphf_seq found"; \
@@ -184,7 +209,29 @@ external-safe:
 	fi
 	@echo "Building emphf with POPCOUNT disabled for compatibility..."
 	@echo "Platform: $(shell uname -s) $(shell uname -m)"
-	cd external/emphf && env -i PATH="$$PATH" HOME="$$HOME" cmake -DEMPHF_USE_POPCOUNT=OFF . && env -i PATH="$$PATH" HOME="$$HOME" make
+	@echo "Detecting cmake..."
+	@CMAKE_CMD=$$(which cmake 2>/dev/null || which /usr/bin/cmake 2>/dev/null || which /usr/local/bin/cmake 2>/dev/null || echo ""); \
+	if [ -z "$$CMAKE_CMD" ]; then \
+		echo "Error: cmake not found in system PATH. Please install cmake."; \
+		echo "On Ubuntu/Debian: apt-get install cmake"; \
+		echo "On CentOS/RHEL: yum install cmake"; \
+		echo "On macOS: brew install cmake"; \
+		exit 1; \
+	fi; \
+	echo "Using cmake: $$CMAKE_CMD"; \
+	if $$CMAKE_CMD --version 2>/dev/null | grep -q "cmake version"; then \
+		echo "✓ Found valid cmake binary"; \
+	else \
+		echo "Warning: cmake command found but may be Python wrapper. Trying system paths..."; \
+		CMAKE_CMD=$$(ls /usr/bin/cmake /usr/local/bin/cmake 2>/dev/null | head -1); \
+		if [ -z "$$CMAKE_CMD" ]; then \
+			echo "Error: No system cmake found. Please install cmake system package."; \
+			exit 1; \
+		fi; \
+		echo "Using system cmake: $$CMAKE_CMD"; \
+	fi; \
+	$$CMAKE_CMD --version; \
+	cd external/emphf && env -i PATH="/usr/local/bin:/usr/bin:/bin" HOME="$$HOME" $$CMAKE_CMD -DEMPHF_USE_POPCOUNT=OFF . && env -i PATH="/usr/local/bin:/usr/bin:/bin" HOME="$$HOME" make
 	@echo "Copying emphf binaries to our bin directory..."
 	@if [ -f "external/emphf/compute_mphf_seq" ]; then \
 		echo "✓ compute_mphf_seq found"; \
@@ -200,6 +247,57 @@ external-safe:
 	cp scripts/compute_index.py $(BIN_DIR)/
 	cp scripts/reads_to_fasta.py $(BIN_DIR)/
 	@echo "Safe external dependencies setup complete."
+
+# Alternative build for pip environments (avoids Python cmake wrapper)
+external-pip: 
+	@echo "Setting up external dependencies for pip build environment..."
+	mkdir -p ${BIN_DIR}
+	mkdir -p external
+	mkdir -p $(PACKAGE_DIR)
+	@if [ ! -d "external/emphf" ]; then \
+		echo "Cloning emphf repository..."; \
+		cd external && git clone https://github.com/ad3002/emphf.git || { \
+			echo "Failed to clone emphf repository. Please check your internet connection."; \
+			exit 1; \
+		}; \
+		echo "Applying CMake version patch..."; \
+		cd emphf && patch -p1 < ../../patches/emphf_cmake_version.patch; \
+	fi
+	@echo "Building emphf with system cmake (avoiding Python cmake wrapper)..."
+	@echo "Platform: $(shell uname -s) $(shell uname -m)"
+	@echo "Searching for system cmake..."
+	@CMAKE_CMD=""; \
+	for path in /usr/bin/cmake /usr/local/bin/cmake /opt/cmake/bin/cmake; do \
+		if [ -x "$$path" ] && $$path --version 2>/dev/null | grep -q "cmake version"; then \
+			CMAKE_CMD="$$path"; \
+			break; \
+		fi; \
+	done; \
+	if [ -z "$$CMAKE_CMD" ]; then \
+		echo "Error: No system cmake found. Please install cmake system package."; \
+		echo "On Ubuntu/Debian: apt-get install cmake"; \
+		echo "On CentOS/RHEL: yum install cmake"; \
+		echo "On macOS: brew install cmake"; \
+		exit 1; \
+	fi; \
+	echo "Using system cmake: $$CMAKE_CMD"; \
+	$$CMAKE_CMD --version; \
+	cd external/emphf && env -i PATH="/usr/local/bin:/usr/bin:/bin" HOME="$$HOME" $$CMAKE_CMD -DEMPHF_USE_POPCOUNT=OFF . && env -i PATH="/usr/local/bin:/usr/bin:/bin" HOME="$$HOME" make
+	@echo "Copying emphf binaries to our bin directory..."
+	@if [ -f "external/emphf/compute_mphf_seq" ]; then \
+		echo "✓ compute_mphf_seq found"; \
+		cp external/emphf/compute_mphf_seq $(BIN_DIR)/; \
+		echo "✓ Binary copied to $(BIN_DIR)/"; \
+	else \
+		echo "✗ compute_mphf_seq not found"; \
+		ls -la external/emphf/compute_mphf* || echo "No compute_mphf* files found"; \
+		exit 1; \
+	fi
+	@echo "Copying our Python scripts..."
+	cp scripts/compute_aindex.py $(BIN_DIR)/
+	cp scripts/compute_index.py $(BIN_DIR)/
+	cp scripts/reads_to_fasta.py $(BIN_DIR)/
+	@echo "Pip environment external dependencies setup complete."
 
 install: all
 	mkdir -p ${BIN_DIR}
@@ -381,6 +479,9 @@ help:
 	@echo "  all              - Build all binaries and Python extension"
 	@echo "  clean            - Clean build artifacts"
 	@echo "  pybind11         - Build only the Python extension"
+	@echo "  external         - Build external dependencies (emphf)"
+	@echo "  external-safe    - Build external dependencies with safe settings"
+	@echo "  external-pip     - Build external dependencies for pip environments"
 	@echo "  test             - Run basic Python API tests (alias for test-python-api)"
 	@echo "  test-quick       - Quick validation test (fast functionality check)"
 	@echo "  test-demo        - Run demo script (builds test data if needed)"
@@ -412,6 +513,7 @@ help:
 	@echo "  make debug-platform - Show platform information"
 	@echo "  make test-emphf-binary - Test emphf binary specifically"
 	@echo "  make external-safe - Safe build for problematic platforms"
+	@echo "  make external-pip  - Build for pip environments (avoids Python cmake)"
 	@echo ""
 	@echo "Documentation:"
 	@echo "  See CROSS_PLATFORM.md for cross-platform compatibility details"
@@ -433,4 +535,4 @@ debug-vars:
 	@echo "PYTHON_HEADERS: $(PYTHON_HEADERS)"
 	@echo "PYTHON_SUFFIX: $(PYTHON_SUFFIX)"
 
-.PHONY: all clean external external-safe install macos macos-simple test test-quick test-demo test-demo-comprehensive test-demo-only test-demo-comprehensive-only test-python-api test-python-api-only test-python-with-data test-python-with-data-only test-regression test-regression-only test-full test-all test-emphf-binary test-cross-platform debug-platform help debug-vars
+.PHONY: all clean external external-safe external-pip install macos macos-simple test test-quick test-demo test-demo-comprehensive test-demo-only test-demo-comprehensive-only test-python-api test-python-api-only test-python-with-data test-python-with-data-only test-regression test-regression-only test-full test-all test-emphf-binary test-cross-platform debug-platform help debug-vars
