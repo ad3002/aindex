@@ -153,7 +153,7 @@ jobs:
             # python -c "import aindex; print('✓ Import successful')"
           
           CIBW_TEST_COMMAND_WINDOWS: |
-            python -c "import aindex; print('✓ Import successful')"          
+            python -c "import aindex; print('✓ Import successful')"
           
           # Environment variables
           CIBW_ENVIRONMENT_LINUX: MAKEFLAGS="-j$(nproc)"
