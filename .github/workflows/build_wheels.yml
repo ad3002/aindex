@@ -76,14 +76,27 @@ jobs:
             ls -la external/emphf/ || echo "No emphf directory"
           
           CIBW_BEFORE_ALL_MACOS: |
+            echo "Building external dependencies on macOS..."
+            brew install cmake || true
             mkdir -p external
             cd external
-            git clone https://github.com/ad3002/emphf.git
+            if [ ! -d "emphf" ]; then
+              git clone https://github.com/ad3002/emphf.git
+            fi
             cd emphf
             patch -p1 < ../../patches/emphf_cmake_version.patch || true
             cmake .
             make
             cd ../../
+            echo "Building all C++ binaries..."
+            mkdir -p bin obj aindex/core
+            make clean || true
+            make external || true  # This should copy emphf binary
+            # Build all non-pybind11 binaries (without .exe extension on macOS)
+            make bin/compute_index bin/compute_aindex bin/compute_reads bin/kmer_counter bin/generate_all_13mers bin/build_13mer_hash bin/count_kmers13 bin/compute_aindex13 || true
+            echo "Available binaries:"
+            ls -la bin/ || echo "No bin directory"
+            ls -la external/emphf/ || echo "No emphf directory"
           
           CIBW_BEFORE_ALL_WINDOWS: |
             mkdir external
@@ -111,9 +124,12 @@ jobs:
           
           CIBW_BEFORE_BUILD_MACOS: |
             pip install cmake pybind11 numpy
+            python -c "import sys; print(f'Python: {sys.executable}')"
+            python -c "import pybind11; print(f'pybind11: {pybind11.get_include()}')"
+            # Set environment variable for cibuildwheel detection
             export CIBUILDWHEEL=1
-            make clean || true
-            python setup.py build_ext --inplace
+            # Only build pybind11 extension, binaries are already built in BEFORE_ALL
+            make pybind11
           
           CIBW_BEFORE_BUILD_WINDOWS: |
             pip install cmake pybind11 numpy
