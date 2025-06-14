@@ -86,6 +86,7 @@ jobs:
           CIBW_BEFORE_BUILD: |
             pip install cmake pybind11 numpy
             python -c "import sys; print(f'Building for Python {sys.version}')"
+            python -c "import pybind11; print(f'pybind11 include: {pybind11.get_include()}')"
           
           CIBW_BEFORE_BUILD_LINUX: |
             pip install cmake pybind11 numpy
@@ -95,7 +96,7 @@ jobs:
           CIBW_BEFORE_BUILD_MACOS: |
             pip install cmake pybind11 numpy
             make clean || true
-            make pybind11
+            python setup.py build_ext --inplace
           
           CIBW_BEFORE_BUILD_WINDOWS: |
             pip install cmake pybind11 numpy

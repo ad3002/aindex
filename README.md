@@ -43,12 +43,6 @@ pip install aindex2
 
 ### Detailed Installation Instructions
 
-Requirements:
-
-[jellyfish 2](https://github.com/gmarcais/Jellyfish)
-
-(easy to install with `apt install jellyfish` or with `conda install bioconda::jellyfish`)
-
 Installation with pip:
 
 ```bash

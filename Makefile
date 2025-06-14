@@ -44,7 +44,8 @@ ifeq ($(PYTHON_CONFIG),)
     PYTHON_CONFIG = python3-config
 endif
 
-PYTHON_INCLUDE := $(shell $(PYTHON_CMD) -c "import pybind11; print(pybind11.get_include())")
+# Safely get pybind11 include path
+PYTHON_INCLUDE := $(shell $(PYTHON_CMD) -c "try: import pybind11; print(pybind11.get_include());\nexcept: print('')" 2>/dev/null)
 PYTHON_HEADERS := $(shell $(PYTHON_CONFIG) --includes)
 PYTHON_SUFFIX := $(shell $(PYTHON_CONFIG) --extension-suffix)
 
@@ -99,6 +100,11 @@ pybind11: $(OBJECTS) $(SRC_DIR)/python_wrapper.cpp | $(PACKAGE_DIR)
 	@echo "Building Python extension for Python $(PYTHON_VERSION)"
 	@echo "Using Python config: $(PYTHON_CONFIG)"
 	@echo "Extension suffix: $(PYTHON_SUFFIX)"
+	@if [ -z "$(PYTHON_INCLUDE)" ]; then \
+		echo "Error: pybind11 not found. Please install pybind11: pip install pybind11"; \
+		exit 1; \
+	fi
+	@echo "pybind11 include path: $(PYTHON_INCLUDE)"
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $(PACKAGE_DIR)/aindex_cpp$(PYTHON_SUFFIX) $(SRC_DIR)/python_wrapper.cpp $(OBJECTS)
 
 $(PACKAGE_DIR)/python_wrapper.so: $(SRC_DIR)/python_wrapper.o $(OBJECTS) | $(PACKAGE_DIR)
