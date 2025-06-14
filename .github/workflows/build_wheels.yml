@@ -42,7 +42,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install setuptools wheel cibuildwheel
+          pip install setuptools==69.5.1 wheel==0.43.0 cibuildwheel==2.19.2
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.19.2
@@ -50,6 +50,12 @@ jobs:
           # Build for Python 3.8+ to match our new requirements
           CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-*"
           CIBW_SKIP: "*-musllinux* *aarch64* *arm64*"  # Skip musl Linux, ARM64, and macOS ARM64 for now
+          
+          CIBW_BEFORE_BUILD: |
+            pip install --upgrade pip
+            pip install setuptools==69.5.1 wheel==0.43.0
+            pip install cmake pybind11 numpy
+            python -c "import setuptools; print(f'Setuptools version: {setuptools.__version__}')"
           
           # Platform-specific before_all commands
           CIBW_BEFORE_ALL_LINUX: |
@@ -156,6 +162,7 @@ jobs:
             python -c "import aindex; print('✓ Import successful')"
           
           # Environment variables
+          CIBW_ENVIRONMENT: SETUPTOOLS_USE_DISTUTILS=stdlib
           CIBW_ENVIRONMENT_LINUX: MAKEFLAGS="-j$(nproc)"
           CIBW_ENVIRONMENT_MACOS: MAKEFLAGS="-j$(sysctl -n hw.ncpu)"
           
