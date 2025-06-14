@@ -12,9 +12,11 @@ PREFIX = $(CONDA_PREFIX)
 INSTALL_DIR = $(PREFIX)/bin
 
 # Python and pybind11 configuration - auto-detect available Python
-# Try to find the actual Python executable, handle aliases properly
+# In cibuildwheel, use the current Python; otherwise try to find the best one
 PYTHON_CMD := $(shell \
-    if /opt/homebrew/opt/python@3.11/bin/python3.11 --version >/dev/null 2>&1; then \
+    if [ -n "$$CIBUILDWHEEL" ] && which python >/dev/null 2>&1; then \
+        echo python; \
+    elif /opt/homebrew/opt/python@3.11/bin/python3.11 --version >/dev/null 2>&1; then \
         echo /opt/homebrew/opt/python@3.11/bin/python3.11; \
     elif python3.11 --version >/dev/null 2>&1; then \
         echo python3.11; \
@@ -30,8 +32,13 @@ PYTHON_CMD := $(shell \
 PYTHON_VERSION := $(shell $(PYTHON_CMD) -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
 
 # Try to find the correct python-config for the active Python
-# First try with the exact Python command that's being used
-PYTHON_CONFIG_CANDIDATES = $(PYTHON_CMD)-config python$(PYTHON_VERSION)-config python3-config python-config
+# In cibuildwheel, try the most common patterns first
+PYTHON_CONFIG_CANDIDATES := $(shell \
+    if [ -n "$$CIBUILDWHEEL" ]; then \
+        echo "$(PYTHON_CMD)-config python$(PYTHON_VERSION)-config python3-config python-config"; \
+    else \
+        echo "$(PYTHON_CMD)-config python$(PYTHON_VERSION)-config python3-config python-config"; \
+    fi)
 PYTHON_CONFIG = $(shell for cmd in $(PYTHON_CONFIG_CANDIDATES); do \
     if which $$cmd >/dev/null 2>&1; then \
         echo $$cmd; \
@@ -107,11 +114,19 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(INCLUDES) | $(OBJ_DIR)
 
 # Pybind11 module
 pybind11: $(OBJECTS) $(SRC_DIR)/python_wrapper.cpp | $(PACKAGE_DIR)
-	@echo "Building Python extension for Python $(PYTHON_VERSION)"
-	@echo "Using Python config: $(PYTHON_CONFIG)"
+	@echo "=== Building Python extension ==="
+	@echo "Python command: $(PYTHON_CMD)"
+	@echo "Python version: $(PYTHON_VERSION)"
+	@echo "Python config: $(PYTHON_CONFIG)"
 	@echo "Extension suffix: $(PYTHON_SUFFIX)"
+	@echo "CIBUILDWHEEL env: $$CIBUILDWHEEL"
+	@$(PYTHON_CMD) -c "import sys; print(f'Active Python: {sys.executable}')"
+	@$(PYTHON_CMD) -c "try: import pybind11; print(f'pybind11 found: {pybind11.get_include()}'); except Exception as e: print(f'pybind11 error: {e}')"
 	@if [ -z "$(PYTHON_INCLUDE)" ]; then \
 		echo "Error: pybind11 not found. Please install pybind11: pip install pybind11"; \
+		echo "Debug: PYTHON_CMD=$(PYTHON_CMD)"; \
+		echo "Debug: Trying to find pybind11..."; \
+		$(PYTHON_CMD) -c "import pybind11; print(pybind11.get_include())" || echo "pybind11 import failed"; \
 		exit 1; \
 	fi
 	@echo "pybind11 include path: $(PYTHON_INCLUDE)"
