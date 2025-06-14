@@ -102,28 +102,28 @@ $(BIN_DIR):
 $(OBJ_DIR):
 	mkdir -p $(OBJ_DIR)
 
-$(BIN_DIR)/compute_index$(BIN_EXT): $(SRC_DIR)/Compute_index.cpp $(OBJECTS) | $(BIN_DIR)
+$(BIN_DIR)/compute_index$(BIN_EXT): $(SRC_DIR)/compute_index.cpp $(OBJECTS) | $(BIN_DIR)
 	$(CXX) $(OBJ_CXXFLAGS) $^ -o $@
 
-$(BIN_DIR)/compute_aindex$(BIN_EXT): $(SRC_DIR)/Compute_aindex.cpp $(OBJECTS) | $(BIN_DIR)
+$(BIN_DIR)/compute_aindex$(BIN_EXT): $(SRC_DIR)/compute_aindex.cpp $(OBJECTS) | $(BIN_DIR)
 	$(CXX) $(OBJ_CXXFLAGS) $^ -o $@
 
-$(BIN_DIR)/compute_reads$(BIN_EXT): $(SRC_DIR)/Compute_reads.cpp $(OBJECTS) | $(BIN_DIR)
+$(BIN_DIR)/compute_reads$(BIN_EXT): $(SRC_DIR)/compute_reads.cpp $(OBJECTS) | $(BIN_DIR)
 	$(CXX) $(OBJ_CXXFLAGS) $^ -o $@
 
-$(BIN_DIR)/kmer_counter$(BIN_EXT): $(SRC_DIR)/Count_kmers.cpp | $(BIN_DIR)
+$(BIN_DIR)/kmer_counter$(BIN_EXT): $(SRC_DIR)/count_kmers.cpp | $(BIN_DIR)
 	$(CXX) $(OBJ_CXXFLAGS) $< -o $@
 
 $(BIN_DIR)/generate_all_13mers$(BIN_EXT): $(SRC_DIR)/generate_all_13mers.cpp $(OBJ_DIR)/kmers.o | $(BIN_DIR)
 	$(CXX) $(OBJ_CXXFLAGS) $^ -o $@
 
-$(BIN_DIR)/build_13mer_hash$(BIN_EXT): $(SRC_DIR)/Build_13mer_hash.cpp $(OBJECTS) | $(BIN_DIR)
+$(BIN_DIR)/build_13mer_hash$(BIN_EXT): $(SRC_DIR)/build_13mer_hash.cpp $(OBJECTS) | $(BIN_DIR)
 	$(CXX) $(OBJ_CXXFLAGS) -I./external $^ -o $@
 
 $(BIN_DIR)/count_kmers13$(BIN_EXT): $(SRC_DIR)/count_kmers13.cpp $(OBJECTS) | $(BIN_DIR)
 	$(CXX) $(OBJ_CXXFLAGS) -I./external $^ -o $@
 
-$(BIN_DIR)/compute_aindex13$(BIN_EXT): $(SRC_DIR)/Compute_aindex13.cpp $(OBJECTS) | $(BIN_DIR)
+$(BIN_DIR)/compute_aindex13$(BIN_EXT): $(SRC_DIR)/compute_aindex13.cpp $(OBJECTS) | $(BIN_DIR)
 	$(CXX) $(OBJ_CXXFLAGS) -I./external $< $(OBJECTS) -o $@
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(INCLUDES) | $(OBJ_DIR)
@@ -226,7 +226,7 @@ install: all
 	cp bin/compute_reads.exe $(INSTALL_DIR)/
 	cp bin/kmer_counter.exe $(INSTALL_DIR)/
 	cp bin/generate_all_13mers.exe $(INSTALL_DIR)/
-	cp bin/Build_13mer_hash.exe $(INSTALL_DIR)/
+	cp bin/build_13mer_hash.exe $(INSTALL_DIR)/
 	cp bin/compute_aindex13.exe $(INSTALL_DIR)/
 	cp bin/count_kmers13.exe $(INSTALL_DIR)/
 

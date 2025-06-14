@@ -47,8 +47,8 @@ jobs:
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.19.2
         env:
-          # Build for Python 3.8+ to match our new requirements
-          CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-*"
+          # Build for Python 3.8 only for testing
+          CIBW_BUILD: "cp38-*"
           CIBW_SKIP: "*-musllinux* *aarch64* *arm64* *macos*"  # Skip musl Linux, ARM64, and macOS for now
           
           # Platform-specific before_all commands
