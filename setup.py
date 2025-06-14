@@ -9,16 +9,6 @@ import re
 import sys
 import platform
 
-def get_version():
-    version_file = os.path.join(os.path.dirname(__file__), 'aindex', '__init__.py')
-    with open(version_file, 'r') as f:
-        version_content = f.read()
-    # Используем регулярное выражение для поиска строки с версией
-    version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", version_content, re.M)
-    if version_match:
-        return version_match.group(1)
-    raise RuntimeError("Unable to find version string.")
-
 def check_dependencies():
     """Check if required build dependencies are available"""
     missing_deps = []
@@ -143,7 +133,7 @@ class CustomInstall(install):
 
 setup(
     name="aindex2",
-    version=get_version(),
+    version="1.3.7",
     description="Perfect hash based index for genome data.",
     long_description=open('README.md').read(),
     long_description_content_type="text/markdown",
@@ -171,7 +161,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'aindex=aindex.cli:main',
+            'aindex2=aindex.cli:main',
         ],
     },
     classifiers=[
