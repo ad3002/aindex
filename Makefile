@@ -78,7 +78,7 @@ endif
 # Binary targets with platform-appropriate extensions
 BINARIES = $(BIN_DIR)/compute_index$(BIN_EXT) $(BIN_DIR)/compute_aindex$(BIN_EXT) $(BIN_DIR)/compute_reads$(BIN_EXT) $(BIN_DIR)/kmer_counter$(BIN_EXT) $(BIN_DIR)/generate_all_13mers$(BIN_EXT) $(BIN_DIR)/build_13mer_hash$(BIN_EXT) $(BIN_DIR)/count_kmers13$(BIN_EXT) $(BIN_DIR)/compute_aindex13$(BIN_EXT)
 
-all: clean external $(BIN_DIR) $(OBJ_DIR) $(BINARIES) pybind11
+all: clean external $(BIN_DIR) $(OBJ_DIR) $(BINARIES) pybind11 copy-to-package
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
@@ -217,6 +217,7 @@ install: all
 clean:
 	rm -rf $(OBJ_DIR) $(SRC_DIR)/*.so $(BIN_DIR) $(PACKAGE_DIR)/python_wrapper.so $(PACKAGE_DIR)/aindex_cpp*.so
 	rm -rf external
+	rm -rf aindex/bin
 
 # macOS-specific target for manual compilation
 macos: clean $(PACKAGE_DIR) $(OBJ_DIR)
@@ -249,113 +250,24 @@ macos-simple: clean $(PACKAGE_DIR) $(OBJ_DIR)
 $(PACKAGE_DIR):
 	mkdir -p $(PACKAGE_DIR)
 
+# Copy binaries to package directory for inclusion in wheel
+copy-to-package: $(BINARIES)
+	@echo "Copying binaries to package directory..."
+	mkdir -p aindex/bin
+	cp -f $(BIN_DIR)/* aindex/bin/ 2>/dev/null || true
+	@echo "✓ Binaries copied to aindex/bin/"
+	@ls -la aindex/bin/ || echo "No files in aindex/bin/"
+
 # Test targets
-test: test-python-api
-
-test-python-api: pybind11
-	@echo "Running Python API tests..."
-	@$(PYTHON_CMD) tests/test_python_api_basic.py
-
-# Test targets without dependencies (for use in test-all)
-test-python-api-only:
-	@echo "Running Python API tests..."
-	@$(PYTHON_CMD) tests/test_python_api_basic.py
-
-test-python-with-data: pybind11
-	@echo "Running Python API integration tests..."
-	@$(PYTHON_CMD) tests/test_python_api_integration.py
-
-test-python-with-data-only:
-	@echo "Running Python API integration tests..."
-	@$(PYTHON_CMD) tests/test_python_api_integration.py
-
-test-regression: all
+test:
 	@echo "Running full regression tests..."
-	@cd tests && $(PYTHON_CMD) tests/test_regression.py --skip-jellyfish
+	$(PYTHON_CMD) test_aindex_functionality.py
+	$(PYTHON_CMD) test_aindex_functionality_k13.py
 
-test-regression-only:
+test-all:
 	@echo "Running full regression tests..."
-	@cd tests && $(PYTHON_CMD) tests/test_regression.py --skip-jellyfish
-
-test-quick: pybind11
-	@echo "Running quick validation test..."
-	@$(PYTHON_CMD) tests/quick_test.py
-
-test-demo: pybind11 test-regression-only
-	@echo "Running demo script with test data..."
-	@$(PYTHON_CMD) tests/demo.py
-
-test-demo-comprehensive: pybind11 test-regression-only
-	@echo "Running comprehensive demo script with test data..."
-	@$(PYTHON_CMD) tests/demo.py --comprehensive
-
-test-demo-only:
-	@echo "Running demo script with existing test data..."
-	@$(PYTHON_CMD) tests/demo.py
-
-test-demo-comprehensive-only:
-	@echo "Running comprehensive demo script with existing test data..."
-	@$(PYTHON_CMD) tests/demo.py --comprehensive
-
-test-performance: pybind11 test-regression-only
-	@echo "Running performance benchmark tests..."
-	@$(PYTHON_CMD) tests/performance_benchmark.py
-
-test-performance-only:
-	@echo "Running performance benchmark tests with existing data..."
-	@$(PYTHON_CMD) tests/performance_benchmark.py
-
-test-speed: pybind11 test-regression-only
-	@echo "Running speed tests..."
-	@$(PYTHON_CMD) tests/speed_test.py
-
-test-speed-only:
-	@echo "Running speed tests with existing data..."
-	@$(PYTHON_CMD) tests/speed_test.py
-
-test-full: test-regression test-python-with-data
-	@echo "🎉 All tests completed successfully!"
-
-test-all: all
-	@echo "=========================================="
-	@echo "🧪 RUNNING ALL AINDEX TESTS"
-	@echo "=========================================="
-	@echo "Project already built. Running tests..."
-	@echo ""
-	@echo "Step 1/2: Running regression tests (generates test data)..."
-	@$(MAKE) --no-print-directory test-regression-only
-	@echo ""
-	@echo "Step 2/2: Running Python API tests..."
-	@$(MAKE) --no-print-directory test-python-api-only
-	@$(MAKE) --no-print-directory test-python-with-data-only
-	@echo ""
-	@echo "=========================================="
-	@echo "🎉 ALL TESTS COMPLETED SUCCESSFULLY! 🎉"
-	@echo "=========================================="
-
-# Cross-platform testing targets
-test-emphf-binary: external
-	@echo "Testing emphf binary compatibility..."
-	@echo "Platform: $(shell uname -s) $(shell uname -m)"
-	@if [ -x "$(BIN_DIR)/compute_mphf_seq" ]; then \
-		echo "✓ Binary is executable"; \
-		echo "Testing with minimal input..."; \
-		echo -e "test1\ntest2\ntest3" > /tmp/test_input.txt; \
-		if $(BIN_DIR)/compute_mphf_seq /tmp/test_input.txt /tmp/test_output.mphf 2>/dev/null; then \
-			echo "✓ Binary runs successfully on $(shell uname -s) $(shell uname -m)"; \
-			rm -f /tmp/test_input.txt /tmp/test_output.mphf; \
-		else \
-			echo "✗ Binary fails on $(shell uname -s) $(shell uname -m)"; \
-			rm -f /tmp/test_input.txt /tmp/test_output.mphf; \
-			exit 1; \
-		fi; \
-	else \
-		echo "✗ Binary not found or not executable"; \
-		exit 1; \
-	fi
-
-test-cross-platform: test-emphf-binary
-	@echo "Cross-platform compatibility test passed!"
+	$(PYTHON_CMD) test_aindex_functionality.py
+	$(PYTHON_CMD) test_aindex_functionality_k13.py
 
 # Debug target for cross-platform issues
 debug-platform:
@@ -381,44 +293,21 @@ help:
 	@echo "  all              - Build all binaries and Python extension"
 	@echo "  clean            - Clean build artifacts"
 	@echo "  pybind11         - Build only the Python extension"
-	@echo "  test             - Run basic Python API tests (alias for test-python-api)"
-	@echo "  test-quick       - Quick validation test (fast functionality check)"
-	@echo "  test-demo        - Run demo script (builds test data if needed)"
-	@echo "  test-demo-comprehensive - Run comprehensive demo (builds test data if needed)"
-	@echo "  test-performance - Run comprehensive performance benchmarks"
-	@echo "  test-speed       - Run quick speed tests (key metrics)"
-	@echo "  test-python-api  - Test Python module import and basic functionality"
-	@echo "  test-python-with-data - Test Python API with real data (requires test data)"
-	@echo "  test-regression  - Run full regression tests and generate test data"
-	@echo "  test-full        - Run all tests (regression + Python API)"
-	@echo "  test-all         - Run complete test suite (build once + all tests)"
-	@echo "  test-emphf-binary - Test emphf binary compatibility on current platform"
-	@echo "  test-cross-platform - Test cross-platform compatibility"
+	@echo "  test         - Run Python API tests"
+	@echo "  test-all         - Run Python API tests"
 	@echo "  debug-platform   - Display platform and build environment information"
 	@echo "  install          - Install binaries to system (requires CONDA_PREFIX)"
 	@echo "  help             - Show this help message"
 	@echo ""
 	@echo "Recommended usage:"
 	@echo "  make test-all    - Complete test suite for new users/CI (optimized - no rebuild)"
-	@echo "  make test-cross-platform - Test cross-platform compatibility"
-	@echo "  make test-demo   - Interactive demo with real data"
-	@echo "  make test-demo-comprehensive - Full functionality showcase"
-	@echo "  make test-speed  - Quick performance check (key metrics)"
-	@echo "  make test-performance - Comprehensive performance analysis"
-	@echo "  make test-quick  - Quick validation for development"
-	@echo "  make test        - Basic Python API tests for development"
 	@echo ""
 	@echo "Cross-platform debugging:"
 	@echo "  make debug-platform - Show platform information"
-	@echo "  make test-emphf-binary - Test emphf binary specifically"
 	@echo "  make external-safe - Safe build for problematic platforms"
 	@echo ""
 	@echo "Documentation:"
 	@echo "  See CROSS_PLATFORM.md for cross-platform compatibility details"
-	@echo ""
-	@echo "Manual demo usage:"
-	@echo "  python tests/demo.py                - Basic demo"
-	@echo "  python tests/demo.py --comprehensive - Full comprehensive demo"
 	@echo ""
 	@echo "Python version detected: $(PYTHON_VERSION)"
 	@echo "Python config: $(PYTHON_CONFIG)"
@@ -433,4 +322,4 @@ debug-vars:
 	@echo "PYTHON_HEADERS: $(PYTHON_HEADERS)"
 	@echo "PYTHON_SUFFIX: $(PYTHON_SUFFIX)"
 
-.PHONY: all clean external external-safe install macos macos-simple test test-quick test-demo test-demo-comprehensive test-demo-only test-demo-comprehensive-only test-python-api test-python-api-only test-python-with-data test-python-with-data-only test-regression test-regression-only test-full test-all test-emphf-binary test-cross-platform debug-platform help debug-vars
+.PHONY: all clean external external-safe install macos macos-simple test test-all debug-platform help debug-vars copy-to-package

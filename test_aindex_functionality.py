@@ -6,7 +6,7 @@ import time
 import subprocess
 
 # Path setup - add the project root directory to Python path
-PATH_TO_AINDEX_FOLDER = '..'
+PATH_TO_AINDEX_FOLDER = '.'
 sys.path.insert(0, PATH_TO_AINDEX_FOLDER)
 
 # Logging setup

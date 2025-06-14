@@ -11,7 +11,7 @@ import platform
 
 # Important: define package metadata at the beginning of the file
 PACKAGE_NAME = "aindex2"
-PACKAGE_VERSION = "1.3.15"
+PACKAGE_VERSION = "1.3.17"
 
 def check_dependencies():
     """Check if required build dependencies are available"""
@@ -110,13 +110,29 @@ class build_ext(build_ext_orig):
             shutil.copy(pybind11_files[0], os.path.join(package_dir, os.path.basename(pybind11_files[0])))
             print(f"Copied pybind11 extension: {pybind11_files[0]}")
         
-        # Copy binaries to package
+        # Copy binaries to package bin directory (important!)
         pkg_bin_dir = os.path.join(build_lib, 'aindex', 'bin')
         os.makedirs(pkg_bin_dir, exist_ok=True)
         
         if os.path.exists('bin'):
             for file in glob.glob('bin/*'):
-                dest_file = os.path.join(pkg_bin_dir, os.path.basename(file))
+                if os.path.isfile(file):  # Only copy files, not directories
+                    dest_file = os.path.join(pkg_bin_dir, os.path.basename(file))
+                    shutil.copy2(file, dest_file)
+                    # Make executable on Unix-like systems
+                    if not file.endswith('.py'):
+                        os.chmod(dest_file, 0o755)
+                    print(f"Copied binary to package: {os.path.basename(file)}")
+        else:
+            print("Warning: No bin directory found for copying binaries.")
+        
+        # Old method - copy to separate pkg_bin_dir (kept for compatibility)
+        pkg_bin_dir_old = os.path.join(build_lib, 'aindex', 'bin')
+        os.makedirs(pkg_bin_dir_old, exist_ok=True)
+        
+        if os.path.exists('bin'):
+            for file in glob.glob('bin/*'):
+                dest_file = os.path.join(pkg_bin_dir_old, os.path.basename(file))
                 shutil.copy2(file, dest_file)
                 print(f"Copied binary: {os.path.basename(file)}")
         else:
@@ -170,15 +186,16 @@ setup(
         "numpy>=1.20.0",
         "intervaltree==3.1.0", 
         "editdistance==0.8.1",
+        "psutil>=5.8.0",
     ],
     include_package_data=True,
     package_data={
         'aindex.core': ['*.so', 'aindex_cpp*.so'],
-        'aindex': ['bin/*'],
+        'aindex': ['bin/*', 'bin/**/*'],
     },
     entry_points={
         'console_scripts': [
-            'aindex2=aindex.cli:main',
+            'aindex=aindex.cli:main',
         ],
     },
     classifiers=[

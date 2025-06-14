@@ -6,7 +6,7 @@ import time
 import subprocess
 
 # Настройка путей - добавляем корневую директорию проекта в Python path
-PATH_TO_AINDEX_FOLDER = '..'
+PATH_TO_AINDEX_FOLDER = '.'
 sys.path.insert(0, PATH_TO_AINDEX_FOLDER)
 
 # Настройка логирования
@@ -293,7 +293,7 @@ else:
     print(f"  13-мер: '{test_kmer}'")
     try:
         forward_tf, reverse_tf = index.get_tf_both_directions_13mer(test_kmer)
-        total_tf = index.get_total_tf_value_13мер(test_kmer)
+        total_tf = index.get_total_tf_value_13mer(test_kmer)
         rc_kmer = index.get_reverse_complement_13mer(test_kmer)
         
         print(f"  Forward TF: {forward_tf}")

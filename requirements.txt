@@ -1,3 +1,4 @@
 pybind11>=2.6.0
 intervaltree==3.1.0
 editdistance==0.8.1
+psutil>=5.8.0
