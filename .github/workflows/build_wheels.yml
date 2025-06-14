@@ -12,7 +12,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest] #os: [ubuntu-latest, windows-latest, macos-latest, macos-13]
+        os: [ubuntu-latest, macos-latest] # Добавили macOS обратно
     steps:
       - uses: actions/checkout@v4
 
@@ -123,11 +123,10 @@ jobs:
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: >
             auditwheel repair -w {dest_dir} {wheel}
           
-          # Test wheels - disabled for debugging
+          # Test wheels
           CIBW_TEST_COMMAND: |
-            python -c "import aindex; print('Import successful')"
-            # Skip AIndex instantiation for now due to segfault
-            # python -c "from aindex.core.aindex import AIndex; ai = AIndex(); print('AIndex created successfully')"
+            python -c "import aindex; print('✓ Import successful')"
+            python -c "from aindex.core.aindex import AIndex; ai = AIndex(); print('✓ AIndex created successfully'); print(f'✓ AIndex has {len([m for m in dir(ai) if not m.startswith(\"_\")])} methods')"
           
           # Environment variables
           CIBW_ENVIRONMENT_LINUX: MAKEFLAGS="-j$(nproc)"
