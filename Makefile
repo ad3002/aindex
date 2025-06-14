@@ -121,7 +121,7 @@ pybind11: $(OBJECTS) $(SRC_DIR)/python_wrapper.cpp | $(PACKAGE_DIR)
 	@echo "Extension suffix: $(PYTHON_SUFFIX)"
 	@echo "CIBUILDWHEEL env: $$CIBUILDWHEEL"
 	@$(PYTHON_CMD) -c "import sys; print(f'Active Python: {sys.executable}')"
-	@$(PYTHON_CMD) -c "try: import pybind11; print(f'pybind11 found: {pybind11.get_include()}'); except Exception as e: print(f'pybind11 error: {e}')"
+	@$(PYTHON_CMD) -c "import pybind11; print('pybind11 found:', pybind11.get_include())" || echo "pybind11 import failed"
 	@if [ -z "$(PYTHON_INCLUDE)" ]; then \
 		echo "Error: pybind11 not found. Please install pybind11: pip install pybind11"; \
 		echo "Debug: PYTHON_CMD=$(PYTHON_CMD)"; \
