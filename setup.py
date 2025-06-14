@@ -79,7 +79,7 @@ class build_ext(build_ext_orig):
         
         try:
             subprocess.check_call(['make', 'clean'])
-            subprocess.check_call(['make', 'all'])
+            subprocess.check_call(['make', 'all'])  # Build everything including binaries
         except subprocess.CalledProcessError as e:
             print(f"Build failed with error: {e}")
             print("Attempting to build with verbose output...")
@@ -92,52 +92,52 @@ class build_ext(build_ext_orig):
         build_lib = self.build_lib
         package_dir = os.path.join(build_lib, 'aindex', 'core')
         os.makedirs(package_dir, exist_ok=True)
-        so_files = glob.glob(os.path.join('aindex', 'core', 'python_wrapper*.so'))
-        if so_files:
-            shutil.copy(so_files[0], os.path.join(package_dir, 'python_wrapper.so'))
+        
+        # Copy the pybind11 extension (modern API)
+        pybind11_files = glob.glob(os.path.join('aindex', 'core', 'aindex_cpp*.so'))
+        if pybind11_files:
+            shutil.copy(pybind11_files[0], os.path.join(package_dir, os.path.basename(pybind11_files[0])))
+            print(f"Copied pybind11 extension: {pybind11_files[0]}")
+        
+        # Copy binaries to package
+        pkg_bin_dir = os.path.join(build_lib, 'aindex', 'bin')
+        os.makedirs(pkg_bin_dir, exist_ok=True)
+        
+        if os.path.exists('bin'):
+            for file in glob.glob('bin/*'):
+                dest_file = os.path.join(pkg_bin_dir, os.path.basename(file))
+                shutil.copy2(file, dest_file)
+                print(f"Copied binary: {os.path.basename(file)}")
         else:
-            print("Warning: No shared library found. Build may have failed.")
+            print("Warning: No pybind11 extension found.")
 
 class CustomInstall(install):
     def run(self):
         install.run(self)
-        bin_dir = os.path.join(self.install_scripts, 'bin')
-        os.makedirs(bin_dir, exist_ok=True)
-        for file in glob.glob('bin/*'):
-            shutil.copy(file, bin_dir)
+        # Copy bin files to package data directory
+        pkg_bin_dir = os.path.join(self.install_lib, 'aindex', 'bin')
+        os.makedirs(pkg_bin_dir, exist_ok=True)
+        
+        # Copy all binaries
+        if os.path.exists('bin'):
+            for file in glob.glob('bin/*'):
+                dest_file = os.path.join(pkg_bin_dir, os.path.basename(file))
+                shutil.copy2(file, dest_file)
+                # Make executable
+                os.chmod(dest_file, 0o755)
+                print(f"Installed binary: {dest_file}")
 
 setup(
-    name='aindex2',
-    version=get_version(),
-    description='Perfect hash based index for genome data.',
-    long_description=open('README.md').read(),
-    long_description_content_type='text/markdown',
-    author='Aleksey Komissarov',
-    author_email='ad3002@gmail.com',
-    url='https://github.com/ad3002/aindex',
-    packages=find_packages(),
-    ext_modules=[Extension('aindex.core.python_wrapper', sources=[])],
+    ext_modules=[
+        Extension('aindex.core.aindex_cpp', sources=[]),  # Built by Makefile
+    ],
     cmdclass={
         'build_ext': build_ext,
         'install': CustomInstall,
     },
-    install_requires=open('requirements.txt').read().splitlines(),
     include_package_data=True,
     package_data={
-        'aindex.core': ['*.so'],
-        '': ['bin/*'],
-    },
-    data_files=[
-        ('bin', glob.glob('bin/*')),
-    ],
-    classifiers=[
-        'Programming Language :: Python :: 3',
-        'Programming Language :: C++',
-        'License :: OSI Approved :: MIT License',
-        'Operating System :: POSIX :: Linux',
-    ],
-    entry_points={
-        'console_scripts': [
-        ],
+        'aindex.core': ['*.so', 'aindex_cpp*.so'],
+        'aindex': ['bin/*'],
     },
 )

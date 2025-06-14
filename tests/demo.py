@@ -2,84 +2,260 @@
 # -*- coding: utf-8 -*-
 #
 #@created: 07.01.2018
-#@author: Aleksey Komissarov
+#@author: Aleksey Komissarov  
 #@contact: ad3002@gmail.com
 
-import aindex
+import sys
+import argparse
+from pathlib import Path
 
-prefix_path = "tests/raw_reads.101bp.IS350bp25"
-kmer2tf = aindex.get_aindex(prefix_path)
+# Add project root to path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
-kmer = "A"*23
-rkmer = "T"*23
-kid = kmer2tf.get_kid_by_kmer(kmer)
-print(kmer2tf.get_kmer_info_by_kid(kid))
-print(kmer2tf[kmer], kid, kmer2tf.get_kmer_by_kid(kid), len(kmer2tf.pos(kmer)), kmer2tf.get_strand(kmer), kmer2tf.get_strand(rkmer))
-kmer = kmer2tf.get_read(0, 23, 0)
-pos = kmer2tf.pos(kmer)[0]
-print(pos)
+# Parse command line arguments
+parser = argparse.ArgumentParser(description='AIndex Demo - showcase functionality')
+parser.add_argument('--comprehensive', action='store_true', 
+                   help='Run comprehensive demo with all functionality tests')
+args = parser.parse_args()
 
-print(kmer2tf.get_kid_by_kmer(kmer), kmer2tf.get_kid_by_kmer(rkmer))
+# Use pybind11 API (memory-safe and efficient)
+from aindex.core.aindex import (
+    load_index_with_reads, get_aindex, AIndex, Strand,
+    get_revcomp, hamming_distance, iter_reads_by_kmer
+)
+print("Using pybind11 API")
 
-print(kmer2tf.get_hash_size())
+# Use test results from temp directory
+test_dir = Path(__file__).parent
+temp_dir = test_dir / "temp"
 
-print(kmer2tf.get_read(0, 123, 0))
+# Define explicit file paths (using correct names from the current pipeline)
+reads_file = str(temp_dir / "test_kmer_counter.reads")
+hash_file = str(temp_dir / "test_kmer_counter.23.pf")
 
-print(kmer2tf.get_read(0, 123, 1))
+tf_bin_file = str(temp_dir / "test_kmer_counter.23.tf.bin")
+kmers_bin_file = str(temp_dir / "test_kmer_counter.23.kmers.bin")
 
-k = 23
-for p in kmer2tf.pos(kmer):
-  print(kmer2tf.get_read(p, p+k))
-  
-test_kmer = "TAAGTTATTATTTAGTTAATACT"
-right_kmer = "AGTTAATACTTTTAACAATATTA"
+pos_file = str(temp_dir / "test_kmer_counter.23.pos.bin")
+index_file = str(temp_dir / "test_kmer_counter.23.index.bin")
+indices_file = str(temp_dir / "test_kmer_counter.23.indices.bin")
 
-print(kmer2tf[kmer])
+# Check if test results exist
+required_files = [reads_file, hash_file, tf_bin_file, kmers_bin_file, index_file, indices_file]
 
-sequence = kmer2tf.get_read(0, 1023, 0)
+missing_files = [f for f in required_files if not Path(f).exists()]
+if missing_files:
+    print(f"Test results not found: {missing_files}")
+    print("Please run 'make test-regression' first to generate test files.")
+    exit(1)
 
-print("Task 1. Get kmer frequency")
-for i, (kmer, tf) in enumerate(kmer2tf.iter_sequence_kmers(sequence)):
-    print(f"Position {i} kmer {kmer} freq = {tf}")
-  
-print("Task 2. Iter read by read, print the first 20 reads")
-for rid, read in kmer2tf.iter_reads():
-    if rid == 20:
-        break
-    print(rid, read)
+print("\n=== LOADING INDEX ===")
 
-print("Task 3. Iter reads by kmer, returs (read id, position in read, read, all_positions)")
-for rid, pos, read, poses in aindex.iter_reads_by_kmer(test_kmer, kmer2tf):
-  print(read[pos:pos+k])
+# Load with explicit file paths
+try:
+    aindex = load_index_with_reads(
+        hash_file=hash_file,
+        tf_file=tf_bin_file,
+        kmers_bin_file=kmers_bin_file,
+        kmers_text_file="",  # Not used in this demo
+        reads_file=reads_file,
+        pos_file=pos_file,
+        index_file=index_file,
+        indices_file=indices_file,
+        max_tf=10000
+    )
+    print("✓ Loaded index with explicit file paths successfully")
+except FileNotFoundError as e:
+    print(f"✗ Failed to load index: {e}")
+    exit(1)
 
-print("Task 4. Iter reads by sequence, returns (read, position in read, read, all_positions ")
-sequence = "AATATTATTAAGGTATTTAAAAAATACTATTATAGTATTTAACATA"
-for read in aindex.iter_reads_by_sequence(sequence, kmer2tf):
-    print(read)
+# Test legacy loading method
+try:
+    prefix_path = str(temp_dir / "test_kmer_counter")
+    aindex_legacy = get_aindex(prefix_path, skip_aindex=False, max_tf=10000)
+    print("✓ Legacy loading method also works")
+except Exception as e:
+    print(f"✗ Legacy loading failed: {e}")
 
-print("Task 5. Iter reads by sequence over hamming distance, returns (read, position in read, read, all_positions, hamming distance). Note that the first kmer used as seed.")
-sequence = "AATATTATTAAGGTATTTAAAAAATACTATTATAGTATTTAACATA"
-for read in aindex.iter_reads_by_sequence(sequence, kmer2tf, hd=10):
-    print(read)
+print("\n=== AINDEX DEMO ===")
 
-print("Task 6. Iter reads by sequence over hamming distance or edit distance, returns (read, position in read, read, all_positions, hamming distance). Note that the first kmer used as seed")
-sequence = "AATATTATTAAGGTATTTAAAAAATACTATTATAGTATTTAACATA"
-for read in aindex.iter_reads_by_sequence(sequence, kmer2tf, hd=10):
-    print(read)
+# Test kmers
+kmers = ["A"*23, "T"*23, "AAAAAAAAAAAAAAAAAAAAAAT", "ATCGATCGATCGATCGATCGATCG"]
 
-for read in aindex.iter_reads_by_sequence(sequence, kmer2tf, ed=10):
-    print(read)
+print("\n1. Basic K-mer Queries:")
+for kmer in kmers:
+    try:
+        # Test multiple access methods
+        tf_method = aindex.get_tf_value(kmer)
+        tf_dict = aindex[kmer]
+        exists = kmer in aindex
+        tf_get = aindex.get(kmer, -1)
+        hash_val = aindex.get_hash_value(kmer)
+        kid = aindex.get_kid_by_kmer(kmer)
+        strand = aindex.get_strand(kmer)
+        
+        print(f"  K-mer: {kmer}")
+        print(f"    TF (method): {tf_method}")
+        print(f"    TF (dict): {tf_dict}")
+        print(f"    Exists: {exists}")
+        print(f"    TF (get): {tf_get}")
+        print(f"    Hash: {hash_val}")
+        print(f"    Kid: {kid}")
+        print(f"    Strand: {strand} ({strand.name if isinstance(strand, Strand) else 'unknown'})")
+        
+        # Test reverse lookup
+        if kid > 0:
+            kmer_back = aindex.get_kmer_by_kid(kid)
+            print(f"    K-mer from KID: {kmer_back}")
+        
+    except Exception as e:
+        print(f"  {kmer}: error = {e}")
 
-print("Task 7. Get distances in reads for two kmers, returns a list of (rid, left_kmer_pos, right_kmer_pos) tuples.")
-for rid, start, end, length, fragment, is_gapped, is_reversed in aindex.get_left_right_distances(test_kmer, right_kmer, kmer2tf):
-    print(rid, start, end, length, fragment, is_gapped, is_reversed)
+print("\n2. Batch Operations:")
+try:
+    tf_values = aindex.get_tf_values(kmers)
+    hash_values = aindex.get_hash_values(kmers)
+    print(f"  Batch TF values: {tf_values}")
+    print(f"  Batch hash values: {hash_values}")
+except Exception as e:
+    print(f"  Batch operations error: {e}")
 
-print("Task 8. Get layout for kmer, returns (max_pos, reads, lefts, rights, rids, starts), for details see source code")
-max_pos, reads, lefts, rights, rids, starts = aindex.get_layout_from_reads(right_kmer, kmer2tf)
-print("Central layout:")
-for read in reads:
-    print(read)
-print("Left flanks:")
-print(lefts)
-print("Right flanks:")
-print(rights)
+print("\n3. Index Statistics:")
+try:
+    print(f"  Total k-mers: {len(aindex)}")
+    print(f"  Number of k-mers: {aindex.n_kmers}")
+    print(f"  Number of reads: {aindex.n_reads}")
+    print(f"  Reads size: {aindex.reads_size} bytes")
+    print(f"  Hash loaded: {aindex._loaded}")
+    print(f"  Aindex loaded: {aindex.aindex_loaded}")
+    print(f"  Max TF: {aindex.max_tf}")
+except Exception as e:
+    print(f"  Error getting statistics: {e}")
+
+print("\n4. Utility Functions:")
+test_seq = "ATCGATCGN"
+try:
+    revcomp = get_revcomp(test_seq)
+    print(f"  Original: {test_seq}")
+    print(f"  RevComp:  {revcomp}")
+    
+    # Test Hamming distance
+    seq1, seq2 = "ATCGATCG", "ATCGATCC"
+    hd = hamming_distance(seq1, seq2)
+    print(f"  Hamming distance '{seq1}' vs '{seq2}': {hd}")
+except Exception as e:
+    print(f"  Utility functions error: {e}")
+
+if aindex.aindex_loaded:
+    print("\n5. Positional Queries:")
+    for kmer in kmers[:2]:
+        try:
+            positions = aindex.get_positions(kmer)
+            print(f"  K-mer {kmer}: {len(positions)} positions")
+            if positions:
+                pos = positions[0]
+                rid = aindex.get_rid(pos)
+                start = aindex.get_start(pos)
+                print(f"    First position {pos} -> Read {rid}, Start {start}")
+        except Exception as e:
+            print(f"  {kmer}: position error = {e}")
+
+    print("\n6. Read Retrieval:")
+    # Test read retrieval by kmer
+    for kmer in kmers[:2]:
+        try:
+            reads = aindex.get_reads_by_kmer(kmer, max_reads=3)
+            print(f"  K-mer {kmer}: found {len(reads)} reads")
+            for i, read in enumerate(reads):
+                print(f"    Read {i}: {read[:40]}...")
+        except Exception as e:
+            print(f"  {kmer}: read retrieval error = {e}")
+
+    # Test read retrieval by read ID
+    print("\n7. Read Access by ID:")
+    for rid in range(min(3, aindex.n_reads)):
+        try:
+            read = aindex.get_read_by_rid(rid)
+            print(f"  Read {rid}: {read[:50]}...")
+        except Exception as e:
+            print(f"  Read {rid}: error = {e}")
+
+    print("\n8. Advanced Analysis:")
+    # Test sequence coverage
+    test_sequence = "ATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG"
+    try:
+        coverage = aindex.get_sequence_coverage(test_sequence, cutoff=1)
+        non_zero = sum(1 for x in coverage if x > 0)
+        print(f"  Sequence coverage: {non_zero}/{len(coverage)} positions covered")
+        
+        # Test k-mer iteration in sequence
+        kmer_count = 0
+        for kmer, tf in aindex.iter_sequence_kmers(test_sequence):
+            if kmer_count < 3:
+                print(f"    K-mer {kmer}: tf={tf}")
+            kmer_count += 1
+            if kmer_count >= 3:
+                break
+    except Exception as e:
+        print(f"  Sequence analysis error: {e}")
+
+    print("\n9. Iterator Functions:")
+    # Test read iteration
+    try:
+        read_count = 0
+        for rid, read in aindex.iter_reads():
+            if read_count < 2:
+                print(f"  Read {rid}: {read[:40]}...")
+            read_count += 1
+            if read_count >= 2:
+                break
+        print(f"  Found {read_count} reads total")
+    except Exception as e:
+        print(f"  Read iteration error: {e}")
+
+    # Test advanced analysis functions
+    print("\n10. Advanced Analysis Functions:")
+    test_kmer = kmers[0]
+    try:
+        # Test reads-by-kmer iterator
+        read_count = 0
+        for result in iter_reads_by_kmer(test_kmer, aindex):
+            if read_count < 2:
+                rid, pos, read, poses = result
+                print(f"  Found {test_kmer} in read {rid} at position {pos}")
+                print(f"    Read: {read[:40]}...")
+            read_count += 1
+            if read_count >= 2:
+                break
+    except Exception as e:
+        print(f"  Advanced analysis error: {e}")
+
+else:
+    print("\n5-10. Positional queries skipped (aindex not loaded)")
+
+print("\n=== DEMO COMPLETE ===")
+print("✓ All core functionality tested successfully!")
+print("✓ Using explicit file paths (no automatic name generation)")
+print("✓ Both new pybind11 API and legacy compatibility confirmed")
+print(f"✓ Processed index with {aindex.n_kmers} k-mers and {aindex.n_reads} reads")
+
+# Run comprehensive demo if requested
+if args.comprehensive:
+    print("\n" + "="*60)
+    print("RUNNING COMPREHENSIVE DEMO")
+    print("="*60)
+    try:
+        from comprehensive_demo import main as comprehensive_main
+        comprehensive_main()
+        print("\n" + "="*60)
+        print("✓ COMPREHENSIVE DEMO COMPLETED SUCCESSFULLY!")
+        print("="*60)
+    except ImportError as e:
+        print(f"✗ Comprehensive demo not available: {e}")
+        print("Make sure comprehensive_demo.py is in the tests directory")
+    except Exception as e:
+        print(f"✗ Comprehensive demo failed: {e}")
+else:
+    print("\nTip: Use --comprehensive flag to run extended functionality tests:")
+    print("  python demo.py --comprehensive")

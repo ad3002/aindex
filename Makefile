@@ -59,7 +59,7 @@ else
     MACOS = false
 endif
 
-all: clean external $(BIN_DIR) $(OBJ_DIR) $(BIN_DIR)/compute_index.exe $(BIN_DIR)/compute_aindex.exe $(BIN_DIR)/compute_reads.exe $(BIN_DIR)/kmer_counter.exe $(BIN_DIR)/generate_all_13mers.exe $(BIN_DIR)/build_13mer_hash.exe $(BIN_DIR)/count_kmers13.exe $(BIN_DIR)/compute_aindex13.exe pybind11
+all: clean external $(BIN_DIR) $(OBJ_DIR) $(BIN_DIR)/compute_index.exe $(BIN_DIR)/compute_aindex.exe $(BIN_DIR)/compute_reads.exe $(BIN_DIR)/kmer_counter.exe $(BIN_DIR)/generate_all_13mers.exe $(BIN_DIR)/Build_13mer_hash.exe $(BIN_DIR)/count_kmers13.exe $(BIN_DIR)/compute_aindex13.exe pybind11
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
@@ -76,13 +76,13 @@ $(BIN_DIR)/compute_aindex.exe: $(SRC_DIR)/Compute_aindex.cpp $(OBJECTS) | $(BIN_
 $(BIN_DIR)/compute_reads.exe: $(SRC_DIR)/Compute_reads.cpp $(OBJECTS) | $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-$(BIN_DIR)/kmer_counter.exe: $(SRC_DIR)/kmer_counter.cpp | $(BIN_DIR)
+$(BIN_DIR)/kmer_counter.exe: $(SRC_DIR)/Count_kmers.cpp | $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) $< -o $@
 
 $(BIN_DIR)/generate_all_13mers.exe: $(SRC_DIR)/generate_all_13mers.cpp $(OBJ_DIR)/kmers.o | $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-$(BIN_DIR)/build_13mer_hash.exe: $(SRC_DIR)/build_13mer_hash.cpp $(OBJECTS) | $(BIN_DIR)
+$(BIN_DIR)/Build_13mer_hash.exe: $(SRC_DIR)/Build_13mer_hash.cpp $(OBJECTS) | $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) -I./external $^ -o $@
 
 $(BIN_DIR)/count_kmers13.exe: $(SRC_DIR)/count_kmers13.cpp $(OBJECTS) | $(BIN_DIR)
@@ -115,6 +115,8 @@ external:
 			echo "Failed to clone emphf repository. Please check your internet connection."; \
 			exit 1; \
 		}; \
+		echo "Applying CMake version patch..."; \
+		cd emphf && patch -p1 < ../../patches/emphf_cmake_version.patch; \
 	fi
 	@echo "Building emphf using original build process..."
 	@echo "Platform: $(shell uname -s) $(shell uname -m)"
@@ -147,6 +149,8 @@ external-safe:
 			echo "Failed to clone emphf repository. Please check your internet connection."; \
 			exit 1; \
 		}; \
+		echo "Applying CMake version patch..."; \
+		cd emphf && patch -p1 < ../../patches/emphf_cmake_version.patch; \
 	fi
 	@echo "Building emphf with POPCOUNT disabled for compatibility..."
 	@echo "Platform: $(shell uname -s) $(shell uname -m)"
@@ -176,7 +180,7 @@ install: all
 	cp bin/compute_reads.exe $(INSTALL_DIR)/
 	cp bin/kmer_counter.exe $(INSTALL_DIR)/
 	cp bin/generate_all_13mers.exe $(INSTALL_DIR)/
-	cp bin/build_13mer_hash.exe $(INSTALL_DIR)/
+	cp bin/Build_13mer_hash.exe $(INSTALL_DIR)/
 	cp bin/compute_aindex13.exe $(INSTALL_DIR)/
 	cp bin/count_kmers13.exe $(INSTALL_DIR)/
 

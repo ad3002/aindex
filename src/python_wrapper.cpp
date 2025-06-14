@@ -137,14 +137,13 @@ class AindexWrapper {
     // 13-mer mode support
     bool is_13mer_mode = false;
     HASHER hasher_13mer;
-    uint32_t* tf_array_13mer = nullptr;  // Use uint32_t to match file format
+    uint64_t* tf_array_13mer = nullptr;  // Use uint64_t to match file format
     static const uint32_t TOTAL_13MERS = 67108864; // 4^13
     
     // 13-mer AIndex support (positions)
     uint64_t *positions_13mer = nullptr;
     uint64_t *indices_13mer = nullptr;
     uint64_t n_13mer = 0;
-    uint32_t max_tf_13mer = 0;
     uint64_t indices_length_13mer = 0;
     
 public:
@@ -168,7 +167,7 @@ public:
         if (positions != nullptr) munmap(positions, n*sizeof(uint64_t));
         if (indices != nullptr) munmap(indices, indices_length);
         if (reads != nullptr) munmap(reads, reads_size);
-        if (tf_array_13mer != nullptr) munmap(tf_array_13mer, TOTAL_13MERS * sizeof(uint32_t));
+        if (tf_array_13mer != nullptr) munmap(tf_array_13mer, TOTAL_13MERS * sizeof(uint64_t));
         if (positions_13mer != nullptr) munmap(positions_13mer, indices_length_13mer);
         if (indices_13mer != nullptr) munmap(indices_13mer, (TOTAL_13MERS + 1) * sizeof(uint64_t));
         if (positions_13mer != nullptr) munmap(positions_13mer, n_13mer*sizeof(uint64_t));
@@ -337,7 +336,7 @@ public:
             std::terminate();
         }
         
-        tf_array_13mer = (uint32_t*)mmap(NULL, TOTAL_13MERS * sizeof(uint32_t), 
+        tf_array_13mer = (uint64_t*)mmap(NULL, TOTAL_13MERS * sizeof(uint64_t), 
                                         PROT_READ, MAP_SHARED, fileno(tf_in), 0);
         if (tf_array_13mer == MAP_FAILED) {
             std::cerr << "Failed to mmap tf file" << std::endl;
@@ -347,6 +346,7 @@ public:
         
         is_13mer_mode = true;
         n_kmers = TOTAL_13MERS;
+        
         emphf::logger() << "13-mer index loaded successfully" << std::endl;
     }
     
@@ -406,7 +406,7 @@ public:
             std::terminate();
         }
         fclose(indices_fp);
-        
+        this->aindex_loaded = true;
         emphf::logger() << "13-mer AIndex loaded successfully" << std::endl;
     }
     
@@ -419,7 +419,7 @@ public:
     }
     
     uint32_t get_tf_value_13mer(const std::string& kmer) {
-        if (!is_13mer_mode || !is_13mer(kmer)) {
+        if (kmer.length() != 13) {
             return 0;
         }
         
@@ -432,15 +432,8 @@ public:
         
         emphf::stl_string_adaptor str_adapter;
         
-        // Try forward direction
+        // Use perfect hash lookup
         uint64_t hash_id = hasher_13mer.lookup(kmer, str_adapter);
-        if (hash_id < TOTAL_13MERS) {
-            return tf_array_13mer[hash_id];
-        }
-        
-        // Try reverse complement
-        std::string rev_kmer = get_reverse_complement_13mer(kmer);
-        hash_id = hasher_13mer.lookup(rev_kmer, str_adapter);
         if (hash_id < TOTAL_13MERS) {
             return tf_array_13mer[hash_id];
         }
@@ -462,80 +455,97 @@ public:
         return rc;
     }
 
-    std::vector<uint32_t> get_tf_values(std::vector<std::string> kmers) {
-        std::vector<uint32_t> tf_values;
-        
-        // Auto-detect mode from first k-mer
-        if (!kmers.empty()) {
-            if (is_13mer(kmers[0]) && is_13mer_mode) {
-                // Use 13-mer batch processing
-                tf_values.reserve(kmers.size());
-                
-                emphf::stl_string_adaptor str_adapter;
-                
-                for (const auto& kmer : kmers) {
-                    if (!is_13mer(kmer)) {
-                        tf_values.push_back(0);
-                        continue;
-                    }
-                    
-                    // Validate k-mer (only ATGC)
-                    bool valid = true;
-                    for (char c : kmer) {
-                        if (c != 'A' && c != 'T' && c != 'G' && c != 'C') {
-                            valid = false;
-                            break;
-                        }
-                    }
-                    
-                    if (!valid) {
-                        tf_values.push_back(0);
-                        continue;
-                    }
-                    
-                    // Try forward direction
-                    uint64_t hash_id = hasher_13mer.lookup(kmer, str_adapter);
-                    if (hash_id < TOTAL_13MERS) {
-                        tf_values.push_back(tf_array_13mer[hash_id]);
-                        continue;
-                    }
-                    
-                    // Try reverse complement
-                    std::string rev_kmer = get_reverse_complement_13mer(kmer);
-                    hash_id = hasher_13mer.lookup(rev_kmer, str_adapter);
-                    if (hash_id < TOTAL_13MERS) {
-                        tf_values.push_back(tf_array_13mer[hash_id]);
-                    } else {
-                        tf_values.push_back(0);
-                    }
-                }
-                return tf_values;
-            } else if (is_23mer(kmers[0]) && hash_map != nullptr) {
-                // Original 23-mer logic
-                for (const auto& kmer : kmers) {
-                    uint64_t kmer_id = hash_map->hasher.lookup(kmer, str_adapter);
-                    tf_values.push_back(hash_map->tf_values[kmer_id]);
-                }
-                return tf_values;
-            }
+    /**
+     * Get total TF value for 13-mer (forward + reverse complement)
+     */
+    uint64_t get_total_tf_value_13mer(const std::string& kmer) {
+        if (!is_13mer_mode) {
+            std::cerr << "Error: 13-mer mode not enabled" << std::endl;
+            return 0;
         }
         
-        // Default: return zeros for unknown k-mer sizes
-        tf_values.resize(kmers.size(), 0);
-        return tf_values;
+        if (kmer.length() != 13) {
+            std::cerr << "Error: k-mer length must be 13, got: " << kmer.length() << std::endl;
+            return 0;
+        }
+        
+        // Get TF for forward k-mer
+        uint64_t hash_idx = hasher_13mer.lookup(kmer, str_adapter);
+        uint64_t tf_forward = tf_array_13mer[hash_idx];
+        
+        // Get TF for reverse complement
+        std::string rc_kmer = get_reverse_complement_13mer(kmer);
+        uint64_t rc_hash_idx = hasher_13mer.lookup(rc_kmer, str_adapter);
+        uint64_t tf_reverse = tf_array_13mer[rc_hash_idx];
+        
+        return tf_forward + tf_reverse;
     }
 
-    uint32_t get_tf_value(std::string kmer) {
-        // Auto-detect mode based on k-mer length
-        if (is_13mer(kmer) && is_13mer_mode) {
-            return get_tf_value_13mer(kmer);
-        } else if (is_23mer(kmer) && hash_map != nullptr) {
-            return get_tf_value_23mer(kmer);
+    /**
+     * Get total TF values for multiple 13-mers (forward + reverse complement)
+     */
+    std::vector<uint64_t> get_total_tf_values_13mer(const std::vector<std::string>& kmers) {
+        if (!is_13mer_mode) {
+            std::cerr << "Error: 13-mer mode not enabled" << std::endl;
+            return std::vector<uint64_t>(kmers.size(), 0);
         }
         
-        return 0;
+        std::vector<uint64_t> total_tfs;
+        total_tfs.reserve(kmers.size());
+        
+        for (const auto& kmer : kmers) {
+            total_tfs.push_back(get_total_tf_value_13mer(kmer));
+        }
+        
+        return total_tfs;
     }
-    
+
+    /**
+     * Get TF values for 13-mer in both directions (forward, reverse complement)
+     */
+    std::pair<uint64_t, uint64_t> get_tf_both_directions_13mer(const std::string& kmer) {
+        if (!is_13mer_mode) {
+            std::cerr << "Error: 13-mer mode not enabled" << std::endl;
+            return std::make_pair(0, 0);
+        }
+        
+        if (kmer.length() != 13) {
+            std::cerr << "Error: k-mer length must be 13, got: " << kmer.length() << std::endl;
+            return std::make_pair(0, 0);
+        }
+        
+        // Get TF for forward k-mer
+        uint64_t hash_idx = hasher_13mer.lookup(kmer, str_adapter);
+        uint64_t tf_forward = tf_array_13mer[hash_idx];
+        
+        // Get TF for reverse complement
+        std::string rc_kmer = get_reverse_complement_13mer(kmer);
+        uint64_t rc_hash_idx = hasher_13mer.lookup(rc_kmer, str_adapter);
+        uint64_t tf_reverse = tf_array_13mer[rc_hash_idx];
+        
+        return std::make_pair(tf_forward, tf_reverse);
+    }
+
+    /**
+     * Get TF values for multiple 13-mers in both directions
+     * Returns vector of pairs: [(forward_tf, reverse_tf), ...]
+     */
+    std::vector<std::pair<uint64_t, uint64_t>> get_tf_both_directions_13mer_batch(const std::vector<std::string>& kmers) {
+        if (!is_13mer_mode) {
+            std::cerr << "Error: 13-mer mode not enabled" << std::endl;
+            return std::vector<std::pair<uint64_t, uint64_t>>(kmers.size(), std::make_pair(0, 0));
+        }
+        
+        std::vector<std::pair<uint64_t, uint64_t>> results;
+        results.reserve(kmers.size());
+        
+        for (const auto& kmer : kmers) {
+            results.push_back(get_tf_both_directions_13mer(kmer));
+        }
+        
+        return results;
+    }
+
     uint32_t get_tf_value_23mer(const std::string& kmer) {
         uint64_t ukmer = get_dna23_bitset(kmer);
         auto h1 = hash_map->hasher.lookup(kmer, str_adapter);
@@ -568,6 +578,31 @@ public:
         uint64_t kmer_id = hash_map->hasher.lookup(kmer, str_adapter);
         return kmer_id;
     }
+
+    // General get_tf_value method that auto-detects mode
+    uint32_t get_tf_value(const std::string& kmer) {
+        if (is_13mer_mode) {
+            return get_tf_value_13mer(kmer);
+        } else {
+            return get_tf_value_23mer(kmer);
+        }
+    }
+
+    // General get_tf_values method that auto-detects mode
+    std::vector<uint32_t> get_tf_values(const std::vector<std::string>& kmers) {
+        if (is_13mer_mode) {
+            return get_tf_values_13mer(kmers);
+        } else {
+            std::vector<uint32_t> tf_values;
+            tf_values.reserve(kmers.size());
+            for (const auto& kmer : kmers) {
+                tf_values.push_back(get_tf_value_23mer(kmer));
+            }
+            return tf_values;
+        }
+    }
+
+    // ...existing code...
 
     std::string get_read_by_rid(uint64_t rid) {
         if (start_positions.size() <= rid) {
@@ -647,15 +682,17 @@ public:
         }
     }
 
-    uint64_t get_kmer_info(uint64_t kid, std::string& kmer, std::string& rkmer) {
+    std::tuple<uint64_t, std::string, std::string> get_kmer_info(uint64_t kid) {
         if (kid >= hash_map->n) {
-            return 0;
+            return std::make_tuple(0, "", "");
         }
         uint64_t ukmer = hash_map->checker[kid];
-        kmer = get_bitset_dna23(ukmer);
+        std::string kmer = get_bitset_dna23(ukmer);
         uint64_t urev_kmer = reverseDNA(ukmer);
-        rkmer = get_bitset_dna23(urev_kmer);
-        return hash_map->tf_values[kid];
+        std::string rkmer = get_bitset_dna23(urev_kmer);
+        // Use load() to get a non-atomic value from the atomic tf_values
+        uint64_t tf_value = static_cast<uint64_t>(hash_map->tf_values[kid].load());
+        return std::make_tuple(tf_value, kmer, rkmer);
     }
 
     uint64_t get_rid(uint64_t pos) {
@@ -717,6 +754,9 @@ public:
     }
 
     uint64_t get_hash_size() {
+        if (is_13mer_mode) {
+            return TOTAL_13MERS;
+        }
         return hash_map ? hash_map->n : 0;
     }
 
@@ -837,16 +877,8 @@ public:
                 continue;
             }
             
-            // Try forward direction
+            // Use perfect hash lookup
             uint64_t hash_id = hasher_13mer.lookup(kmer, str_adapter);
-            if (hash_id < TOTAL_13MERS) {
-                tf_values.push_back(tf_array_13mer[hash_id]);
-                continue;
-            }
-            
-            // Try reverse complement
-            std::string rev_kmer = get_reverse_complement_13mer(kmer);
-            hash_id = hasher_13mer.lookup(rev_kmer, str_adapter);
             if (hash_id < TOTAL_13MERS) {
                 tf_values.push_back(tf_array_13mer[hash_id]);
             } else {
@@ -888,7 +920,7 @@ public:
             for (uint64_t i = 0; i < TOTAL_13MERS; i++) {
                 if (tf_array_13mer[i] > 0) {
                     non_zero_count++;
-                    total_count += tf_array_13mer[i];  // uint32_t automatically promotes to uint64_t
+                    total_count += tf_array_13mer[i];  // uint64_t
                 }
             }
             info += "Non-zero entries: " + std::to_string(non_zero_count) + "\n";
@@ -910,6 +942,41 @@ public:
         return info;
     }
     
+    /**
+     * Get statistics about the 13-mer index
+     */
+    std::map<std::string, uint64_t> get_13mer_statistics() {
+        std::map<std::string, uint64_t> stats;
+        
+        if (!is_13mer_mode) {
+            std::cerr << "Error: 13-mer mode not enabled" << std::endl;
+            return stats;
+        }
+        
+        uint64_t total_kmers = TOTAL_13MERS;
+        uint64_t non_zero_kmers = 0;
+        uint64_t max_frequency = 0;
+        uint64_t total_count = 0;
+        
+        for (uint32_t i = 0; i < TOTAL_13MERS; i++) {
+            uint64_t tf = tf_array_13mer[i];
+            if (tf > 0) {
+                non_zero_kmers++;
+                total_count += tf;
+                if (tf > max_frequency) {
+                    max_frequency = tf;
+                }
+            }
+        }
+        
+        stats["total_kmers"] = total_kmers;
+        stats["non_zero_kmers"] = non_zero_kmers;
+        stats["max_frequency"] = max_frequency;
+        stats["total_count"] = total_count;
+        
+        return stats;
+    }
+    
     std::vector<uint64_t> get_positions_13mer(const std::string& kmer) {
         std::vector<uint64_t> result;
         
@@ -926,7 +993,7 @@ public:
         
         emphf::stl_string_adaptor str_adapter;
         
-        // Try forward direction
+        // Use perfect hash lookup
         uint64_t hash_id = hasher_13mer.lookup(kmer, str_adapter);
         if (hash_id < TOTAL_13MERS) {
             // Get positions for this k-mer
@@ -938,25 +1005,224 @@ public:
                     result.push_back(positions_13mer[i] - 1); // Convert from 1-based to 0-based
                 }
             }
-            return result;
-        }
-        
-        // Try reverse complement
-        std::string rev_kmer = get_reverse_complement_13mer(kmer);
-        hash_id = hasher_13mer.lookup(rev_kmer, str_adapter);
-        if (hash_id < TOTAL_13MERS) {
-            // Get positions for reverse complement
-            uint64_t start_idx = indices_13mer[hash_id];
-            uint64_t end_idx = indices_13mer[hash_id + 1];
-            
-            for (uint64_t i = start_idx; i < end_idx && i < n_13mer; ++i) {
-                if (positions_13mer[i] > 0) {
-                    result.push_back(positions_13mer[i] - 1); // Convert from 1-based to 0-based
-                }
-            }
         }
         
         return result;
+    }
+    
+    void load_from_prefix_23mer(const std::string& prefix, const std::string& reads_file = "") {
+        emphf::logger() << "Loading 23-mer index from prefix: " << prefix << std::endl;
+        
+        // Construct file paths
+        std::string pf_file = prefix + ".pf";
+        std::string tf_file = prefix + ".tf.bin";
+        std::string kmers_bin_file = prefix + ".kmers.bin";
+        std::string kmers_text_file = prefix + ".txt";
+        
+        // Check required files exist
+        std::vector<std::string> required_files = {pf_file, tf_file, kmers_bin_file};
+        for (const auto& file : required_files) {
+            std::ifstream test(file);
+            if (!test.good()) {
+                std::cerr << "Required file not found: " << file << std::endl;
+                std::terminate();
+            }
+        }
+        
+        // Load hash
+        load_hash_file(pf_file, tf_file, kmers_bin_file, kmers_text_file);
+        emphf::logger() << "23-mer hash loaded successfully" << std::endl;
+        
+        // Load reads if file provided
+        if (!reads_file.empty()) {
+            load_reads(reads_file);
+            emphf::logger() << "Reads loaded from: " << reads_file << std::endl;
+        }
+    }
+    
+    void load_aindex_from_prefix_23mer(const std::string& prefix, uint32_t max_tf, const std::string& reads_file = "") {
+        emphf::logger() << "Loading 23-mer AIndex from prefix: " << prefix << std::endl;
+        
+        // Construct file paths
+        std::string pos_file = prefix + ".pos.bin";
+        std::string index_file = prefix + ".index.bin";
+        std::string indices_file = prefix + ".indices.bin";
+        
+        // Check required files exist
+        std::vector<std::string> required_files = {pos_file, index_file, indices_file};
+        for (const auto& file : required_files) {
+            std::ifstream test(file);
+            if (!test.good()) {
+                std::cerr << "Required AIndex file not found: " << file << std::endl;
+                std::terminate();
+            }
+        }
+        
+        // Load aindex
+        load_aindex(pos_file, index_file, indices_file, max_tf);
+        emphf::logger() << "23-mer AIndex loaded successfully" << std::endl;
+        
+        // Load reads if file provided and not already loaded
+        if (!reads_file.empty() && reads == nullptr) {
+            load_reads(reads_file);
+            emphf::logger() << "Reads loaded from: " << reads_file << std::endl;
+        }
+    }
+    
+    void load_from_prefix_13mer(const std::string& prefix, const std::string& reads_file = "") {
+        emphf::logger() << "Loading 13-mer index from prefix: " << prefix << std::endl;
+        
+        // Construct file paths
+        std::string hash_file = prefix + ".pf";
+        std::string tf_file = prefix + ".tf.bin";
+        
+        // Check required files exist
+        std::vector<std::string> required_files = {hash_file, tf_file};
+        for (const auto& file : required_files) {
+            std::ifstream test(file);
+            if (!test.good()) {
+                std::cerr << "Required 13-mer file not found: " << file << std::endl;
+                std::terminate();
+            }
+        }
+        
+        // Load 13-mer index
+        load_13mer_index(hash_file, tf_file);
+        emphf::logger() << "13-mer index loaded successfully" << std::endl;
+        
+        // Load reads if file provided
+        if (!reads_file.empty()) {
+            load_reads(reads_file);
+            emphf::logger() << "Reads loaded from: " << reads_file << std::endl;
+        }
+    }
+    
+    void load_aindex_from_prefix_13mer(const std::string& prefix, const std::string& reads_file = "") {
+        emphf::logger() << "Loading 13-mer AIndex from prefix: " << prefix << std::endl;
+        
+        // Construct file paths
+        std::string pos_file = prefix + ".pos.bin";
+        std::string index_file = prefix + ".index.bin";
+        std::string indices_file = prefix + ".indices.bin";
+        
+        // Check required files exist
+        std::vector<std::string> required_files = {pos_file, index_file, indices_file};
+        for (const auto& file : required_files) {
+            std::ifstream test(file);
+            if (!test.good()) {
+                std::cerr << "Required 13-mer AIndex file not found: " << file << std::endl;
+                std::terminate();
+            }
+        }
+        
+        // Load 13-mer aindex
+        load_13mer_aindex(pos_file, index_file, indices_file);
+        emphf::logger() << "13-mer AIndex loaded successfully" << std::endl;
+        
+        // Load reads if file provided and not already loaded
+        if (!reads_file.empty() && reads == nullptr) {
+            load_reads(reads_file);
+            emphf::logger() << "Reads loaded from: " << reads_file << std::endl;
+        }
+    }
+    
+    // 23-mer specific methods
+    std::vector<uint32_t> get_tf_values_23mer(const std::vector<std::string>& kmers) {
+        std::vector<uint32_t> tf_values;
+        tf_values.reserve(kmers.size());
+        
+        for (const auto& kmer : kmers) {
+            tf_values.push_back(get_tf_value_23mer(kmer));
+        }
+        
+        return tf_values;
+    }
+    
+    uint64_t get_total_tf_value_23mer(const std::string& kmer) {
+        if (kmer.length() != 23) {
+            return 0;
+        }
+        
+        uint32_t forward_tf = get_tf_value_23mer(kmer);
+        
+        // Get reverse complement
+        std::string rev_kmer = "NNNNNNNNNNNNNNNNNNNNNNN";
+        uint64_t ukmer = get_dna23_bitset(kmer);
+        uint64_t urev_kmer = reverseDNA(ukmer);
+        get_bitset_dna23(urev_kmer, rev_kmer);
+        
+        uint32_t reverse_tf = get_tf_value_23mer(rev_kmer);
+        
+        return static_cast<uint64_t>(forward_tf) + static_cast<uint64_t>(reverse_tf);
+    }
+    
+    std::vector<uint64_t> get_total_tf_values_23mer(const std::vector<std::string>& kmers) {
+        std::vector<uint64_t> total_tfs;
+        total_tfs.reserve(kmers.size());
+        
+        for (const auto& kmer : kmers) {
+            total_tfs.push_back(get_total_tf_value_23mer(kmer));
+        }
+        
+        return total_tfs;
+    }
+    
+    std::pair<uint32_t, uint32_t> get_tf_both_directions_23mer(const std::string& kmer) {
+        if (kmer.length() != 23) {
+            return {0, 0};
+        }
+        
+        uint32_t forward_tf = get_tf_value_23mer(kmer);
+        
+        // Get reverse complement
+        std::string rev_kmer = "NNNNNNNNNNNNNNNNNNNNNNN";
+        uint64_t ukmer = get_dna23_bitset(kmer);
+        uint64_t urev_kmer = reverseDNA(ukmer);
+        get_bitset_dna23(urev_kmer, rev_kmer);
+        
+        uint32_t reverse_tf = get_tf_value_23mer(rev_kmer);
+        
+        return {forward_tf, reverse_tf};
+    }
+    
+    std::vector<std::pair<uint32_t, uint32_t>> get_tf_both_directions_23mer_batch(const std::vector<std::string>& kmers) {
+        std::vector<std::pair<uint32_t, uint32_t>> results;
+        results.reserve(kmers.size());
+        
+        for (const auto& kmer : kmers) {
+            results.push_back(get_tf_both_directions_23mer(kmer));
+        }
+        
+        return results;
+    }
+    
+    std::string get_reverse_complement_23mer(const std::string& kmer) {
+        if (kmer.length() != 23) {
+            return "";
+        }
+        
+        std::string rev_kmer = "NNNNNNNNNNNNNNNNNNNNNNN";
+        uint64_t ukmer = get_dna23_bitset(kmer);
+        uint64_t urev_kmer = reverseDNA(ukmer);
+        get_bitset_dna23(urev_kmer, rev_kmer);
+        
+        return rev_kmer;
+    }
+    
+    std::string get_23mer_statistics() {
+        if (is_13mer_mode) {
+            return "Not in 23-mer mode";
+        }
+        
+        std::ostringstream stats;
+        stats << "23-mer Index Statistics:\n";
+        stats << "Total k-mers: " << n_kmers << "\n";
+        stats << "Total reads: " << n_reads << "\n";
+        stats << "AIndex loaded: " << (aindex_loaded ? "Yes" : "No") << "\n";
+        stats << "Reads loaded: " << (reads != nullptr ? "Yes" : "No") << "\n";
+        stats << "Hash map size: " << (hash_map ? hash_map->n : 0) << "\n";
+        
+        return stats.str();
     }
 };
 
@@ -986,8 +1252,20 @@ PYBIND11_MODULE(aindex_cpp, m) {
              "Load 13-mer index from hash file and tf file")
         .def("load_13mer_aindex", &AindexWrapper::load_13mer_aindex,
              "Load 13-mer position index from pos, index, and indices files")
-        .def("load_13mer_aindex", &AindexWrapper::load_13mer_aindex,
-             "Load 13-mer AIndex files")
+        
+        // New prefix-based loading methods with reads file support
+        .def("load_from_prefix_23mer", &AindexWrapper::load_from_prefix_23mer,
+             "Load 23-mer index from prefix (auto-constructs file paths)",
+             py::arg("prefix"), py::arg("reads_file") = "")
+        .def("load_aindex_from_prefix_23mer", &AindexWrapper::load_aindex_from_prefix_23mer,
+             "Load 23-mer AIndex from prefix (auto-constructs file paths)",
+             py::arg("prefix"), py::arg("max_tf"), py::arg("reads_file") = "")
+        .def("load_from_prefix_13mer", &AindexWrapper::load_from_prefix_13mer,
+             "Load 13-mer index from prefix (auto-constructs file paths)",
+             py::arg("prefix"), py::arg("reads_file") = "")
+        .def("load_aindex_from_prefix_13mer", &AindexWrapper::load_aindex_from_prefix_13mer,
+             "Load 13-mer AIndex from prefix (auto-constructs file paths)",
+             py::arg("prefix"), py::arg("reads_file") = "")
         
         // Query functions
         .def("get_tf_values", &AindexWrapper::get_tf_values,
@@ -1034,6 +1312,18 @@ PYBIND11_MODULE(aindex_cpp, m) {
              "Debug kmer tf values")
         .def("get_tf_values_13mer", &AindexWrapper::get_tf_values_13mer,
              "Get term frequency values for 13-mers")
+        .def("get_total_tf_value_13mer", &AindexWrapper::get_total_tf_value_13mer,
+             "Get total term frequency value for 13-mer (forward + reverse complement)")
+        .def("get_total_tf_values_13mer", &AindexWrapper::get_total_tf_values_13mer,
+             "Get total term frequency values for 13-mers (forward + reverse complement)")
+        .def("get_tf_both_directions_13mer", &AindexWrapper::get_tf_both_directions_13mer,
+             "Get TF values for 13-mer in both directions (forward, reverse complement)")
+        .def("get_tf_both_directions_13mer_batch", &AindexWrapper::get_tf_both_directions_13mer_batch,
+             "Get TF values for multiple 13-mers in both directions")
+        .def("get_reverse_complement_13mer", &AindexWrapper::get_reverse_complement_13mer,
+             "Get reverse complement of a 13-mer")
+        .def("get_13mer_statistics", &AindexWrapper::get_13mer_statistics,
+             "Get statistics about the 13-mer index")
         .def("get_13mer_tf_array", &AindexWrapper::get_13mer_tf_array,
              "Get direct access to 13-mer tf array")
         .def("get_tf_by_index_13mer", &AindexWrapper::get_tf_by_index_13mer,
@@ -1041,5 +1331,23 @@ PYBIND11_MODULE(aindex_cpp, m) {
         .def("get_index_info", &AindexWrapper::get_index_info,
              "Get statistics about loaded index")
         .def("get_positions_13mer", &AindexWrapper::get_positions_13mer,
-             "Get positions for 13-mers using the position index");
+             "Get positions for 13-mers using the position index")
+        .def("get_13mer_statistics", &AindexWrapper::get_13mer_statistics,
+             "Get statistics about the 13-mer index")
+        
+        // 23-mer specific methods
+        .def("get_tf_values_23mer", &AindexWrapper::get_tf_values_23mer,
+             "Get term frequency values for 23-mers")
+        .def("get_total_tf_value_23mer", &AindexWrapper::get_total_tf_value_23mer,
+             "Get total term frequency value for 23-mer (forward + reverse complement)")
+        .def("get_total_tf_values_23mer", &AindexWrapper::get_total_tf_values_23mer,
+             "Get total term frequency values for 23-mers (forward + reverse complement)")
+        .def("get_tf_both_directions_23mer", &AindexWrapper::get_tf_both_directions_23mer,
+             "Get TF values for 23-mer in both directions (forward, reverse complement)")
+        .def("get_tf_both_directions_23mer_batch", &AindexWrapper::get_tf_both_directions_23mer_batch,
+             "Get TF values for multiple 23-mers in both directions")
+        .def("get_reverse_complement_23mer", &AindexWrapper::get_reverse_complement_23mer,
+             "Get reverse complement of a 23-mer")
+        .def("get_23mer_statistics", &AindexWrapper::get_23mer_statistics,
+             "Get statistics about the 23-mer index");
 }

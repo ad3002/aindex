@@ -65,3 +65,8 @@ tests/temp/test_kmer_counter.reads
 tests/temp/test_kmer_counter.ridx
 tests/temp/test_results.json
 temp
+depricated_code
+all_13mers.txt
+pyvenv.cfg
+kmers_analysis.trues.summary
+kmers_analysis.trues

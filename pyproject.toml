@@ -2,21 +2,88 @@
 requires = ["setuptools", "wheel", "pybind11>=2.6.0", "cmake"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "aindex2"
+dynamic = ["version"]
+description = "Perfect hash based index for genome data."
+authors = [{name = "Aleksey Komissarov", email = "ad3002@gmail.com"}]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "numpy>=1.20.0",
+    "intervaltree==3.1.0",
+    "editdistance==0.8.1",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: C++",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+]
+
+[project.urls]
+Homepage = "https://github.com/ad3002/aindex"
+
+[project.scripts]
+aindex = "aindex.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["aindex*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "aindex.__version__"}
+
 [tool.cibuildwheel]
+# Build for Python 3.8+ on all platforms
+build = "cp38-* cp39-* cp310-* cp311-* cp312-*"
+skip = "*-musllinux*"  # Skip musl Linux for simplicity
+test-command = "python -c 'import aindex; print(\"Import successful\"); ai = aindex.AIndex(); print(f\"AIndex created with {len([m for m in dir(ai) if not m.startswith(\\\"_\\\")])} methods\")'"
+
+# Linux-specific configuration
+[tool.cibuildwheel.linux]
+archs = ["x86_64", "aarch64"]
+repair-wheel-command = "auditwheel repair -w {dest_dir} {wheel}"
 before-all = """
-    uname -a
+    yum install -y cmake make gcc-c++ git || apt-get update && apt-get install -y cmake make build-essential git
     mkdir -p external
     cd external
     git clone https://github.com/ad3002/emphf.git
     cd emphf
+    patch -p1 < ../../patches/emphf_cmake_version.patch || true
     cmake .
     make
     cd ../../
-    make
     """
-archs = ["x86_64"]
-environment = { CIBW_BUILD = "cp3?-*-manylinux*"}
-skip = "*-win32 *-manylinux_i686 *-manylinux2010_i686 *-manylinux2014_i686 *-manylinux_aarch64 *-manylinux_ppc64le *-manylinux_s390x *-musllinux_i686 *-musllinux_aarch64 *-musllinux_ppc64le *-musllinux_s390x *-musllinux_x86_64"
 
-[tool.cibuildwheel.linux]
-repair-wheel-command = "auditwheel repair -w {dest_dir} {wheel}"
+# macOS-specific configuration
+[tool.cibuildwheel.macos]
+archs = ["x86_64", "arm64"]
+before-all = """
+    mkdir -p external
+    cd external
+    git clone https://github.com/ad3002/emphf.git
+    cd emphf
+    patch -p1 < ../../patches/emphf_cmake_version.patch || true
+    cmake .
+    make
+    cd ../../
+    """
+
+# Windows-specific configuration
+[tool.cibuildwheel.windows]
+archs = ["AMD64"]
+before-all = """
+    mkdir external
+    cd external
+    git clone https://github.com/ad3002/emphf.git
+    cd emphf
+    cmake -G "Visual Studio 17 2022" .
+    cmake --build . --config Release
+    cd ../..
+    """

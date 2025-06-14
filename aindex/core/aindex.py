@@ -4,9 +4,10 @@
 # @created: 07.03.2015
 # @author: Aleksey Komissarov
 # @contact: ad3002@gmail.com
-# """
+
+"""
 Aindex Python API using pybind11 bindings
-This replaces the ctypes-based API with a safer, more Pythonic interface
+Modern, safe, and Pythonic interface for k-mer indexing
 All file paths must be provided explicitly - no automatic name generation
 """
 
