@@ -12,7 +12,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest] # Временно отключаем macOS из-за проблем с wheel metadata
+        os: [ubuntu-latest] # Тестируем исправления только на Linux
     steps:
       - uses: actions/checkout@v4
 
@@ -49,7 +49,7 @@ jobs:
         env:
           # Build for Python 3.8+ to match our new requirements
           CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-*"
-          CIBW_SKIP: "*-musllinux* *aarch64* *arm64*"  # Skip musl Linux, ARM64, and macOS ARM64 for now
+          CIBW_SKIP: "*-musllinux* *aarch64* *arm64* *macos*"  # Skip musl Linux, ARM64, and macOS for now
           
           # Platform-specific before_all commands
           CIBW_BEFORE_ALL_LINUX: |
@@ -61,50 +61,54 @@ jobs:
               git clone https://github.com/ad3002/emphf.git
             fi
             cd emphf
-            patch -p1 < ../../patches/emphf_cmake_version.patch || true
+            patch -p1 < ../../patches/emphf_cmake_version.patch
             cmake .
             make
             cd ../../
             echo "Building all C++ binaries..."
             mkdir -p bin obj aindex/core
-            make clean || true
-            make external || true  # This should copy emphf binary
-            # Build all binaries with simplified make command
-            make || true
+            make clean
+            make external
+            echo "=== Debug Makefile Variables ==="
+            make debug-vars
+            echo "=== Building all binaries at once ==="
+            make bin obj
+            make bin/compute_index bin/compute_aindex bin/compute_reads bin/kmer_counter bin/generate_all_13mers bin/build_13mer_hash bin/count_kmers13 bin/compute_aindex13
             echo "Available binaries:"
-            ls -la bin/ || echo "No bin directory"
-            ls -la external/emphf/ || echo "No emphf directory"
+            ls -la bin/
             echo "Copying binaries to aindex/bin for packaging..."
             mkdir -p aindex/bin
-            cp bin/* aindex/bin/ 2>/dev/null || echo "No binaries to copy"
-            ls -la aindex/bin/ || echo "No aindex/bin directory"
+            cp bin/* aindex/bin/
+            ls -la aindex/bin/
           
           CIBW_BEFORE_ALL_MACOS: |
             echo "Building external dependencies on macOS..."
-            brew install cmake || true
+            brew install cmake
             mkdir -p external
             cd external
             if [ ! -d "emphf" ]; then
               git clone https://github.com/ad3002/emphf.git
             fi
             cd emphf
-            patch -p1 < ../../patches/emphf_cmake_version.patch || true
+            patch -p1 < ../../patches/emphf_cmake_version.patch
             cmake .
             make
             cd ../../
             echo "Building all C++ binaries..."
             mkdir -p bin obj aindex/core
-            make clean || true
-            make external || true  # This should copy emphf binary
-            # Build all binaries with simplified make command
-            make || true
+            make clean
+            make external
+            echo "=== Debug Makefile Variables ==="
+            make debug-vars
+            echo "=== Building all binaries at once ==="
+            make bin obj
+            make bin/compute_index bin/compute_aindex bin/compute_reads bin/kmer_counter bin/generate_all_13mers bin/build_13mer_hash bin/count_kmers13 bin/compute_aindex13
             echo "Available binaries:"
-            ls -la bin/ || echo "No bin directory"
-            ls -la external/emphf/ || echo "No emphf directory"
+            ls -la bin/
             echo "Copying binaries to aindex/bin for packaging..."
             mkdir -p aindex/bin
-            cp bin/* aindex/bin/ 2>/dev/null || echo "No binaries to copy"
-            ls -la aindex/bin/ || echo "No aindex/bin directory"
+            cp bin/* aindex/bin/
+            ls -la aindex/bin/
           
           CIBW_BEFORE_ALL_WINDOWS: |
             mkdir external

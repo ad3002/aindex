@@ -1,5 +1,7 @@
 CXX = g++
 CXXFLAGS = -std=c++17 -pthread -O3 -fPIC -Wall -Wextra
+# Separate flags for object files (without Python includes)
+OBJ_CXXFLAGS = -std=c++17 -pthread -O3 -fPIC -Wall -Wextra
 LDFLAGS = -shared -Wl,--export-dynamic
 SRC_DIR = src
 OBJ_DIR = obj
@@ -59,11 +61,19 @@ PYTHON_SUFFIX := $(shell $(PYTHON_CONFIG) --extension-suffix)
 # Detect OS for macOS-specific settings
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
-    CXXFLAGS += -stdlib=libc++ -I$(PYTHON_INCLUDE) $(PYTHON_HEADERS)
+    ifneq ($(PYTHON_INCLUDE),)
+        CXXFLAGS += -stdlib=libc++ -I$(PYTHON_INCLUDE) $(PYTHON_HEADERS)
+    else
+        CXXFLAGS += -stdlib=libc++ $(PYTHON_HEADERS)
+    endif
     LDFLAGS = -shared -undefined dynamic_lookup
     MACOS = true
 else
-    CXXFLAGS += -I$(PYTHON_INCLUDE) $(PYTHON_HEADERS)
+    ifneq ($(PYTHON_INCLUDE),)
+        CXXFLAGS += -I$(PYTHON_INCLUDE) $(PYTHON_HEADERS)
+    else
+        CXXFLAGS += $(PYTHON_HEADERS)
+    endif
     LDFLAGS = -shared
     MACOS = false
 endif
@@ -83,6 +93,9 @@ all: clean external $(BIN_DIR) $(OBJ_DIR) $(BINARIES) pybind11 copy-to-package
 # Alternative simplified all target that matches what's used in setup.py
 simple-all: clean external-safe $(BIN_DIR) $(OBJ_DIR) $(BINARIES) pybind11 copy-to-package
 
+# Build only object files for debugging
+objects: $(OBJ_DIR) $(OBJECTS)
+
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
 
@@ -90,31 +103,31 @@ $(OBJ_DIR):
 	mkdir -p $(OBJ_DIR)
 
 $(BIN_DIR)/compute_index$(BIN_EXT): $(SRC_DIR)/Compute_index.cpp $(OBJECTS) | $(BIN_DIR)
-	$(CXX) $(CXXFLAGS) $^ -o $@
+	$(CXX) $(OBJ_CXXFLAGS) $^ -o $@
 
 $(BIN_DIR)/compute_aindex$(BIN_EXT): $(SRC_DIR)/Compute_aindex.cpp $(OBJECTS) | $(BIN_DIR)
-	$(CXX) $(CXXFLAGS) $^ -o $@
+	$(CXX) $(OBJ_CXXFLAGS) $^ -o $@
 
 $(BIN_DIR)/compute_reads$(BIN_EXT): $(SRC_DIR)/Compute_reads.cpp $(OBJECTS) | $(BIN_DIR)
-	$(CXX) $(CXXFLAGS) $^ -o $@
+	$(CXX) $(OBJ_CXXFLAGS) $^ -o $@
 
 $(BIN_DIR)/kmer_counter$(BIN_EXT): $(SRC_DIR)/Count_kmers.cpp | $(BIN_DIR)
-	$(CXX) $(CXXFLAGS) $< -o $@
+	$(CXX) $(OBJ_CXXFLAGS) $< -o $@
 
 $(BIN_DIR)/generate_all_13mers$(BIN_EXT): $(SRC_DIR)/generate_all_13mers.cpp $(OBJ_DIR)/kmers.o | $(BIN_DIR)
-	$(CXX) $(CXXFLAGS) $^ -o $@
+	$(CXX) $(OBJ_CXXFLAGS) $^ -o $@
 
 $(BIN_DIR)/build_13mer_hash$(BIN_EXT): $(SRC_DIR)/Build_13mer_hash.cpp $(OBJECTS) | $(BIN_DIR)
-	$(CXX) $(CXXFLAGS) -I./external $^ -o $@
+	$(CXX) $(OBJ_CXXFLAGS) -I./external $^ -o $@
 
 $(BIN_DIR)/count_kmers13$(BIN_EXT): $(SRC_DIR)/count_kmers13.cpp $(OBJECTS) | $(BIN_DIR)
-	$(CXX) $(CXXFLAGS) -I./external $^ -o $@
+	$(CXX) $(OBJ_CXXFLAGS) -I./external $^ -o $@
 
 $(BIN_DIR)/compute_aindex13$(BIN_EXT): $(SRC_DIR)/Compute_aindex13.cpp $(OBJECTS) | $(BIN_DIR)
-	$(CXX) $(CXXFLAGS) $(INC) -I./external $< $(OBJECTS) -o $@
+	$(CXX) $(OBJ_CXXFLAGS) -I./external $< $(OBJECTS) -o $@
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(INCLUDES) | $(OBJ_DIR)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(OBJ_CXXFLAGS) -c $< -o $@
 
 # Pybind11 module
 pybind11: $(OBJECTS) $(SRC_DIR)/python_wrapper.cpp | $(PACKAGE_DIR)
@@ -257,7 +270,7 @@ $(PACKAGE_DIR):
 copy-to-package: $(BINARIES)
 	@echo "Copying binaries to package directory..."
 	mkdir -p aindex/bin
-	cp -f $(BIN_DIR)/* aindex/bin/ 2>/dev/null || true
+	cp -f $(BIN_DIR)/* aindex/bin/ 2>/dev/null
 	@echo "✓ Binaries copied to aindex/bin/"
 	@ls -la aindex/bin/ || echo "No files in aindex/bin/"
 
@@ -279,7 +292,7 @@ debug-platform:
 	@echo "Architecture: $(shell uname -m)"
 	@echo "Compiler: $(CXX)"
 	@echo "C++ Standard Library:"
-	@$(CXX) --version || true
+	@$(CXX) --version
 	@echo "Python: $(PYTHON_CMD)"
 	@$(PYTHON_CMD) --version
 	@echo "Python Config: $(PYTHON_CONFIG)"
@@ -321,11 +334,22 @@ help:
 
 # Debug target to print variables
 debug-vars:
+	@echo "=== Makefile Variables ==="
+	@echo "CXX: $(CXX)"
+	@echo "CXXFLAGS: $(CXXFLAGS)"
+	@echo "OBJ_CXXFLAGS: $(OBJ_CXXFLAGS)"
+	@echo "SRC_DIR: $(SRC_DIR)"
+	@echo "OBJ_DIR: $(OBJ_DIR)"
+	@echo "BIN_DIR: $(BIN_DIR)"
+	@echo "SOURCES: $(SOURCES)"
+	@echo "OBJECTS: $(OBJECTS)"
+	@echo "BINARIES: $(BINARIES)"
 	@echo "PYTHON_CMD: $(PYTHON_CMD)"
 	@echo "PYTHON_VERSION: $(PYTHON_VERSION)"
 	@echo "PYTHON_CONFIG: $(PYTHON_CONFIG)"
 	@echo "PYTHON_INCLUDE: $(PYTHON_INCLUDE)"
 	@echo "PYTHON_HEADERS: $(PYTHON_HEADERS)"
 	@echo "PYTHON_SUFFIX: $(PYTHON_SUFFIX)"
+	@echo "============================="
 
-.PHONY: all simple-all clean external external-safe install macos macos-simple test test-all debug-platform help debug-vars copy-to-package
+.PHONY: all simple-all clean external external-safe install macos macos-simple test test-all debug-platform help debug-vars copy-to-package objects

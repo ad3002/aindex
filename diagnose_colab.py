@@ -99,7 +99,7 @@ if os.path.exists("Makefile"):
     if run_cmd("python3 -c 'import cmake' 2>/dev/null"):
         print("Found Python cmake module - this may cause conflicts!")
         print("Removing Python cmake and installing system cmake...")
-        run_cmd("pip uninstall -y cmake || true")
+        run_cmd("pip uninstall -y cmake")
         run_cmd("apt-get update && apt-get install -y cmake")
     
     # Try to build external dependencies first  
