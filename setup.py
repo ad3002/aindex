@@ -9,6 +9,10 @@ import re
 import sys
 import platform
 
+# Important: define package metadata at the beginning of the file
+PACKAGE_NAME = "aindex2"
+PACKAGE_VERSION = "1.3.7"
+
 def check_dependencies():
     """Check if required build dependencies are available"""
     missing_deps = []
@@ -93,6 +97,9 @@ class build_ext(build_ext_orig):
             except subprocess.CalledProcessError as e2:
                 raise RuntimeError(f"Failed to build C++ extensions: {e2}")
         
+        # Important: call the parent run() method for correct metadata handling
+        super().run()
+        
         build_lib = self.build_lib
         package_dir = os.path.join(build_lib, 'aindex', 'core')
         os.makedirs(package_dir, exist_ok=True)
@@ -131,18 +138,28 @@ class CustomInstall(install):
                 os.chmod(dest_file, 0o755)
                 print(f"Installed binary: {dest_file}")
 
+# Read README for long_description
+with open('README.md', 'r', encoding='utf-8') as f:
+    long_description = f.read()
+
 setup(
-    name="aindex2",
-    version="1.3.7",
+    name=PACKAGE_NAME,
+    version=PACKAGE_VERSION,
     description="Perfect hash based index for genome data.",
-    long_description=open('README.md').read(),
+    long_description=long_description,
     long_description_content_type="text/markdown",
     author="Aleksey Komissarov",
     author_email="ad3002@gmail.com",
     url="https://github.com/ad3002/aindex",
     packages=find_packages(),
     ext_modules=[
-        Extension('aindex.core.aindex_cpp', sources=[]),  # Built by Makefile
+        Extension(
+            'aindex.core.aindex_cpp', 
+            sources=[],  # Built by Makefile
+            # Add empty include_dirs and library_dirs for compatibility
+            include_dirs=[],
+            library_dirs=[],
+        ),
     ],
     cmdclass={
         'build_ext': build_ext,
@@ -175,4 +192,6 @@ setup(
         "Operating System :: POSIX :: Linux",
         "Operating System :: MacOS",
     ],
+    # Add zip_safe=False for correct work with binary extensions
+    zip_safe=False,
 )

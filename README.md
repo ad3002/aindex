@@ -35,6 +35,20 @@
 pip install aindex2
 ```
 
+**⚠️ Note for Apple M1/M2 Mac users:**
+Pre-built wheels are not yet available for Apple Silicon (ARM64) architecture. Please install from source:
+
+```bash
+# Install system dependencies
+brew install cmake
+
+# Install from source
+git clone https://github.com/ad3002/aindex.git
+cd aindex
+make
+pip install .
+```
+
 **For Google Colab users:**
 ```python
 !pip uninstall -y cmake && !apt-get update && !apt-get install -y build-essential cmake git python3-dev
@@ -43,13 +57,13 @@ pip install aindex2
 
 ### Detailed Installation Instructions
 
-Installation with pip:
+**Standard installation with pip (Linux x86_64, Intel Mac):**
 
 ```bash
 pip install aindex2
 ```
 
-If you want to install the package from source or you don't have pip version for your system, you can do so by running the following commands:
+**Installation from source (recommended for M1/M2 Mac, development, or troubleshooting):**
 
 ```bash
 git clone https://github.com/ad3002/aindex.git
@@ -57,6 +71,12 @@ cd aindex
 make
 pip install .
 ```
+
+**Platform-specific notes:**
+- **Linux x86_64**: Pre-built wheels available via pip
+- **Intel Mac**: Pre-built wheels available via pip  
+- **Apple Silicon Mac (M1/M2)**: Install from source (see above)
+- **Windows**: Install from source (WSL recommended)
 
 This will create the necessary executables in the `bin` directory.
 

@@ -30,7 +30,7 @@ classifiers = [
 Homepage = "https://github.com/ad3002/aindex"
 
 [project.scripts]
-aindex2 = "aindex.cli:main"
+aindex = "aindex.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
