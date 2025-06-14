@@ -142,6 +142,15 @@ class CustomInstall(install):
                 print(f"Installed binary: {dest_file}")
 
 setup(
+    name="aindex2",
+    version=get_version(),
+    description="Perfect hash based index for genome data.",
+    long_description=open('README.md').read(),
+    long_description_content_type="text/markdown",
+    author="Aleksey Komissarov",
+    author_email="ad3002@gmail.com",
+    url="https://github.com/ad3002/aindex",
+    packages=find_packages(),
     ext_modules=[
         Extension('aindex.core.aindex_cpp', sources=[]),  # Built by Makefile
     ],
@@ -149,9 +158,31 @@ setup(
         'build_ext': build_ext,
         'install': CustomInstall,
     },
+    python_requires=">=3.8",
+    install_requires=[
+        "numpy>=1.20.0",
+        "intervaltree==3.1.0", 
+        "editdistance==0.8.1",
+    ],
     include_package_data=True,
     package_data={
         'aindex.core': ['*.so', 'aindex_cpp*.so'],
         'aindex': ['bin/*'],
     },
+    entry_points={
+        'console_scripts': [
+            'aindex=aindex.cli:main',
+        ],
+    },
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9", 
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: C++",
+        "Operating System :: POSIX :: Linux",
+        "Operating System :: MacOS",
+    ],
 )
