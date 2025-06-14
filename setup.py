@@ -11,7 +11,7 @@ import platform
 
 # Important: define package metadata at the beginning of the file
 PACKAGE_NAME = "aindex2"
-PACKAGE_VERSION = "1.3.22"
+PACKAGE_VERSION = "1.3.23"
 
 def check_dependencies():
     """Check if required build dependencies are available"""
