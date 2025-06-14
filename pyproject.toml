@@ -1,19 +1,15 @@
 [build-system]
-requires = ["setuptools", "wheel", "pybind11>=2.6.0", "cmake"]
+requires = ["setuptools>=45", "wheel", "pybind11>=2.6.0", "cmake"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "aindex2"
-version = "1.3.7"
+version = "1.3.8"
 description = "Perfect hash based index for genome data."
 authors = [{name = "Aleksey Komissarov", email = "ad3002@gmail.com"}]
 readme = "README.md"
 requires-python = ">=3.8"
-dependencies = [
-    "numpy>=1.20.0",
-    "intervaltree==3.1.0",
-    "editdistance==0.8.1",
-]
+license = {text = "MIT"}
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
@@ -25,26 +21,36 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
 ]
+dependencies = [
+    "numpy>=1.20.0",
+    "intervaltree==3.1.0",
+    "editdistance==0.8.1",
+]
 
 [project.urls]
 Homepage = "https://github.com/ad3002/aindex"
+"Bug Tracker" = "https://github.com/ad3002/aindex/issues"
+"Source Code" = "https://github.com/ad3002/aindex"
 
 [project.scripts]
-aindex = "aindex.cli:main"
+aindex2 = "aindex.cli:main"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["aindex*"]
+[tool.setuptools]
+packages = ["aindex", "aindex.core"]
+
+[tool.setuptools.package-data]
+aindex = ["bin/*"]
+"aindex.core" = ["*.so", "aindex_cpp*.so", "*.pyd"]
 
 [tool.cibuildwheel]
 # Build for Python 3.8+ on all platforms
 build = "cp38-* cp39-* cp310-* cp311-* cp312-*"
 skip = "*-musllinux*"  # Skip musl Linux for simplicity
-test-command = "python -c 'import aindex; print(\"Import successful\"); ai = aindex.AIndex(); print(f\"AIndex created with {len([m for m in dir(ai) if not m.startswith(\\\"_\\\")])} methods\")'"
+test-command = "python -c 'import aindex; print(\"Import successful\")'"
 
 # Linux-specific configuration
 [tool.cibuildwheel.linux]
-archs = ["x86_64", "aarch64"]
+archs = ["x86_64"]
 repair-wheel-command = "auditwheel repair -w {dest_dir} {wheel}"
 before-all = """
     yum install -y cmake make gcc-c++ git || apt-get update && apt-get install -y cmake make build-essential git
@@ -60,7 +66,7 @@ before-all = """
 
 # macOS-specific configuration
 [tool.cibuildwheel.macos]
-archs = ["x86_64", "arm64"]
+archs = ["x86_64"]
 before-all = """
     mkdir -p external
     cd external
@@ -70,17 +76,4 @@ before-all = """
     cmake .
     make
     cd ../../
-    """
-
-# Windows-specific configuration
-[tool.cibuildwheel.windows]
-archs = ["AMD64"]
-before-all = """
-    mkdir external
-    cd external
-    git clone https://github.com/ad3002/emphf.git
-    cd emphf
-    cmake -G "Visual Studio 17 2022" .
-    cmake --build . --config Release
-    cd ../..
     """

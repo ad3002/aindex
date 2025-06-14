@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+"""Setup script for aindex2 package."""
+
 from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext as build_ext_orig
 from setuptools.command.install import install
@@ -5,41 +8,17 @@ import subprocess
 import os
 import glob
 import shutil
-import re
 import sys
-import platform
-
-# Important: define package metadata at the beginning of the file
-PACKAGE_NAME = "aindex2"
-PACKAGE_VERSION = "1.3.7"
 
 def check_dependencies():
     """Check if required build dependencies are available"""
     missing_deps = []
     
-    # Check for make
-    try:
-        subprocess.check_call(['make', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        missing_deps.append('make')
-    
-    # Check for cmake
-    try:
-        subprocess.check_call(['cmake', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        missing_deps.append('cmake')
-    
-    # Check for g++
-    try:
-        subprocess.check_call(['g++', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        missing_deps.append('g++')
-    
-    # Check for git
-    try:
-        subprocess.check_call(['git', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        missing_deps.append('git')
+    for cmd in ['make', 'cmake', 'g++', 'git']:
+        try:
+            subprocess.check_call([cmd, '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            missing_deps.append(cmd)
     
     return missing_deps
 
@@ -48,7 +27,6 @@ def install_colab_dependencies():
     print("Detected Google Colab environment. Installing build dependencies...")
     
     try:
-        # Install build essentials
         subprocess.check_call(['apt-get', 'update'], stdout=subprocess.DEVNULL)
         subprocess.check_call(['apt-get', 'install', '-y', 'build-essential', 'cmake', 'git'], 
                             stdout=subprocess.DEVNULL)
@@ -71,20 +49,17 @@ class build_ext(build_ext_orig):
                 if not install_colab_dependencies():
                     raise RuntimeError("Failed to install required build dependencies")
         
-        # Check if we're in a cibuildwheel environment or if binaries already exist
+        # Check if we're in a cibuildwheel environment
         in_cibw = os.environ.get('CIBUILDWHEEL', '0') == '1'
         
         try:
             if in_cibw:
-                # In cibuildwheel, external dependencies should be built in BEFORE_ALL
-                # We only need to build the pybind11 extension
                 print("Building in cibuildwheel environment - building only pybind11 extension")
                 subprocess.check_call(['make', 'clean'])
                 subprocess.check_call(['make', 'pybind11'])
             else:
-                # Regular build - build everything
                 subprocess.check_call(['make', 'clean'])
-                subprocess.check_call(['make', 'all'])  # Build everything including binaries
+                subprocess.check_call(['make', 'all'])
         except subprocess.CalledProcessError as e:
             print(f"Build failed with error: {e}")
             print("Attempting to build with verbose output...")
@@ -97,18 +72,24 @@ class build_ext(build_ext_orig):
             except subprocess.CalledProcessError as e2:
                 raise RuntimeError(f"Failed to build C++ extensions: {e2}")
         
-        # Important: call the parent run() method for correct metadata handling
+        # CRITICAL: Call parent's run() method for metadata generation
         super().run()
         
+        # Copy compiled files
+        self._copy_built_files()
+    
+    def _copy_built_files(self):
+        """Copy built files to the appropriate locations"""
         build_lib = self.build_lib
         package_dir = os.path.join(build_lib, 'aindex', 'core')
         os.makedirs(package_dir, exist_ok=True)
         
-        # Copy the pybind11 extension (modern API)
+        # Copy the pybind11 extension
         pybind11_files = glob.glob(os.path.join('aindex', 'core', 'aindex_cpp*.so'))
         if pybind11_files:
-            shutil.copy(pybind11_files[0], os.path.join(package_dir, os.path.basename(pybind11_files[0])))
-            print(f"Copied pybind11 extension: {pybind11_files[0]}")
+            for f in pybind11_files:
+                shutil.copy(f, os.path.join(package_dir, os.path.basename(f)))
+                print(f"Copied pybind11 extension: {f}")
         
         # Copy binaries to package
         pkg_bin_dir = os.path.join(build_lib, 'aindex', 'bin')
@@ -119,8 +100,6 @@ class build_ext(build_ext_orig):
                 dest_file = os.path.join(pkg_bin_dir, os.path.basename(file))
                 shutil.copy2(file, dest_file)
                 print(f"Copied binary: {os.path.basename(file)}")
-        else:
-            print("Warning: No pybind11 extension found.")
 
 class CustomInstall(install):
     def run(self):
@@ -129,69 +108,23 @@ class CustomInstall(install):
         pkg_bin_dir = os.path.join(self.install_lib, 'aindex', 'bin')
         os.makedirs(pkg_bin_dir, exist_ok=True)
         
-        # Copy all binaries
         if os.path.exists('bin'):
             for file in glob.glob('bin/*'):
                 dest_file = os.path.join(pkg_bin_dir, os.path.basename(file))
                 shutil.copy2(file, dest_file)
-                # Make executable
                 os.chmod(dest_file, 0o755)
                 print(f"Installed binary: {dest_file}")
 
-# Read README for long_description
-with open('README.md', 'r', encoding='utf-8') as f:
-    long_description = f.read()
-
+# Minimal setup() call - most configuration comes from setup.cfg
 setup(
-    name=PACKAGE_NAME,
-    version=PACKAGE_VERSION,
-    description="Perfect hash based index for genome data.",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    author="Aleksey Komissarov",
-    author_email="ad3002@gmail.com",
-    url="https://github.com/ad3002/aindex",
-    packages=find_packages(),
     ext_modules=[
         Extension(
             'aindex.core.aindex_cpp', 
             sources=[],  # Built by Makefile
-            # Add empty include_dirs and library_dirs for compatibility
-            include_dirs=[],
-            library_dirs=[],
         ),
     ],
     cmdclass={
         'build_ext': build_ext,
         'install': CustomInstall,
     },
-    python_requires=">=3.8",
-    install_requires=[
-        "numpy>=1.20.0",
-        "intervaltree==3.1.0", 
-        "editdistance==0.8.1",
-    ],
-    include_package_data=True,
-    package_data={
-        'aindex.core': ['*.so', 'aindex_cpp*.so'],
-        'aindex': ['bin/*'],
-    },
-    entry_points={
-        'console_scripts': [
-            'aindex2=aindex.cli:main',
-        ],
-    },
-    classifiers=[
-        "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9", 
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
-        "Programming Language :: C++",
-        "Operating System :: POSIX :: Linux",
-        "Operating System :: MacOS",
-    ],
-    # Add zip_safe=False for correct work with binary extensions
-    zip_safe=False,
 )
