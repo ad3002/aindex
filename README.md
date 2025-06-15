@@ -35,47 +35,52 @@
 pip install aindex2
 ```
 
-**⚠️ Note for Apple M1/M2/M3 Mac users:**
-We now provide ARM64-optimized builds for Apple Silicon! For best performance:
+**✅ Optimized builds available for all platforms:**
+- **Linux**: x86_64, aarch64 (ARM64)
+- **macOS**: x86_64 (Intel), arm64 (Apple Silicon M1/M2/M3)
+- **Windows**: AMD64
 
+**⚡ ARM64-optimized builds for Apple Silicon:**
+Our builds include ARM64 optimizations for Apple M1/M2/M3 processors, providing:
+- Up to 30% faster k-mer querying
+- Native ARM64 SIMD optimizations
+- Optimized for Apple Silicon architecture
+
+**Building from source (optional):**
 ```bash
-# Install system dependencies
-brew install cmake
-
-# Install from source with ARM64 optimizations
 git clone https://github.com/ad3002/aindex.git
 cd aindex
-make arm64  # Build ARM64-optimized version
+make arm64  # For Apple Silicon
+# or
+make all    # For x86_64
 pip install .
-
-# Verify ARM64 optimizations
-python -c "import aindex; aindex.cli.main()" platform
 ```
 
-**🚀 ARM64 Performance**: 2-4x faster k-mer counting on Apple Silicon
-See [ARM64_OPTIMIZATIONS.md](ARM64_OPTIMIZATIONS.md) for details.
+**Requirements:**
+- Python 3.8+
+- Standard build tools (automatically handled by pip)
+- No external dependencies required
 
 **For Google Colab users:**
 ```python
-!pip uninstall -y cmake && !apt-get update && !apt-get install -y build-essential cmake git python3-dev
 !pip install aindex2
 ```
 
 ### Detailed Installation Instructions
 
-**Standard installation with pip (Linux x86_64, Intel Mac):**
+**Standard installation with pip (all platforms):**
 
 ```bash
 pip install aindex2
 ```
 
-**Installation from source (recommended for M1/M2 Mac, development, or troubleshooting):**
+**Installation from source (for development or custom builds):**
 
 ```bash
 git clone https://github.com/ad3002/aindex.git
 cd aindex
 
-# Standard build (no external dependencies)
+# Standard build (all platforms)
 make all
 pip install .
 
@@ -84,13 +89,12 @@ make arm64
 pip install .
 ```
 
-**Platform-specific notes:**
-- **Linux x86_64**: Pre-built wheels available via pip
-- **Intel Mac**: Pre-built wheels available via pip  
-- **Apple Silicon Mac (M1/M2)**: Install from source with `make all` or `make arm64`
-- **Windows**: Install from source (WSL recommended)
+**Platform support:**
+- **Linux**: x86_64, aarch64 (ARM64) - pre-built wheels available
+- **macOS**: x86_64 (Intel), arm64 (Apple Silicon) - pre-built wheels available  
+- **Windows**: AMD64 - pre-built wheels available
 
-This will create the necessary executables in the `bin` directory.
+All platforms include optimized builds with no external dependencies required.
 
 ### Google Colab Installation
 

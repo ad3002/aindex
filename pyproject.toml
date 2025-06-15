@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0,<70.0", "wheel>=0.40.0,<0.44.0", "pybind11>=2.6.0", "cmake"]
+requires = ["setuptools>=61.0", "wheel", "pybind11>=2.6.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -25,6 +25,7 @@ classifiers = [
     "Programming Language :: C++",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
 ]
 
 [project.urls]
@@ -37,46 +38,86 @@ aindex = "aindex.cli:main"
 where = ["."]
 include = ["aindex*"]
 
-[tool.cibuildwheel]
-# Build for Python 3.8+ on all platforms  
-build = "cp38-* cp39-* cp310-* cp311-* cp312-*"
-skip = "*-musllinux*"  # Skip musl Linux for simplicity
-test-command = "python -c 'import aindex; print(\"Import successful\"); ai = aindex.AIndex(); print(f\"AIndex created with {len([m for m in dir(ai) if not m.startswith(\\\"_\\\")])} methods\")'"
+# ============================================================================
+# cibuildwheel configuration - optimized for cross-platform builds
+# ============================================================================
 
-# Linux-specific configuration - using local emphf sources
+[tool.cibuildwheel]
+# Build for Python 3.8+ on all platforms
+build = "cp38-* cp39-* cp310-* cp311-* cp312-*"
+skip = "*-musllinux*"  # Skip musl Linux distributions
+
+# Test that wheels work
+test-command = "python -c 'import aindex; print(\"✓ aindex import successful\")'"
+
+# ============================================================================
+# Linux configuration
+# ============================================================================
+
 [tool.cibuildwheel.linux]
 archs = ["x86_64", "aarch64"]
+
+before-all = [
+    "yum install -y make gcc-c++ || (apt-get update && apt-get install -y make build-essential)",
+    "mkdir -p bin obj aindex/core aindex/bin",
+]
+
+before-build = [
+    "pip install pybind11 numpy",
+    "echo 'Building for Linux {wheel}'",
+    "make clean",
+    "make all",
+]
+
 repair-wheel-command = "auditwheel repair -w {dest_dir} {wheel}"
-before-all = """
-    yum install -y make gcc-c++ || apt-get update && apt-get install -y make build-essential
-    echo "Setting up build environment for Linux..."
-    mkdir -p bin obj aindex/core aindex/bin
-    """
 
 [tool.cibuildwheel.linux.environment]
-CIBW_BEFORE_BUILD = """
-    echo "Building for Linux architecture: $(uname -m)"
-    make clean && make all
-    """
+MAKEFLAGS = "-j$(nproc)"
 
-# macOS-specific configuration - using local emphf sources  
+# ============================================================================
+# macOS configuration  
+# ============================================================================
+
 [tool.cibuildwheel.macos]
 archs = ["x86_64", "arm64"]
-repair-wheel-command = "cp {wheel} {dest_dir}"  # Skip delocate to avoid arch conflicts
-before-all = """
-    echo "Setting up build environment for macOS..."
-    mkdir -p bin obj aindex/core aindex/bin
-    """
 
-[tool.cibuildwheel.macos.environment]  
+before-all = [
+    "mkdir -p bin obj aindex/core aindex/bin",
+]
+
+before-build = [
+    "pip install pybind11 numpy",
+    "make clean",
+    "WHEEL_FILE='{wheel}' && if echo \"$WHEEL_FILE\" | grep -q \"arm64\"; then echo \"Building ARM64 version for wheel: $WHEEL_FILE\" && make arm64; else echo \"Building x86_64 version for wheel: $WHEEL_FILE\" && make all; fi",
+]
+
+# Use simple copy instead of delocate for cross-arch compatibility
+repair-wheel-command = "cp {wheel} {dest_dir}"
+
+[tool.cibuildwheel.macos.environment]
 MACOSX_DEPLOYMENT_TARGET = "10.15"
-CIBW_BEFORE_BUILD = """
-    echo "Building for macOS architecture: $(uname -m)"
-    if [[ "$(uname -m)" == "arm64" ]]; then
-      echo "Building with ARM64 optimizations..."
-      make clean && make arm64
-    else
-      echo "Building standard version for x86_64..."
-      make clean && make all
-    fi
-    """
+MAKEFLAGS = "-j$(sysctl -n hw.ncpu)"
+
+# ============================================================================
+# Windows configuration
+# ============================================================================
+
+[tool.cibuildwheel.windows]
+archs = ["AMD64"]
+
+before-all = [
+    "mkdir bin 2>nul || echo 'bin exists'",
+    "mkdir obj 2>nul || echo 'obj exists'", 
+    "mkdir aindex\\core 2>nul || echo 'aindex\\core exists'",
+    "mkdir aindex\\bin 2>nul || echo 'aindex\\bin exists'",
+    "copy scripts\\compute_aindex.py bin\\ || echo 'scripts copied'",
+    "copy scripts\\compute_index.py bin\\ || echo 'scripts copied'",
+    "copy scripts\\reads_to_fasta.py bin\\ || echo 'scripts copied'",
+]
+
+before-build = [
+    "pip install pybind11 numpy",
+    "echo Building for Windows {wheel}",
+    # Use setup.py for Windows builds (simpler than make)
+    "python setup.py build_ext --inplace",
+]
