@@ -301,31 +301,34 @@ clean:
 	rm -rf aindex/bin
 
 # ARM64 target for Apple Silicon Macs
-arm64: clean $(PACKAGE_DIR) $(OBJ_DIR)
+arm64: clean $(PACKAGE_DIR) $(OBJ_DIR) local-scripts
 	@echo "Building ARM64-optimized version for Apple Silicon..."
 ifeq ($(ARM64_ENABLED),true)
 	@echo "Platform: Apple Silicon ($(UNAME_M))"
 	mkdir -p $(PACKAGE_DIR)
 	mkdir -p $(OBJ_DIR)
 	mkdir -p $(BIN_DIR)
-	@echo "Building ARM64-optimized binaries..."
-	@echo "K-mer counter source: $(KMER_COUNTER_SRC)"
-	@echo "13-mer counter source: $(COUNT_KMERS13_SRC)"
-	@echo "AIndex13 source: $(COMPUTE_AINDEX13_SRC)"
+	@echo "Building ARM64-optimized object files..."
 	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -c $(SRC_DIR)/helpers.cpp -o $(OBJ_DIR)/helpers.o
 	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -c $(SRC_DIR)/debrujin.cpp -o $(OBJ_DIR)/debrujin.o
 	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -c $(SRC_DIR)/hash.cpp -o $(OBJ_DIR)/hash.o
 	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -c $(SRC_DIR)/read.cpp -o $(OBJ_DIR)/read.o
 	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -c $(SRC_DIR)/settings.cpp -o $(OBJ_DIR)/settings.o
 	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -c $(SRC_DIR)/kmers.cpp -o $(OBJ_DIR)/kmers.o
-	@echo "Building k-mer counter with ARM64 optimizations..."
+	@echo "Building all ARM64-optimized binaries..."
+	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) $(SRC_DIR)/compute_index.cpp $(OBJ_DIR)/helpers.o $(OBJ_DIR)/debrujin.o $(OBJ_DIR)/read.o $(OBJ_DIR)/kmers.o $(OBJ_DIR)/settings.o $(OBJ_DIR)/hash.o -o $(BIN_DIR)/compute_index$(BIN_EXT)
+	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) $(SRC_DIR)/compute_aindex.cpp $(OBJ_DIR)/helpers.o $(OBJ_DIR)/debrujin.o $(OBJ_DIR)/read.o $(OBJ_DIR)/kmers.o $(OBJ_DIR)/settings.o $(OBJ_DIR)/hash.o -o $(BIN_DIR)/compute_aindex$(BIN_EXT)
+	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) $(SRC_DIR)/compute_reads.cpp $(OBJ_DIR)/helpers.o $(OBJ_DIR)/debrujin.o $(OBJ_DIR)/read.o $(OBJ_DIR)/kmers.o $(OBJ_DIR)/settings.o $(OBJ_DIR)/hash.o -o $(BIN_DIR)/compute_reads$(BIN_EXT)
 	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) $(KMER_COUNTER_SRC) -o $(BIN_DIR)/kmer_counter$(BIN_EXT)
-	@echo "Building 13-mer counter with ARM64 optimizations..."
+	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) $(SRC_DIR)/generate_all_13mers.cpp $(OBJ_DIR)/kmers.o -o $(BIN_DIR)/generate_all_13mers$(BIN_EXT)
+	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -I$(SRC_DIR) $(SRC_DIR)/build_13mer_hash.cpp $(OBJ_DIR)/helpers.o $(OBJ_DIR)/debrujin.o $(OBJ_DIR)/read.o $(OBJ_DIR)/kmers.o $(OBJ_DIR)/settings.o $(OBJ_DIR)/hash.o -o $(BIN_DIR)/build_13mer_hash$(BIN_EXT)
 	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -I$(SRC_DIR) $(COUNT_KMERS13_SRC) $(OBJ_DIR)/helpers.o $(OBJ_DIR)/hash.o $(OBJ_DIR)/kmers.o $(OBJ_DIR)/settings.o -o $(BIN_DIR)/count_kmers13$(BIN_EXT)
-	@echo "Building AIndex13 with ARM64 optimizations..."
 	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -I$(SRC_DIR) $(COMPUTE_AINDEX13_SRC) $(OBJ_DIR)/helpers.o $(OBJ_DIR)/debrujin.o $(OBJ_DIR)/read.o $(OBJ_DIR)/kmers.o $(OBJ_DIR)/settings.o $(OBJ_DIR)/hash.o -o $(BIN_DIR)/compute_aindex13$(BIN_EXT)
-	@echo "ARM64 build complete! All binaries optimized for Apple M1/M2 processors."
-	@echo "Use standard binary names - they are automatically ARM64-optimized on this platform."
+	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -I$(SRC_DIR) $(SRC_DIR)/emphf/compute_mphf_seq.cpp -o $(BIN_DIR)/compute_mphf_seq$(BIN_EXT)
+	@echo "Building ARM64-optimized Python extension..."
+	$(MAKE) pybind11
+	$(MAKE) copy-to-package
+	@echo "✅ ARM64 build complete! All binaries optimized for Apple M1/M2 processors."
 else
 	@echo "Error: ARM64 target is only available on Apple Silicon Macs"
 	@echo "Current platform: $(UNAME_S) $(UNAME_M)"
