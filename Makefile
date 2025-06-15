@@ -301,13 +301,17 @@ clean:
 	rm -rf aindex/bin
 
 # ARM64 target for Apple Silicon Macs
-arm64: clean $(PACKAGE_DIR) $(OBJ_DIR) local-scripts
+arm64: clean $(PACKAGE_DIR) $(OBJ_DIR) $(BIN_DIR)
 	@echo "Building ARM64-optimized version for Apple Silicon..."
 ifeq ($(ARM64_ENABLED),true)
 	@echo "Platform: Apple Silicon ($(UNAME_M))"
 	mkdir -p $(PACKAGE_DIR)
 	mkdir -p $(OBJ_DIR)
 	mkdir -p $(BIN_DIR)
+	@echo "Copying Python scripts to bin directory..."
+	cp scripts/compute_aindex.py $(BIN_DIR)/
+	cp scripts/compute_index.py $(BIN_DIR)/
+	cp scripts/reads_to_fasta.py $(BIN_DIR)/
 	@echo "Building ARM64-optimized object files..."
 	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -c $(SRC_DIR)/helpers.cpp -o $(OBJ_DIR)/helpers.o
 	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -c $(SRC_DIR)/debrujin.cpp -o $(OBJ_DIR)/debrujin.o
