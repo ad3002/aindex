@@ -87,8 +87,9 @@ before-all = [
 
 before-build = [
     "pip install pybind11 numpy",
-    "make clean",
-    "WHEEL_FILE='{wheel}' && if echo \"$WHEEL_FILE\" | grep -q \"arm64\"; then echo \"Building ARM64 version for wheel: $WHEEL_FILE\" && make arm64; else echo \"Building x86_64 version for wheel: $WHEEL_FILE\" && make all; fi",
+    "make clean || true",
+    "mkdir -p bin obj aindex/core aindex/bin",
+    "if echo '{wheel}' | grep -q 'arm64'; then echo 'Building ARM64 version' && make arm64; else echo 'Building x86_64 version' && make all; fi",
 ]
 
 # Use simple copy instead of delocate for cross-arch compatibility
@@ -96,7 +97,7 @@ repair-wheel-command = "cp {wheel} {dest_dir}"
 
 [tool.cibuildwheel.macos.environment]
 MACOSX_DEPLOYMENT_TARGET = "10.15"
-MAKEFLAGS = "-j$(sysctl -n hw.ncpu)"
+MAKEFLAGS = "-j1"
 
 # ============================================================================
 # Windows configuration
