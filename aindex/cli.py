@@ -10,8 +10,13 @@ import os
 import subprocess
 import shutil
 from pathlib import Path
-import pkg_resources
 import importlib.util
+
+# Use importlib instead of deprecated pkg_resources
+try:
+    import importlib.metadata as importlib_metadata
+except ImportError:
+    import importlib_metadata
 
 
 def get_bin_path():
@@ -27,12 +32,19 @@ def get_bin_path():
     except:
         pass
     
-    # Method 2: Try via pkg_resources (installed package)
+    # Method 2: Try via importlib (installed package)
     try:
-        package_path = pkg_resources.resource_filename('aindex', 'bin')
-        bin_dir = Path(package_path)
-        if bin_dir.exists() and any(bin_dir.iterdir()):
-            return bin_dir
+        try:
+            # Python 3.8+
+            from importlib.resources import files
+            package_path = files('aindex') / 'bin'
+        except ImportError:
+            # Fallback for older Python versions
+            import importlib_resources
+            package_path = importlib_resources.files('aindex') / 'bin'
+        
+        if package_path.exists() and any(package_path.iterdir()):
+            return package_path
     except:
         pass
     
@@ -161,21 +173,137 @@ def cmd_compute_index(args):
     """Compute index from input data"""
     parser = argparse.ArgumentParser(
         prog='aindex compute-index',
-        description='Compute index from input data'
+        description='Compute LU index for reads with perfect hash'
     )
-    parser.add_argument('-i', '--input', required=True, help='Input file')
+    parser.add_argument('dat_file', help='Data file (or use "dummy" with --mock)')
+    parser.add_argument('hash_file', help='Perfect hash file (.hash)')
     parser.add_argument('-o', '--output', required=True, help='Output prefix')
+    parser.add_argument('-t', '--threads', type=int, default=4, help='Number of threads')
+    parser.add_argument('--mock', action='store_true', help='Mock data file flag (use 1)')
     
     parsed_args = parser.parse_args(args)
     
-    script_args = ['-i', parsed_args.input, '-o', parsed_args.output]
-    return run_python_script('compute_index.py', script_args)
+    # compute_index expects: dat_file pf_file output_prefix nthreads mock_flag
+    exe_args = [
+        parsed_args.dat_file,
+        parsed_args.hash_file,
+        parsed_args.output,
+        str(parsed_args.threads),
+        "1" if parsed_args.mock else "0"
+    ]
+    return run_executable('compute_index', exe_args)
+
+
+def detect_file_format(filepath):
+    """Auto-detect file format by reading the first line"""
+    try:
+        with open(filepath, 'r') as f:
+            first_line = f.readline().strip()
+            
+        if not first_line:
+            return 'unknown', f"Empty file: {filepath}"
+            
+        if first_line.startswith('>'):
+            return 'fasta', first_line
+        elif first_line.startswith('@'):
+            return 'fastq', first_line  
+        elif all(c in 'ATCGN' for c in first_line.upper()):
+            return 'reads', first_line
+        else:
+            return 'unknown', first_line
+            
+    except Exception as e:
+        return 'error', str(e)
 
 
 def cmd_compute_reads(args):
     """Process reads using compute_reads"""
-    print("Processing reads...")
-    return run_executable('compute_reads', args)
+    parser = argparse.ArgumentParser(
+        prog='aindex compute-reads',
+        description='Convert FASTA or FASTQ reads to simple reads format'
+    )
+    
+    # Input options - mutually exclusive groups
+    input_group = parser.add_mutually_exclusive_group(required=True)
+    input_group.add_argument('-i', '--input', help='Single input file (FASTA/FASTQ/reads/single-end FASTQ)')
+    input_group.add_argument('-1', '--input1', help='First file for paired-end FASTQ')
+    
+    parser.add_argument('-2', '--input2', help='Second file for paired-end FASTQ (required with -1)')
+    parser.add_argument('-o', '--output', required=True, help='Output prefix')
+    parser.add_argument('--format', choices=['fastq', 'fasta', 'se', 'reads'], 
+                       help='Force file format (auto-detected if not specified)')
+    
+    parsed_args = parser.parse_args(args)
+    
+    # Validate arguments
+    if parsed_args.input1 and not parsed_args.input2:
+        print("Error: -2/--input2 is required when using -1/--input1")
+        return 1
+    
+    if parsed_args.input2 and not parsed_args.input1:
+        print("Error: -1/--input1 is required when using -2/--input2")
+        return 1
+    
+    # Determine mode and files
+    if parsed_args.input:
+        # Single file mode
+        file1 = parsed_args.input
+        file2 = "-"
+        is_paired = False
+    else:
+        # Paired-end mode
+        file1 = parsed_args.input1
+        file2 = parsed_args.input2
+        is_paired = True
+    
+    # Auto-detect format if not specified
+    if parsed_args.format:
+        file_format = parsed_args.format
+        print(f"Using specified format: {file_format}")
+    else:
+        # Auto-detect format from first file
+        detected_format, first_line = detect_file_format(file1)
+        
+        if detected_format == 'error':
+            print(f"Error reading file {file1}: {first_line}")
+            return 1
+        elif detected_format == 'unknown':
+            print(f"Unknown format for file {file1}")
+            print(f"First line: {first_line}")
+            return 1
+        else:
+            file_format = detected_format
+            print(f"Auto-detected format: {file_format}")
+            print(f"First line: {first_line}")
+    
+    # Determine mode and format for compute_reads binary
+    if file_format == 'reads':
+        mode = 'raw reads'
+        compute_format = 'reads'
+    elif file_format == 'fasta':
+        mode = 'FASTA'
+        compute_format = 'fasta'
+    elif file_format == 'fastq' or file_format == 'se':
+        if is_paired:
+            mode = 'PE fastq'
+            compute_format = 'fastq'
+        else:
+            mode = 'SE fastq'
+            compute_format = 'se'
+    else:
+        print(f"Unsupported format: {file_format}")
+        return 1
+    
+    print(f"Processing reads:")
+    print(f"  Mode: {mode}")
+    print(f"  File 1: {file1}")
+    print(f"  File 2: {file2}")
+    print(f"  Format: {compute_format}")
+    print(f"  Output: {parsed_args.output}")
+    
+    # compute_reads expects: fastq_file1|fasta_file1|reads_file fastq_file2|- fastq|fasta|se|reads output_prefix
+    exe_args = [file1, file2, compute_format, parsed_args.output]
+    return run_executable('compute_reads', exe_args)
 
 
 def cmd_count_kmers(args):
@@ -185,20 +313,25 @@ def cmd_count_kmers(args):
         description='Count k-mers using built-in fast counter'
     )
     parser.add_argument('-i', '--input', required=True, help='Input FASTA/FASTQ file')
-    parser.add_argument('-o', '--output', required=True, help='Output file')
-    parser.add_argument('-k', '--kmer-size', type=int, choices=[13, 23], default=23, help='K-mer size')
-    parser.add_argument('-t', '--threads', type=int, default=1, help='Number of threads')
+    parser.add_argument('--hash-file', required=True, help='Precomputed perfect hash file (.hash)')
+    parser.add_argument('-o', '--output', required=True, help='Output counts file (.tf.bin)')
+    parser.add_argument('-k', '--kmer-size', type=int, choices=[13, 23], default=13, help='K-mer size')
+    parser.add_argument('-t', '--threads', type=int, default=None, help='Number of threads (default: auto)')
     
     parsed_args = parser.parse_args(args)
     
     if parsed_args.kmer_size == 13:
         print(f"Counting 13-mers in {parsed_args.input}")
-        # Use specialized 13-mer counter if available
-        exe_args = [parsed_args.input, parsed_args.output, str(parsed_args.threads)]
+        # count_kmers13 expects: input_file hash_file output_tf_file [num_threads]
+        exe_args = [parsed_args.input, parsed_args.hash_file, parsed_args.output]
+        if parsed_args.threads is not None:
+            exe_args.append(str(parsed_args.threads))
         return run_executable('count_kmers13', exe_args)
     else:
         print(f"Counting {parsed_args.kmer_size}-mers in {parsed_args.input}")
-        exe_args = [parsed_args.input, parsed_args.output, str(parsed_args.kmer_size), str(parsed_args.threads)]
+        exe_args = [parsed_args.input, parsed_args.hash_file, parsed_args.output, str(parsed_args.kmer_size)]
+        if parsed_args.threads is not None:
+            exe_args.append(str(parsed_args.threads))
         return run_executable('kmer_counter', exe_args)
 
 
@@ -209,20 +342,20 @@ def cmd_build_hash(args):
         description='Build perfect hash for k-mers'
     )
     parser.add_argument('-i', '--input', required=True, help='Input k-mers file')
-    parser.add_argument('-o', '--output', required=True, help='Output prefix')
-    parser.add_argument('-k', '--kmer-size', type=int, choices=[13, 23], default=23, help='K-mer size')
-    parser.add_argument('-t', '--threads', type=int, default=4, help='Number of threads')
+    parser.add_argument('-o', '--output', required=True, help='Output hash file')
+    parser.add_argument('-k', '--kmer-size', type=int, choices=[13, 23], default=13, help='K-mer size')
     
     parsed_args = parser.parse_args(args)
     
     if parsed_args.kmer_size == 13:
         print(f"Building 13-mer hash for {parsed_args.input}")
-        exe_args = [parsed_args.input, parsed_args.output, str(parsed_args.threads)]
+        # build_13mer_hash expects: kmers_file output_hash_file
+        exe_args = [parsed_args.input, parsed_args.output]
         return run_executable('build_13mer_hash', exe_args)
     else:
         print(f"Building hash for {parsed_args.kmer_size}-mers")
         # Use general purpose hash builder
-        exe_args = [parsed_args.input, parsed_args.output, str(parsed_args.threads)]
+        exe_args = [parsed_args.input, parsed_args.output]
         return run_executable('compute_mphf_seq', exe_args)
 
 
@@ -234,22 +367,121 @@ def cmd_generate_kmers(args):
     )
     parser.add_argument('-o', '--output', required=True, help='Output file')
     parser.add_argument('-k', '--kmer-size', type=int, choices=[13, 23], default=13, help='K-mer size')
+    parser.add_argument('-i', '--with-indices', action='store_true', help='Include numerical indices in output')
+    parser.add_argument('-b', '--binary', action='store_true', help='Generate binary format')
+    parser.add_argument('-s', '--stats', action='store_true', help='Show statistics only')
+    parser.add_argument('-v', '--validate', action='store_true', help='Run validation test')
     
     parsed_args = parser.parse_args(args)
     
     if parsed_args.kmer_size == 13:
         print(f"Generating all 13-mers to {parsed_args.output}")
+        # generate_all_13mers expects: output_file [options]
         exe_args = [parsed_args.output]
+        if parsed_args.with_indices:
+            exe_args.append('-i')
+        if parsed_args.binary:
+            exe_args.append('-b')
+        if parsed_args.stats:
+            exe_args.append('-s')
+        if parsed_args.validate:
+            exe_args.append('-v')
         return run_executable('generate_all_13mers', exe_args)
     else:
         print(f"Generating all {parsed_args.kmer_size}-mers is not supported (too many combinations)")
         return 1
 
 
+def cmd_compute_aindex_direct(args):
+    """Direct call to compute_aindex binary for expert users"""
+    parser = argparse.ArgumentParser(
+        prog='aindex compute-aindex-direct',
+        description='Direct call to compute_aindex binary (for expert users)'
+    )
+    parser.add_argument('reads_file', help='Input reads file (one sequence per line)')
+    parser.add_argument('hash_file', help='Precomputed perfect hash file (.hash)')
+    parser.add_argument('output_prefix', help='Output prefix for generated files')
+    parser.add_argument('-t', '--threads', type=int, required=True, help='Number of threads to use')
+    parser.add_argument('-k', '--kmer-size', type=int, choices=[13, 23], default=13, help='K-mer size (13 or 23)')
+    parser.add_argument('--tf-file', help='TF frequencies file (.tf.bin)')
+    parser.add_argument('--kmers-bin', help='Binary k-mers file (.kmers.bin) [for k=23 only]')
+    parser.add_argument('--kmers-text', help='Text k-mers file (.kmers) [for k=23 only]')
+    
+    parsed_args = parser.parse_args(args)
+    
+    if parsed_args.kmer_size == 13:
+        print(f"Computing 13-mer aindex for {parsed_args.reads_file}")
+        if not parsed_args.tf_file:
+            print("Error: --tf-file is required for 13-mer mode")
+            return 1
+        # compute_aindex13 expects: reads_file hash_file tf_file output_prefix num_threads
+        exe_args = [
+            parsed_args.reads_file,
+            parsed_args.hash_file, 
+            parsed_args.tf_file,
+            parsed_args.output_prefix,
+            str(parsed_args.threads)
+        ]
+        return run_executable('compute_aindex13', exe_args)
+    else:
+        print(f"Computing 23-mer aindex for {parsed_args.reads_file}")
+        if not all([parsed_args.tf_file, parsed_args.kmers_bin, parsed_args.kmers_text]):
+            print("Error: --tf-file, --kmers-bin, and --kmers-text are required for 23-mer mode")
+            return 1
+        # compute_aindex expects: reads_file hash_file output_prefix num_threads k tf_file kmers_bin_file kmers_text_file
+        exe_args = [
+            parsed_args.reads_file,
+            parsed_args.hash_file,
+            parsed_args.output_prefix,
+            str(parsed_args.threads),
+            str(parsed_args.kmer_size),
+            parsed_args.tf_file,
+            parsed_args.kmers_bin,
+            parsed_args.kmers_text
+        ]
+        return run_executable('compute_aindex', exe_args)
+
+
 def cmd_reads_to_fasta(args):
     """Convert reads to FASTA format"""
     print("Converting reads to FASTA...")
     return run_python_script('reads_to_fasta.py', args)
+
+
+def cmd_help(args):
+    """Show detailed help for all commands"""
+    print("=== aindex Command Line Interface ===")
+    print()
+    print("Available commands:")
+    print()
+    
+    commands = {
+        'generate': 'Generate all possible k-mers (13-mers)',
+        'build-hash': 'Build perfect hash for k-mers',
+        'count': 'Count k-mers using fast built-in counter',
+        'compute-reads': 'Convert FASTA/FASTQ reads to simple reads format',
+        'compute-aindex': 'Compute aindex for k-mer analysis (high-level)',
+        'compute-aindex-direct': 'Direct call to compute_aindex binary (expert)',
+        'compute-index': 'Compute LU index for reads with perfect hash',
+        'reads-to-fasta': 'Convert reads to FASTA format',
+        'version': 'Show version information',
+        'info': 'Show system and installation information'
+    }
+    
+    for cmd, desc in commands.items():
+        print(f"  {cmd:<25} {desc}")
+    
+    print()
+    print("Typical workflow for 13-mers:")
+    print("  1. aindex generate -o all_13mers.txt")
+    print("  2. aindex build-hash -i all_13mers.txt -o 13mer_index.hash")
+    print("  3. aindex count -i input.fastq --hash-file 13mer_index.hash -o counts.tf.bin")
+    print("  4. aindex compute-reads -i input.fastq -o reads_prefix  # single-end")
+    print("     OR: aindex compute-reads -1 R1.fastq -2 R2.fastq -o reads_prefix  # paired-end")
+    print("  5. aindex compute-aindex-direct reads_prefix.reads 13mer_index.hash output_prefix -t 4 --tf-file counts.tf.bin")
+    print()
+    print("Use 'aindex <command> --help' for detailed help on specific commands.")
+    return 0
 
 
 def cmd_version(args):
@@ -334,12 +566,14 @@ def main():
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
     
     # Add subcommands
-    subparsers.add_parser('compute-aindex', help='Compute aindex for k-mer analysis')
-    subparsers.add_parser('compute-index', help='Compute index from input data') 
-    subparsers.add_parser('compute-reads', help='Process reads')
-    subparsers.add_parser('count', help='Count k-mers using fast built-in counter')
+    subparsers.add_parser('help', help='Show detailed help for all commands')
+    subparsers.add_parser('generate', help='Generate all possible k-mers (13-mers only)')
     subparsers.add_parser('build-hash', help='Build perfect hash for k-mers')
-    subparsers.add_parser('generate', help='Generate all possible k-mers')
+    subparsers.add_parser('count', help='Count k-mers using fast built-in counter (requires hash file)')
+    subparsers.add_parser('compute-reads', help='Convert FASTA/FASTQ reads to simple reads format')
+    subparsers.add_parser('compute-aindex', help='Compute aindex for k-mer analysis')
+    subparsers.add_parser('compute-aindex-direct', help='Direct call to compute_aindex binary (expert)')
+    subparsers.add_parser('compute-index', help='Compute index from input data') 
     subparsers.add_parser('reads-to-fasta', help='Convert reads to FASTA format')
     subparsers.add_parser('version', help='Show version information')
     subparsers.add_parser('info', help='Show system and installation information')
@@ -363,12 +597,14 @@ def main():
     
     # Route to appropriate command handler
     command_map = {
-        'compute-aindex': cmd_compute_aindex,
-        'compute-index': cmd_compute_index,
-        'compute-reads': cmd_compute_reads,
-        'count': cmd_count_kmers,
-        'build-hash': cmd_build_hash,
+        'help': cmd_help,
         'generate': cmd_generate_kmers,
+        'build-hash': cmd_build_hash,
+        'count': cmd_count_kmers,
+        'compute-reads': cmd_compute_reads,
+        'compute-aindex': cmd_compute_aindex,
+        'compute-aindex-direct': cmd_compute_aindex_direct,
+        'compute-index': cmd_compute_index,
         'reads-to-fasta': cmd_reads_to_fasta,
         'version': cmd_version,
         'info': cmd_info,
