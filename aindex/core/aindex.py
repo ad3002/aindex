@@ -91,12 +91,12 @@ class AIndex:
         self._wrapper.load_reads(reads_file)
         self.reads_size = self._wrapper.reads_size
         
-    def load_aindex(self, pos_file: str, index_file: str, indices_file: str, max_tf: int):
+    def load_aindex(self, index_file: str, indices_file: str, max_tf: int):
         """Load aindex files with explicit paths"""
-        for fname, fpath in [('pos', pos_file), ('index', index_file), ('indices', indices_file)]:
+        for fname, fpath in [('index', index_file), ('indices', indices_file)]:
             if not os.path.exists(fpath):
                 raise FileNotFoundError(f"{fname} file not found: {fpath}")
-        self._wrapper.load_aindex(pos_file, index_file, indices_file, max_tf)
+        self._wrapper.load_aindex(index_file, indices_file, max_tf)
         
     def load_reads_index(self, index_file: str, header_file: str = None):
         """Load reads index and optional headers."""

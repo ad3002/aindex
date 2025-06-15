@@ -272,7 +272,7 @@ public:
         emphf::logger() << "\tDone" << std::endl;
     }
 
-    void load_aindex(std::string pos_file, std::string index_file, std::string indices_file, uint32_t _max_tf) {
+    void load_aindex(std::string index_file, std::string indices_file, uint32_t _max_tf) {
         // Load aindex.
 
         n = hash_map->n;
@@ -1044,12 +1044,11 @@ public:
         emphf::logger() << "Loading 23-mer AIndex from prefix: " << prefix << std::endl;
         
         // Construct file paths
-        std::string pos_file = prefix + ".pos.bin";
         std::string index_file = prefix + ".index.bin";
         std::string indices_file = prefix + ".indices.bin";
         
         // Check required files exist
-        std::vector<std::string> required_files = {pos_file, index_file, indices_file};
+        std::vector<std::string> required_files = {index_file, indices_file};
         for (const auto& file : required_files) {
             std::ifstream test(file);
             if (!test.good()) {
@@ -1059,7 +1058,7 @@ public:
         }
         
         // Load aindex
-        load_aindex(pos_file, index_file, indices_file, max_tf);
+        load_aindex(index_file, indices_file, max_tf);
         emphf::logger() << "23-mer AIndex loaded successfully" << std::endl;
         
         // Load reads if file provided and not already loaded

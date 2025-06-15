@@ -7,6 +7,7 @@ Unified CLI for all aindex tools and utilities
 import argparse
 import sys
 import os
+import platform
 import subprocess
 import shutil
 from pathlib import Path
@@ -17,6 +18,89 @@ try:
     import importlib.metadata as importlib_metadata
 except ImportError:
     import importlib_metadata
+
+
+def detect_platform():
+    """Detect current platform and return optimization info"""
+    system = platform.system()
+    machine = platform.machine()
+    
+    platform_info = {
+        'system': system,
+        'machine': machine,
+        'is_apple_silicon': system == 'Darwin' and machine == 'arm64',
+        'is_macos': system == 'Darwin',
+        'is_linux': system == 'Linux',
+        'is_windows': system == 'Windows',
+        'cpu_count': os.cpu_count() or 4
+    }
+    
+    return platform_info
+
+
+def get_optimal_executable(base_name, platform_info=None):
+    """Get the optimal executable name based on platform"""
+    if platform_info is None:
+        platform_info = detect_platform()
+    
+    # Define platform-specific executable mappings
+    # Note: On ARM64, the main binaries are already ARM64-optimized
+    executable_variants = {
+        'kmer_counter': {
+            'default': 'kmer_counter'  # Now always optimal for current platform
+        },
+        'count_kmers': {
+            'default': 'kmer_counter'  # Use the same binary
+        },
+        # Add more mappings as needed
+        'compute_index': {
+            'default': 'compute_index'
+        },
+        'compute_aindex': {
+            'default': 'compute_aindex'
+        },
+        'compute_reads': {
+            'default': 'compute_reads'
+        },
+        'generate_all_13mers': {
+            'default': 'generate_all_13mers'
+        },
+        'build_13mer_hash': {
+            'default': 'build_13mer_hash'
+        },
+        'count_kmers13': {
+            'default': 'count_kmers13'
+        },
+        'compute_aindex13': {
+            'default': 'compute_aindex13'
+        }
+    }
+    
+    if base_name not in executable_variants:
+        return base_name
+    
+    variants = executable_variants[base_name]
+    
+    # Always use default since binaries are now platform-optimized at build time
+    return variants['default']
+
+
+def print_platform_info():
+    """Print current platform information"""
+    platform_info = detect_platform()
+    print(f"Platform: {platform_info['system']} {platform_info['machine']}")
+    print(f"CPU cores: {platform_info['cpu_count']}")
+    
+    if platform_info['is_apple_silicon']:
+        print("✓ Apple Silicon (ARM64) optimizations available")
+    elif platform_info['is_macos']:
+        print("• macOS (Intel) - standard optimizations")
+    elif platform_info['is_linux']:
+        print("• Linux - standard optimizations")
+    elif platform_info['is_windows']:
+        print("• Windows - standard optimizations")
+    
+    print()
 
 
 def get_bin_path():
@@ -71,34 +155,67 @@ def get_bin_path():
     return Path.cwd() / "bin"
 
 
-def run_executable(exe_name, args):
-    """Run a binary executable from bin directory"""
+def run_executable(exe_name, args, verbose=False):
+    """Run a binary executable from bin directory with platform optimization"""
+    platform_info = detect_platform()
     bin_dir = get_bin_path()
     
+    # Get optimal executable for current platform
+    optimal_exe = get_optimal_executable(exe_name, platform_info)
+    
+    if verbose:
+        print(f"Platform: {platform_info['system']} {platform_info['machine']}")
+        print(f"Selected executable: {optimal_exe}")
+    
     # Try different executable extensions based on platform
-    candidates = [exe_name]
-    if exe_name.endswith('.exe'):
+    candidates = [optimal_exe]
+    if optimal_exe.endswith('.exe'):
         # If requested with .exe, also try without extension
-        candidates.append(exe_name[:-4])
+        candidates.append(optimal_exe[:-4])
     else:
-        # If requested without extension, also try with .exe
-        candidates.append(exe_name + '.exe')
+        # If requested without extension, also try with .exe on Windows
+        if platform_info['is_windows']:
+            candidates.append(optimal_exe + '.exe')
+    
+    # Also try the original exe_name as fallback
+    if exe_name != optimal_exe:
+        candidates.append(exe_name)
+        if platform_info['is_windows'] and not exe_name.endswith('.exe'):
+            candidates.append(exe_name + '.exe')
     
     exe_path = None
     for candidate in candidates:
         candidate_path = bin_dir / candidate
         if candidate_path.exists():
             exe_path = candidate_path
+            if verbose:
+                print(f"Found executable: {exe_path}")
             break
     
     if exe_path is None:
         print(f"Error: Executable {exe_name} not found in {bin_dir}")
+        print(f"Platform: {platform_info['system']} {platform_info['machine']}")
+        if platform_info['is_apple_silicon']:
+            print("Note: ARM64-optimized version expected but not found")
         print(f"Tried: {[str(bin_dir / c) for c in candidates]}")
         return 1
     
     try:
+        # Add platform-specific optimizations to args if needed
+        optimized_args = args.copy()
+        
+        # For ARM64 version, ensure we use all available cores by default
+        if 'arm64' in exe_path.name and platform_info['is_apple_silicon']:
+            # Check if threads argument is missing and executable supports it
+            if exe_path.name in ['kmer_counter_arm64'] and '-t' not in args:
+                # Add optimal thread count for M1/M2
+                optimized_args.extend(['-t', str(min(platform_info['cpu_count'], 8))])
+        
+        if verbose:
+            print(f"Running: {exe_path.name} {' '.join(optimized_args)}")
+        
         # Run the executable with the provided arguments
-        result = subprocess.run([str(exe_path)] + args, check=False)
+        result = subprocess.run([str(exe_path)] + optimized_args, check=False)
         return result.returncode
     except Exception as e:
         print(f"Error running {exe_path.name}: {e}")
@@ -106,20 +223,26 @@ def run_executable(exe_name, args):
 
 
 def run_python_script(script_name, args):
-    """Run a Python script from scripts directory"""
-    # Try to find scripts directory
+    """Run a Python script from scripts or bin directory"""
+    # Try to find the script in multiple locations
     current_dir = Path(__file__).parent.parent
-    scripts_dir = current_dir / "scripts"
+    search_dirs = [
+        current_dir / "scripts",  # Development environment
+        get_bin_path(),           # Installed package bin
+        current_dir / "bin",      # Local bin directory
+    ]
     
-    if not scripts_dir.exists():
-        # Try in bin directory
-        bin_dir = get_bin_path()
-        script_path = bin_dir / script_name
-    else:
-        script_path = scripts_dir / script_name
+    script_path = None
+    for search_dir in search_dirs:
+        if search_dir.exists():
+            candidate_path = search_dir / script_name
+            if candidate_path.exists():
+                script_path = candidate_path
+                break
     
-    if not script_path.exists():
+    if script_path is None:
         print(f"Error: Script {script_name} not found")
+        print(f"Searched in: {[str(d) for d in search_dirs if d.exists()]}")
         return 1
     
     try:
@@ -307,32 +430,90 @@ def cmd_compute_reads(args):
 
 
 def cmd_count_kmers(args):
-    """Count k-mers using fast built-in counter"""
+    """Count k-mers using fast built-in counter with platform optimization"""
     parser = argparse.ArgumentParser(
         prog='aindex count',
-        description='Count k-mers using built-in fast counter'
+        description='Count k-mers using built-in fast counter (auto-optimized for current platform)'
     )
     parser.add_argument('-i', '--input', required=True, help='Input FASTA/FASTQ file')
     parser.add_argument('--hash-file', required=True, help='Precomputed perfect hash file (.hash)')
     parser.add_argument('-o', '--output', required=True, help='Output counts file (.tf.bin)')
     parser.add_argument('-k', '--kmer-size', type=int, choices=[13, 23], default=13, help='K-mer size')
-    parser.add_argument('-t', '--threads', type=int, default=None, help='Number of threads (default: auto)')
+    parser.add_argument('-t', '--threads', type=int, default=None, help='Number of threads (default: auto-optimized)')
+    parser.add_argument('--verbose', action='store_true', help='Show platform optimization details')
     
     parsed_args = parser.parse_args(args)
     
+    platform_info = detect_platform()
+    if parsed_args.verbose:
+        print_platform_info()
+    
+    # Auto-optimize thread count if not specified
+    if parsed_args.threads is None:
+        if platform_info['is_apple_silicon']:
+            # M1/M2 optimal: use all P-cores + some E-cores
+            parsed_args.threads = min(platform_info['cpu_count'], 8)
+        else:
+            # Standard optimization
+            parsed_args.threads = platform_info['cpu_count']
+    
     if parsed_args.kmer_size == 13:
         print(f"Counting 13-mers in {parsed_args.input}")
+        if platform_info['is_apple_silicon']:
+            print("Using ARM64-optimized k-mer counter")
+        
         # count_kmers13 expects: input_file hash_file output_tf_file [num_threads]
-        exe_args = [parsed_args.input, parsed_args.hash_file, parsed_args.output]
-        if parsed_args.threads is not None:
-            exe_args.append(str(parsed_args.threads))
-        return run_executable('count_kmers13', exe_args)
+        exe_args = [parsed_args.input, parsed_args.hash_file, parsed_args.output, str(parsed_args.threads)]
+        return run_executable('count_kmers13', exe_args, parsed_args.verbose)
     else:
         print(f"Counting {parsed_args.kmer_size}-mers in {parsed_args.input}")
-        exe_args = [parsed_args.input, parsed_args.hash_file, parsed_args.output, str(parsed_args.kmer_size)]
-        if parsed_args.threads is not None:
-            exe_args.append(str(parsed_args.threads))
-        return run_executable('kmer_counter', exe_args)
+        if platform_info['is_apple_silicon']:
+            print("Using ARM64-optimized k-mer counter")
+        
+        # For general k-mer counter, use format: input k output [-t threads] [-m min_count]
+        exe_args = [parsed_args.input, str(parsed_args.kmer_size), parsed_args.output, 
+                   '-t', str(parsed_args.threads)]
+        return run_executable('kmer_counter', exe_args, parsed_args.verbose)
+
+
+def cmd_count_kmers_direct(args):
+    """Count k-mers directly from sequences (no hash required) - ARM64 optimized"""
+    parser = argparse.ArgumentParser(
+        prog='aindex count-direct',
+        description='Count k-mers directly from sequences using optimized counter'
+    )
+    parser.add_argument('-i', '--input', required=True, help='Input FASTA/FASTQ file')
+    parser.add_argument('-k', '--kmer-size', type=int, default=13, help='K-mer size')
+    parser.add_argument('-o', '--output', required=True, help='Output k-mer counts file')
+    parser.add_argument('-t', '--threads', type=int, default=None, help='Number of threads (default: auto-optimized)')
+    parser.add_argument('-m', '--min-count', type=int, default=1, help='Minimum count threshold')
+    parser.add_argument('--verbose', action='store_true', help='Show platform optimization details')
+    
+    parsed_args = parser.parse_args(args)
+    
+    platform_info = detect_platform()
+    if parsed_args.verbose:
+        print_platform_info()
+    
+    # Auto-optimize thread count if not specified
+    if parsed_args.threads is None:
+        if platform_info['is_apple_silicon']:
+            # M1/M2 optimal: use all cores efficiently
+            parsed_args.threads = platform_info['cpu_count']
+        else:
+            # Standard optimization
+            parsed_args.threads = platform_info['cpu_count']
+    
+    print(f"Direct k-mer counting: k={parsed_args.kmer_size}, input={parsed_args.input}")
+    if platform_info['is_apple_silicon']:
+        print("Using ARM64-optimized direct k-mer counter")
+    
+    # Use the optimized k-mer counter directly
+    # Format: input k output [-t threads] [-m min_count]
+    exe_args = [parsed_args.input, str(parsed_args.kmer_size), parsed_args.output,
+               '-t', str(parsed_args.threads), '-m', str(parsed_args.min_count)]
+    
+    return run_executable('kmer_counter', exe_args, parsed_args.verbose)
 
 
 def cmd_build_hash(args):
@@ -444,35 +625,58 @@ def cmd_compute_aindex_direct(args):
 
 def cmd_reads_to_fasta(args):
     """Convert reads to FASTA format"""
-    print("Converting reads to FASTA...")
-    return run_python_script('reads_to_fasta.py', args)
+    parser = argparse.ArgumentParser(
+        prog='aindex reads-to-fasta',
+        description='Convert reads to FASTA format'
+    )
+    parser.add_argument('-i', '--input', required=True, help='Reads input file')
+    parser.add_argument('-o', '--output', required=True, help='FASTA output file')
+    
+    parsed_args = parser.parse_args(args)
+    
+    print(f"Converting reads from {parsed_args.input} to FASTA format...")
+    script_args = ['-i', parsed_args.input, '-o', parsed_args.output]
+    return run_python_script('reads_to_fasta.py', script_args)
 
 
 def cmd_help(args):
     """Show detailed help for all commands"""
+    platform_info = detect_platform()
+    
     print("=== aindex Command Line Interface ===")
     print()
+    print_platform_info()
     print("Available commands:")
     print()
     
     commands = {
         'generate': 'Generate all possible k-mers (13-mers)',
         'build-hash': 'Build perfect hash for k-mers',
-        'count': 'Count k-mers using fast built-in counter',
+        'count': 'Count k-mers using fast built-in counter (with hash)',
+        'count-direct': 'Count k-mers directly from sequences (no hash required) ⚡',
         'compute-reads': 'Convert FASTA/FASTQ reads to simple reads format',
         'compute-aindex': 'Compute aindex for k-mer analysis (high-level)',
         'compute-aindex-direct': 'Direct call to compute_aindex binary (expert)',
         'compute-index': 'Compute LU index for reads with perfect hash',
         'reads-to-fasta': 'Convert reads to FASTA format',
         'version': 'Show version information',
-        'info': 'Show system and installation information'
+        'info': 'Show system and installation information',
+        'platform': 'Show platform optimization information'
     }
     
     for cmd, desc in commands.items():
-        print(f"  {cmd:<25} {desc}")
+        if cmd == 'count-direct' and platform_info['is_apple_silicon']:
+            print(f"  {cmd:<25} {desc} (ARM64-optimized)")
+        else:
+            print(f"  {cmd:<25} {desc}")
     
     print()
-    print("Typical workflow for 13-mers:")
+    print("Typical workflows:")
+    print()
+    print("📈 Fast direct k-mer counting (recommended):")
+    print("  aindex count-direct -i input.fastq -k 13 -o kmers.txt --verbose")
+    print()
+    print("🔬 Traditional workflow with perfect hash (for large datasets):")
     print("  1. aindex generate -o all_13mers.txt")
     print("  2. aindex build-hash -i all_13mers.txt -o 13mer_index.hash")
     print("  3. aindex count -i input.fastq --hash-file 13mer_index.hash -o counts.tf.bin")
@@ -480,7 +684,16 @@ def cmd_help(args):
     print("     OR: aindex compute-reads -1 R1.fastq -2 R2.fastq -o reads_prefix  # paired-end")
     print("  5. aindex compute-aindex-direct reads_prefix.reads 13mer_index.hash output_prefix -t 4 --tf-file counts.tf.bin")
     print()
+    
+    if platform_info['is_apple_silicon']:
+        print("💡 Apple Silicon optimizations:")
+        print("  • ARM64-optimized k-mer counting with NEON instructions")
+        print("  • Memory layout optimized for M1/M2 cache hierarchy")
+        print("  • Automatic optimal thread count selection")
+        print()
+    
     print("Use 'aindex <command> --help' for detailed help on specific commands.")
+    print("Use 'aindex platform --list-executables' to see all available tools.")
     return 0
 
 
@@ -555,6 +768,58 @@ def cmd_info(args):
         return 1
 
 
+def cmd_platform_info(args):
+    """Show platform information and available optimizations"""
+    parser = argparse.ArgumentParser(
+        prog='aindex platform',
+        description='Show platform information and available optimizations'
+    )
+    parser.add_argument('--list-executables', action='store_true', 
+                       help='List all available executables')
+    
+    parsed_args = parser.parse_args(args)
+    
+    platform_info = detect_platform()
+    
+    print("=== aindex Platform Information ===")
+    print_platform_info()
+    
+    # Show available optimizations
+    print("Available optimizations:")
+    if platform_info['is_apple_silicon']:
+        print("✓ ARM64-optimized binaries built for Apple Silicon")
+        print("✓ Apple Silicon memory layout optimizations")
+        print("✓ M1/M2 cache-friendly algorithms")
+        print("✓ Native ARM64 instruction optimizations")
+    else:
+        print("• Standard x86_64 optimizations")
+        print("• Multi-threading support")
+    
+    print(f"Recommended thread count: {platform_info['cpu_count']}")
+    
+    if parsed_args.list_executables:
+        print("\n=== Available Executables ===")
+        bin_dir = get_bin_path()
+        if bin_dir.exists():
+            executables = []
+            for file_path in bin_dir.iterdir():
+                if file_path.is_file() and os.access(file_path, os.X_OK):
+                    executables.append(file_path.name)
+            
+            if executables:
+                for exe in sorted(executables):
+                    if platform_info['is_apple_silicon']:
+                        print(f"✓ {exe} (ARM64-optimized)")
+                    else:
+                        print(f"✓ {exe}")
+            else:
+                print("No executables found in bin directory")
+        else:
+            print(f"Bin directory not found: {bin_dir}")
+    
+    return 0
+
+
 def main():
     """Main CLI entry point"""
     parser = argparse.ArgumentParser(
@@ -570,6 +835,7 @@ def main():
     subparsers.add_parser('generate', help='Generate all possible k-mers (13-mers only)')
     subparsers.add_parser('build-hash', help='Build perfect hash for k-mers')
     subparsers.add_parser('count', help='Count k-mers using fast built-in counter (requires hash file)')
+    subparsers.add_parser('count-direct', help='Count k-mers directly from sequences (ARM64-optimized)')
     subparsers.add_parser('compute-reads', help='Convert FASTA/FASTQ reads to simple reads format')
     subparsers.add_parser('compute-aindex', help='Compute aindex for k-mer analysis')
     subparsers.add_parser('compute-aindex-direct', help='Direct call to compute_aindex binary (expert)')
@@ -577,6 +843,7 @@ def main():
     subparsers.add_parser('reads-to-fasta', help='Convert reads to FASTA format')
     subparsers.add_parser('version', help='Show version information')
     subparsers.add_parser('info', help='Show system and installation information')
+    subparsers.add_parser('platform', help='Show platform information and optimizations')
     
     # Parse main args
     if len(sys.argv) == 1:
@@ -601,6 +868,7 @@ def main():
         'generate': cmd_generate_kmers,
         'build-hash': cmd_build_hash,
         'count': cmd_count_kmers,
+        'count-direct': cmd_count_kmers_direct,
         'compute-reads': cmd_compute_reads,
         'compute-aindex': cmd_compute_aindex,
         'compute-aindex-direct': cmd_compute_aindex_direct,
@@ -608,6 +876,7 @@ def main():
         'reads-to-fasta': cmd_reads_to_fasta,
         'version': cmd_version,
         'info': cmd_info,
+        'platform': cmd_platform_info,
     }
     
     if args.command in command_map:

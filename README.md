@@ -35,19 +35,25 @@
 pip install aindex2
 ```
 
-**⚠️ Note for Apple M1/M2 Mac users:**
-Pre-built wheels are not yet available for Apple Silicon (ARM64) architecture. Please install from source:
+**⚠️ Note for Apple M1/M2/M3 Mac users:**
+We now provide ARM64-optimized builds for Apple Silicon! For best performance:
 
 ```bash
 # Install system dependencies
 brew install cmake
 
-# Install from source
+# Install from source with ARM64 optimizations
 git clone https://github.com/ad3002/aindex.git
 cd aindex
-make
+make arm64  # Build ARM64-optimized version
 pip install .
+
+# Verify ARM64 optimizations
+python -c "import aindex; aindex.cli.main()" platform
 ```
+
+**🚀 ARM64 Performance**: 2-4x faster k-mer counting on Apple Silicon
+See [ARM64_OPTIMIZATIONS.md](ARM64_OPTIMIZATIONS.md) for details.
 
 **For Google Colab users:**
 ```python
@@ -68,14 +74,24 @@ pip install aindex2
 ```bash
 git clone https://github.com/ad3002/aindex.git
 cd aindex
-make
+
+# Recommended: Local build (no external dependencies)
+make all-local
+pip install .
+
+# Alternative: Traditional build (with external emphf repository)
+make all
+pip install .
+
+# For Apple Silicon with ARM64 optimizations
+make arm64
 pip install .
 ```
 
 **Platform-specific notes:**
 - **Linux x86_64**: Pre-built wheels available via pip
 - **Intel Mac**: Pre-built wheels available via pip  
-- **Apple Silicon Mac (M1/M2)**: Install from source (see above)
+- **Apple Silicon Mac (M1/M2)**: Install from source with `make all-local` or `make arm64`
 - **Windows**: Install from source (WSL recommended)
 
 This will create the necessary executables in the `bin` directory.

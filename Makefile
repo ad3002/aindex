@@ -78,17 +78,52 @@ else
     MACOS = false
 endif
 
-# Platform-specific binary extensions
+# Platform-specific binary extensions and flags
 ifeq ($(UNAME_S),Windows_NT)
     BIN_EXT = .exe
 else
     BIN_EXT = 
 endif
 
+# ARM64/Apple Silicon detection and optimization
+UNAME_M := $(shell uname -m)
+ifeq ($(UNAME_S),Darwin)
+    ifeq ($(UNAME_M),arm64)
+        ARM64_FLAGS = -mcpu=apple-m1 -mtune=apple-m1 -DARM64_OPTIMIZED
+        ARM64_ENABLED = true
+        # On ARM64, use ARM64-optimized source files
+        KMER_COUNTER_SRC = $(SRC_DIR)/count_kmers.arm64.cpp
+        KMER_COUNTER_FLAGS = $(ARM64_FLAGS)
+        COUNT_KMERS13_SRC = $(SRC_DIR)/count_kmers13.arm64.cpp
+        COUNT_KMERS13_FLAGS = $(ARM64_FLAGS)
+        COMPUTE_AINDEX13_SRC = $(SRC_DIR)/compute_aindex13.arm64.cpp
+        COMPUTE_AINDEX13_FLAGS = $(ARM64_FLAGS)
+    else
+        ARM64_ENABLED = false
+        KMER_COUNTER_SRC = $(SRC_DIR)/count_kmers.cpp
+        KMER_COUNTER_FLAGS = 
+        COUNT_KMERS13_SRC = $(SRC_DIR)/count_kmers13.cpp
+        COUNT_KMERS13_FLAGS = 
+        COMPUTE_AINDEX13_SRC = $(SRC_DIR)/compute_aindex13.cpp
+        COMPUTE_AINDEX13_FLAGS = 
+    endif
+else
+    ARM64_ENABLED = false
+    KMER_COUNTER_SRC = $(SRC_DIR)/count_kmers.cpp
+    KMER_COUNTER_FLAGS = 
+    COUNT_KMERS13_SRC = $(SRC_DIR)/count_kmers13.cpp
+    COUNT_KMERS13_FLAGS = 
+    COMPUTE_AINDEX13_SRC = $(SRC_DIR)/compute_aindex13.cpp
+    COMPUTE_AINDEX13_FLAGS = 
+endif
+
 # Binary targets with platform-appropriate extensions
-BINARIES = $(BIN_DIR)/compute_index$(BIN_EXT) $(BIN_DIR)/compute_aindex$(BIN_EXT) $(BIN_DIR)/compute_reads$(BIN_EXT) $(BIN_DIR)/kmer_counter$(BIN_EXT) $(BIN_DIR)/generate_all_13mers$(BIN_EXT) $(BIN_DIR)/build_13mer_hash$(BIN_EXT) $(BIN_DIR)/count_kmers13$(BIN_EXT) $(BIN_DIR)/compute_aindex13$(BIN_EXT)
+BINARIES = $(BIN_DIR)/compute_index$(BIN_EXT) $(BIN_DIR)/compute_aindex$(BIN_EXT) $(BIN_DIR)/compute_reads$(BIN_EXT) $(BIN_DIR)/kmer_counter$(BIN_EXT) $(BIN_DIR)/generate_all_13mers$(BIN_EXT) $(BIN_DIR)/build_13mer_hash$(BIN_EXT) $(BIN_DIR)/count_kmers13$(BIN_EXT) $(BIN_DIR)/compute_aindex13$(BIN_EXT) $(BIN_DIR)/compute_mphf_seq$(BIN_EXT)
 
 all: clean external $(BIN_DIR) $(OBJ_DIR) $(BINARIES) pybind11 copy-to-package
+
+# New target: build everything using local emphf sources
+all-local: clean $(BIN_DIR) $(OBJ_DIR) local-scripts $(BINARIES) pybind11 copy-to-package
 
 # Alternative simplified all target that matches what's used in setup.py
 simple-all: clean external-safe $(BIN_DIR) $(OBJ_DIR) $(BINARIES) pybind11 copy-to-package
@@ -111,20 +146,50 @@ $(BIN_DIR)/compute_aindex$(BIN_EXT): $(SRC_DIR)/compute_aindex.cpp $(OBJECTS) | 
 $(BIN_DIR)/compute_reads$(BIN_EXT): $(SRC_DIR)/compute_reads.cpp $(OBJECTS) | $(BIN_DIR)
 	$(CXX) $(OBJ_CXXFLAGS) $^ -o $@
 
-$(BIN_DIR)/kmer_counter$(BIN_EXT): $(SRC_DIR)/count_kmers.cpp | $(BIN_DIR)
-	$(CXX) $(OBJ_CXXFLAGS) $< -o $@
+$(BIN_DIR)/kmer_counter$(BIN_EXT): $(KMER_COUNTER_SRC) | $(BIN_DIR)
+ifeq ($(ARM64_ENABLED),true)
+	@echo "Building k-mer counter with ARM64 optimizations..."
+	$(CXX) $(OBJ_CXXFLAGS) $(KMER_COUNTER_FLAGS) $< -o $@
+else
+	@echo "Building standard k-mer counter..."
+	$(CXX) $(OBJ_CXXFLAGS) $(KMER_COUNTER_FLAGS) $< -o $@
+endif
 
 $(BIN_DIR)/generate_all_13mers$(BIN_EXT): $(SRC_DIR)/generate_all_13mers.cpp $(OBJ_DIR)/kmers.o | $(BIN_DIR)
 	$(CXX) $(OBJ_CXXFLAGS) $^ -o $@
 
 $(BIN_DIR)/build_13mer_hash$(BIN_EXT): $(SRC_DIR)/build_13mer_hash.cpp $(OBJECTS) | $(BIN_DIR)
-	$(CXX) $(OBJ_CXXFLAGS) -I./external $^ -o $@
+	$(CXX) $(OBJ_CXXFLAGS) -I$(SRC_DIR) $^ -o $@
 
-$(BIN_DIR)/count_kmers13$(BIN_EXT): $(SRC_DIR)/count_kmers13.cpp $(OBJECTS) | $(BIN_DIR)
-	$(CXX) $(OBJ_CXXFLAGS) -I./external $^ -o $@
+$(BIN_DIR)/count_kmers13$(BIN_EXT): $(COUNT_KMERS13_SRC) $(OBJECTS) | $(BIN_DIR)
+ifeq ($(ARM64_ENABLED),true)
+	@echo "Building 13-mer counter with ARM64 optimizations..."
+	$(CXX) $(OBJ_CXXFLAGS) $(COUNT_KMERS13_FLAGS) -I$(SRC_DIR) $< $(OBJECTS) -o $@
+else
+	@echo "Building standard 13-mer counter..."
+	$(CXX) $(OBJ_CXXFLAGS) $(COUNT_KMERS13_FLAGS) -I$(SRC_DIR) $^ -o $@
+endif
 
-$(BIN_DIR)/compute_aindex13$(BIN_EXT): $(SRC_DIR)/compute_aindex13.cpp $(OBJECTS) | $(BIN_DIR)
-	$(CXX) $(OBJ_CXXFLAGS) -I./external $< $(OBJECTS) -o $@
+$(BIN_DIR)/compute_aindex13$(BIN_EXT): $(COMPUTE_AINDEX13_SRC) $(OBJECTS) | $(BIN_DIR)
+ifeq ($(ARM64_ENABLED),true)
+	@echo "Building AIndex13 with ARM64 optimizations..."
+	$(CXX) $(OBJ_CXXFLAGS) $(COMPUTE_AINDEX13_FLAGS) -I$(SRC_DIR) $< $(OBJECTS) -o $@
+else
+	@echo "Building standard AIndex13..."
+	$(CXX) $(OBJ_CXXFLAGS) $(COMPUTE_AINDEX13_FLAGS) -I$(SRC_DIR) $< $(OBJECTS) -o $@
+endif
+
+$(BIN_DIR)/compute_mphf_seq$(BIN_EXT): $(SRC_DIR)/emphf/compute_mphf_seq.cpp | $(BIN_DIR)
+	@echo "Building compute_mphf_seq from local sources..."
+	$(CXX) $(OBJ_CXXFLAGS) -I$(SRC_DIR) $< -o $@
+
+# Copy Python scripts to bin directory for local build
+local-scripts: | $(BIN_DIR)
+	@echo "Copying Python scripts to bin directory..."
+	cp scripts/compute_aindex.py $(BIN_DIR)/
+	cp scripts/compute_index.py $(BIN_DIR)/
+	cp scripts/reads_to_fasta.py $(BIN_DIR)/
+	@echo "Python scripts copied successfully."
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(INCLUDES) | $(OBJ_DIR)
 	$(CXX) $(OBJ_CXXFLAGS) -c $< -o $@
@@ -144,7 +209,7 @@ pybind11: $(OBJECTS) $(SRC_DIR)/python_wrapper.cpp | $(PACKAGE_DIR)
 		exit 1; \
 	else \
 		echo "pybind11 include path: $$PYBIND11_INCLUDE"; \
-		$(CXX) $(CXXFLAGS) -I$$PYBIND11_INCLUDE -I./external $(LDFLAGS) -o $(PACKAGE_DIR)/aindex_cpp$(PYTHON_SUFFIX) $(SRC_DIR)/python_wrapper.cpp $(OBJECTS); \
+		$(CXX) $(CXXFLAGS) -I$$PYBIND11_INCLUDE -I$(SRC_DIR) $(LDFLAGS) -o $(PACKAGE_DIR)/aindex_cpp$(PYTHON_SUFFIX) $(SRC_DIR)/python_wrapper.cpp $(OBJECTS); \
 	fi
 
 $(PACKAGE_DIR)/python_wrapper.so: $(SRC_DIR)/python_wrapper.o $(OBJECTS) | $(PACKAGE_DIR)
@@ -235,22 +300,37 @@ clean:
 	rm -rf external
 	rm -rf aindex/bin
 
-# macOS-specific target for manual compilation
-macos: clean $(PACKAGE_DIR) $(OBJ_DIR)
-	@echo "Building for macOS..."
-	@echo "Note: This target skips external dependencies due to ARM64 compatibility issues"
+# ARM64 target for Apple Silicon Macs
+arm64: clean $(PACKAGE_DIR) $(OBJ_DIR)
+	@echo "Building ARM64-optimized version for Apple Silicon..."
+ifeq ($(ARM64_ENABLED),true)
+	@echo "Platform: Apple Silicon ($(UNAME_M))"
 	mkdir -p $(PACKAGE_DIR)
 	mkdir -p $(OBJ_DIR)
-	g++ -c -std=c++11 -fPIC $(SRC_DIR)/python_wrapper.cpp -o $(OBJ_DIR)/python_wrapper.o
-	g++ -c -std=c++11 -fPIC $(SRC_DIR)/kmers.cpp -o $(OBJ_DIR)/kmers.o
-	g++ -c -std=c++11 -fPIC $(SRC_DIR)/debrujin.cpp -o $(OBJ_DIR)/debrujin.o
-	g++ -c -std=c++11 -fPIC $(SRC_DIR)/hash.cpp -o $(OBJ_DIR)/hash.o
-	g++ -c -std=c++11 -fPIC $(SRC_DIR)/read.cpp -o $(OBJ_DIR)/read.o
-	g++ -c -std=c++11 -fPIC $(SRC_DIR)/settings.cpp -o $(OBJ_DIR)/settings.o
-	g++ -c -std=c++11 -fPIC $(SRC_DIR)/helpers.cpp -o $(OBJ_DIR)/helpers.o
-	g++ -shared -Wl,-install_name,python_wrapper.so -o $(PACKAGE_DIR)/python_wrapper.so \
-		$(OBJ_DIR)/python_wrapper.o $(OBJ_DIR)/kmers.o $(OBJ_DIR)/debrujin.o $(OBJ_DIR)/hash.o $(OBJ_DIR)/read.o $(OBJ_DIR)/settings.o $(OBJ_DIR)/helpers.o
-	@echo "macOS build complete! python_wrapper.so created in $(PACKAGE_DIR)/"
+	mkdir -p $(BIN_DIR)
+	@echo "Building ARM64-optimized binaries..."
+	@echo "K-mer counter source: $(KMER_COUNTER_SRC)"
+	@echo "13-mer counter source: $(COUNT_KMERS13_SRC)"
+	@echo "AIndex13 source: $(COMPUTE_AINDEX13_SRC)"
+	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -c $(SRC_DIR)/helpers.cpp -o $(OBJ_DIR)/helpers.o
+	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -c $(SRC_DIR)/debrujin.cpp -o $(OBJ_DIR)/debrujin.o
+	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -c $(SRC_DIR)/hash.cpp -o $(OBJ_DIR)/hash.o
+	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -c $(SRC_DIR)/read.cpp -o $(OBJ_DIR)/read.o
+	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -c $(SRC_DIR)/settings.cpp -o $(OBJ_DIR)/settings.o
+	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -c $(SRC_DIR)/kmers.cpp -o $(OBJ_DIR)/kmers.o
+	@echo "Building k-mer counter with ARM64 optimizations..."
+	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) $(KMER_COUNTER_SRC) -o $(BIN_DIR)/kmer_counter$(BIN_EXT)
+	@echo "Building 13-mer counter with ARM64 optimizations..."
+	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -I$(SRC_DIR) $(COUNT_KMERS13_SRC) $(OBJ_DIR)/helpers.o $(OBJ_DIR)/hash.o $(OBJ_DIR)/kmers.o $(OBJ_DIR)/settings.o -o $(BIN_DIR)/count_kmers13$(BIN_EXT)
+	@echo "Building AIndex13 with ARM64 optimizations..."
+	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -I$(SRC_DIR) $(COMPUTE_AINDEX13_SRC) $(OBJ_DIR)/helpers.o $(OBJ_DIR)/debrujin.o $(OBJ_DIR)/read.o $(OBJ_DIR)/kmers.o $(OBJ_DIR)/settings.o $(OBJ_DIR)/hash.o -o $(BIN_DIR)/compute_aindex13$(BIN_EXT)
+	@echo "ARM64 build complete! All binaries optimized for Apple M1/M2 processors."
+	@echo "Use standard binary names - they are automatically ARM64-optimized on this platform."
+else
+	@echo "Error: ARM64 target is only available on Apple Silicon Macs"
+	@echo "Current platform: $(UNAME_S) $(UNAME_M)"
+	@false
+endif
 
 # macOS simplified target for testing without emphf dependencies
 macos-simple: clean $(PACKAGE_DIR) $(OBJ_DIR)
@@ -306,7 +386,8 @@ debug-platform:
 # Help target
 help:
 	@echo "Available targets:"
-	@echo "  all              - Build all binaries and Python extension"
+	@echo "  all              - Build all binaries and Python extension (with external emphf)"
+	@echo "  all-local        - Build all binaries and Python extension (using local emphf sources)"
 	@echo "  simple-all       - Build with safe external dependencies"
 	@echo "  clean            - Clean build artifacts"
 	@echo "  pybind11         - Build only the Python extension"
@@ -314,11 +395,23 @@ help:
 	@echo "  test-all         - Run Python API tests"
 	@echo "  debug-platform   - Display platform and build environment information"
 	@echo "  install          - Install binaries to system (requires CONDA_PREFIX)"
+	@echo "  arm64            - Build ARM64-optimized version for Apple Silicon"
 	@echo "  help             - Show this help message"
 	@echo ""
+	@echo "Platform-specific targets:"
+ifeq ($(ARM64_ENABLED),true)
+	@echo "  arm64            - ARM64-optimized build for Apple Silicon (AVAILABLE)"
+else
+	@echo "  arm64            - ARM64-optimized build for Apple Silicon (not available on this platform)"
+endif
+	@echo ""
 	@echo "Recommended usage:"
+	@echo "  make all-local   - Complete build using local emphf sources (RECOMMENDED)"
 	@echo "  make all         - Complete build (external dependencies + binaries + Python)"
 	@echo "  make simple-all  - Safe build for problematic platforms"
+ifeq ($(ARM64_ENABLED),true)
+	@echo "  make arm64       - Optimized build for Apple Silicon (recommended for M1/M2 Macs)"
+endif
 	@echo "  make test-all    - Complete test suite for new users/CI"
 	@echo ""
 	@echo "Cross-platform debugging:"
@@ -331,6 +424,11 @@ help:
 	@echo "Python version detected: $(PYTHON_VERSION)"
 	@echo "Python config: $(PYTHON_CONFIG)"
 	@echo "Extension suffix: $(PYTHON_SUFFIX)"
+ifeq ($(ARM64_ENABLED),true)
+	@echo "ARM64 optimization: ENABLED (Apple Silicon detected)"
+else
+	@echo "ARM64 optimization: DISABLED (not Apple Silicon)"
+endif
 
 # Debug target to print variables
 debug-vars:
@@ -352,4 +450,4 @@ debug-vars:
 	@echo "PYTHON_SUFFIX: $(PYTHON_SUFFIX)"
 	@echo "============================="
 
-.PHONY: all simple-all clean external external-safe install macos macos-simple test test-all debug-platform help debug-vars copy-to-package objects
+.PHONY: all all-local simple-all clean external external-safe install macos macos-simple arm64 test test-all debug-platform help debug-vars copy-to-package objects local-scripts
