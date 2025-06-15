@@ -1,7 +1,5 @@
 CXX = g++
 CXXFLAGS = -std=c++17 -pthread -O3 -fPIC -Wall -Wextra
-# Separate flags for object files (without Python includes)
-OBJ_CXXFLAGS = -std=c++17 -pthread -O3 -fPIC -Wall -Wextra
 LDFLAGS = -shared -Wl,--export-dynamic
 SRC_DIR = src
 OBJ_DIR = obj
@@ -85,19 +83,47 @@ else
     BIN_EXT = 
 endif
 
-# ARM64/Apple Silicon detection and optimization
+# Default values for architecture-specific variables
+ARM64_ENABLED = false
+KMER_COUNTER_SRC = $(SRC_DIR)/count_kmers.cpp
+KMER_COUNTER_FLAGS = 
+COUNT_KMERS13_SRC = $(SRC_DIR)/count_kmers13.cpp
+COUNT_KMERS13_FLAGS = 
+COMPUTE_AINDEX13_SRC = $(SRC_DIR)/compute_aindex13.cpp
+COMPUTE_AINDEX13_FLAGS = 
+CROSS_COMPILE_FLAGS = 
+
+# Cross-compilation support for x86_64 on ARM64
+TARGET_ARCH ?= $(shell uname -m)
+ifeq ($(TARGET_ARCH),x86_64)
+    ifeq ($(shell uname -m),arm64)
+        # Cross-compile x86_64 on ARM64 macOS
+        CROSS_COMPILE_FLAGS = -arch x86_64
+        ARM64_ENABLED = false
+        KMER_COUNTER_SRC = $(SRC_DIR)/count_kmers.cpp
+        KMER_COUNTER_FLAGS = $(CROSS_COMPILE_FLAGS)
+        COUNT_KMERS13_SRC = $(SRC_DIR)/count_kmers13.cpp
+        COUNT_KMERS13_FLAGS = $(CROSS_COMPILE_FLAGS)
+        COMPUTE_AINDEX13_SRC = $(SRC_DIR)/compute_aindex13.cpp
+        COMPUTE_AINDEX13_FLAGS = $(CROSS_COMPILE_FLAGS)
+    endif
+endif
+
+# ARM64/Apple Silicon detection and optimization (only if not cross-compiling)
 UNAME_M := $(shell uname -m)
 ifeq ($(UNAME_S),Darwin)
     ifeq ($(UNAME_M),arm64)
-        ARM64_FLAGS = -mcpu=apple-m1 -mtune=apple-m1 -DARM64_OPTIMIZED
-        ARM64_ENABLED = true
-        # On ARM64, use ARM64-optimized source files
-        KMER_COUNTER_SRC = $(SRC_DIR)/count_kmers.arm64.cpp
-        KMER_COUNTER_FLAGS = $(ARM64_FLAGS)
-        COUNT_KMERS13_SRC = $(SRC_DIR)/count_kmers13.arm64.cpp
-        COUNT_KMERS13_FLAGS = $(ARM64_FLAGS)
-        COMPUTE_AINDEX13_SRC = $(SRC_DIR)/compute_aindex13.arm64.cpp
-        COMPUTE_AINDEX13_FLAGS = $(ARM64_FLAGS)
+        ifneq ($(TARGET_ARCH),x86_64)
+            ARM64_FLAGS = -mcpu=apple-m1 -mtune=apple-m1 -DARM64_OPTIMIZED
+            ARM64_ENABLED = true
+            # On ARM64, use ARM64-optimized source files
+            KMER_COUNTER_SRC = $(SRC_DIR)/count_kmers.arm64.cpp
+            KMER_COUNTER_FLAGS = $(ARM64_FLAGS)
+            COUNT_KMERS13_SRC = $(SRC_DIR)/count_kmers13.arm64.cpp
+            COUNT_KMERS13_FLAGS = $(ARM64_FLAGS)
+            COMPUTE_AINDEX13_SRC = $(SRC_DIR)/compute_aindex13.arm64.cpp
+            COMPUTE_AINDEX13_FLAGS = $(ARM64_FLAGS)
+        endif
     else
         ARM64_ENABLED = false
         KMER_COUNTER_SRC = $(SRC_DIR)/count_kmers.cpp
@@ -116,6 +142,9 @@ else
     COMPUTE_AINDEX13_SRC = $(SRC_DIR)/compute_aindex13.cpp
     COMPUTE_AINDEX13_FLAGS = 
 endif
+
+# Separate flags for object files (without Python includes but with cross-compilation flags)
+OBJ_CXXFLAGS = -std=c++17 -pthread -O3 -fPIC -Wall -Wextra $(CROSS_COMPILE_FLAGS)
 
 # Binary targets with platform-appropriate extensions
 BINARIES = $(BIN_DIR)/compute_index$(BIN_EXT) $(BIN_DIR)/compute_aindex$(BIN_EXT) $(BIN_DIR)/compute_reads$(BIN_EXT) $(BIN_DIR)/kmer_counter$(BIN_EXT) $(BIN_DIR)/generate_all_13mers$(BIN_EXT) $(BIN_DIR)/build_13mer_hash$(BIN_EXT) $(BIN_DIR)/count_kmers13$(BIN_EXT) $(BIN_DIR)/compute_aindex13$(BIN_EXT) $(BIN_DIR)/compute_mphf_seq$(BIN_EXT)
@@ -209,7 +238,7 @@ pybind11: $(OBJECTS) $(SRC_DIR)/python_wrapper.cpp | $(PACKAGE_DIR)
 		exit 1; \
 	else \
 		echo "pybind11 include path: $$PYBIND11_INCLUDE"; \
-		$(CXX) $(CXXFLAGS) -I$$PYBIND11_INCLUDE -I$(SRC_DIR) $(LDFLAGS) -o $(PACKAGE_DIR)/aindex_cpp$(PYTHON_SUFFIX) $(SRC_DIR)/python_wrapper.cpp $(OBJECTS); \
+		$(CXX) $(CXXFLAGS) $(CROSS_COMPILE_FLAGS) -I$$PYBIND11_INCLUDE -I$(SRC_DIR) $(LDFLAGS) -o $(PACKAGE_DIR)/aindex_cpp$(PYTHON_SUFFIX) $(SRC_DIR)/python_wrapper.cpp $(OBJECTS); \
 	fi
 
 $(PACKAGE_DIR)/python_wrapper.so: $(SRC_DIR)/python_wrapper.o $(OBJECTS) | $(PACKAGE_DIR)

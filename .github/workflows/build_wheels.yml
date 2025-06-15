@@ -116,17 +116,20 @@ jobs:
             pip install pybind11 numpy
             python -c "import sys; print(f'Python: {sys.executable}')"
             python -c "import pybind11; print(f'pybind11: {pybind11.get_include()}')"
+            python -c "import platform; print(f'Target platform: {platform.machine()}')"
             # Set environment variable for cibuildwheel detection
             export CIBUILDWHEEL=1
-            # Clean and build everything for current architecture
+            # Determine target architecture from Python platform
+            TARGET_ARCH=$(python -c "import platform; print(platform.machine())")
+            export TARGET_ARCH
+            echo "=== Building for architecture: $TARGET_ARCH ==="
+            # Clean and build everything for target architecture
             make clean
-            echo "=== Building for current architecture ($(uname -m)) ==="
-            # Build all components with architecture-specific flags
-            if [[ "$(uname -m)" == "arm64" ]]; then
+            if [[ "$TARGET_ARCH" == "arm64" ]]; then
               echo "Building with ARM64 optimizations..."
               make arm64  # This will build everything with ARM64 flags
             else
-              echo "Building standard version..."
+              echo "Building standard version for x86_64..."
               make all  # Standard build for x86_64
             fi
             echo "Available binaries:"
