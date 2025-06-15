@@ -118,7 +118,7 @@ before-all = [
 ]
 
 before-build = [
-    "pip install pybind11 numpy",
+    "pip install setuptools pybind11 numpy",
     "echo Building for Windows {wheel}",
     # Use setup.py for Windows builds (simpler than make)
     "python setup.py build_ext --inplace",
