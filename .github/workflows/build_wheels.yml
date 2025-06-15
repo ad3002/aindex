@@ -55,6 +55,13 @@ jobs:
           CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-*"
           CIBW_SKIP: "*-musllinux*"  # Пропускаем только musl Linux
           
+          # Set architectures for each platform
+          CIBW_ARCHS_LINUX: "x86_64 aarch64"
+          CIBW_ARCHS_MACOS: "x86_64 arm64"
+          
+          # Set minimum macOS version for filesystem support
+          MACOSX_DEPLOYMENT_TARGET: "10.15"
+          
           # Platform-specific before_all commands
           CIBW_BEFORE_ALL_LINUX: |
             yum install -y make gcc-c++ || apt-get update && apt-get install -y make build-essential
@@ -133,9 +140,9 @@ jobs:
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: >
             auditwheel repair -w {dest_dir} {wheel}
           
-          # Use delocate-wheel without arch requirements for macOS
+          # Use simple copy for macOS to avoid architecture conflicts
           CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
-            delocate-wheel -w {dest_dir} {wheel} || cp {wheel} {dest_dir}
+            cp {wheel} {dest_dir}
           
           # Test wheels - simplified for cross-platform compatibility
           CIBW_TEST_COMMAND_LINUX: |

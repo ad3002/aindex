@@ -62,12 +62,14 @@ CIBW_BEFORE_BUILD = """
 # macOS-specific configuration - using local emphf sources  
 [tool.cibuildwheel.macos]
 archs = ["x86_64", "arm64"]
+repair-wheel-command = "cp {wheel} {dest_dir}"  # Skip delocate to avoid arch conflicts
 before-all = """
     echo "Setting up build environment for macOS..."
     mkdir -p bin obj aindex/core aindex/bin
     """
 
 [tool.cibuildwheel.macos.environment]  
+MACOSX_DEPLOYMENT_TARGET = "10.15"
 CIBW_BEFORE_BUILD = """
     echo "Building for macOS architecture: $(uname -m)"
     if [[ "$(uname -m)" == "arm64" ]]; then

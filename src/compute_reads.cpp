@@ -12,7 +12,8 @@
 #include <math.h>
 #include <mutex>
 #include <string_view>
-#include <filesystem>
+#include <sys/stat.h>
+#include <errno.h>
 #include "emphf/common.hpp"
 #include "read.hpp"
 
@@ -30,18 +31,34 @@ int main(int argc, char** argv) {
     std::string read_type = argv[3];
     std::string output_prefix = argv[4];
     
-    // Check and create output directory if needed
-    std::filesystem::path output_path(output_prefix);
-    std::filesystem::path output_dir = output_path.parent_path();
-    
-    if (!output_dir.empty() && !std::filesystem::exists(output_dir)) {
-        emphf::logger() << "Output directory does not exist. Creating: " << output_dir << std::endl;
-        try {
-            std::filesystem::create_directories(output_dir);
+    // Check and create output directory if needed (using POSIX-compatible approach)
+    std::string output_path_str = output_prefix;
+    size_t last_slash = output_path_str.find_last_of('/');
+    if (last_slash != std::string::npos) {
+        std::string output_dir = output_path_str.substr(0, last_slash);
+        
+        // Check if directory exists using stat
+        struct stat st;
+        if (stat(output_dir.c_str(), &st) != 0) {
+            emphf::logger() << "Output directory does not exist. Creating: " << output_dir << std::endl;
+            
+            // Create directory recursively
+            std::string dir_path = "";
+            std::stringstream ss(output_dir);
+            std::string segment;
+            
+            while (std::getline(ss, segment, '/')) {
+                if (!segment.empty()) {
+                    dir_path += "/" + segment;
+                    if (stat(dir_path.c_str(), &st) != 0) {
+                        if (mkdir(dir_path.c_str(), 0755) != 0 && errno != EEXIST) {
+                            std::cerr << "Error creating directory " << dir_path << ": " << strerror(errno) << std::endl;
+                            std::terminate();
+                        }
+                    }
+                }
+            }
             emphf::logger() << "Successfully created directory: " << output_dir << std::endl;
-        } catch (const std::filesystem::filesystem_error& e) {
-            std::cerr << "Error creating directory " << output_dir << ": " << e.what() << std::endl;
-            std::terminate();
         }
     }
     
