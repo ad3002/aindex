@@ -48,14 +48,14 @@ def install_colab_dependencies():
 
 class build_ext(build_ext_orig):
     def run(self):
-        # Check if we're on Windows
-        is_windows = platform.system() == 'Windows'
+        # Check if we're on Windows or in Windows-only build mode
+        is_windows = platform.system() == 'Windows' or os.environ.get('WINDOWS_PYTHON_ONLY', '0') == '1'
         
         # On Windows, always use Python-only build due to POSIX dependencies
         if is_windows:
             print("Windows detected - using Python-only build (C++ binaries not available)")
-            print("For full functionality, please use Linux or macOS")
-            # Only build the essential Python extension without make
+            print("For full functionality, please use Linux, macOS, or WSL")
+            # Skip any make commands and only build Python parts
             super().run()
             return
         
@@ -182,12 +182,12 @@ with open('README.md', 'r', encoding='utf-8') as f:
     long_description = f.read()
 
 # Conditional extension modules based on platform
-is_windows = platform.system() == 'Windows'
+is_windows = platform.system() == 'Windows' or os.environ.get('WINDOWS_PYTHON_ONLY', '0') == '1'
 
 if is_windows:
-    # On Windows, always use Python-only build due to POSIX dependencies
+    # On Windows, always use Python-only build due to POSIX dependencies  
     ext_modules = []
-    print("Windows build: skipping C++ extensions (use Linux/macOS for full functionality)")
+    print("Windows build: skipping C++ extensions (use Linux/macOS/WSL for full functionality)")
 else:
     # Standard build with C++ extensions for Linux/macOS
     ext_modules = [

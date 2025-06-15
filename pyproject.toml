@@ -101,24 +101,29 @@ MACOSX_DEPLOYMENT_TARGET = "10.15"
 MAKEFLAGS = "-j1"
 
 # ============================================================================
-# Windows configuration
+# Windows configuration - Python-only build
 # ============================================================================
 
 [tool.cibuildwheel.windows]
 archs = ["AMD64"]
 
 before-all = [
-    "mkdir bin 2>nul || echo 'bin exists'",
-    "mkdir obj 2>nul || echo 'obj exists'", 
     "mkdir aindex\\core 2>nul || echo 'aindex\\core exists'",
     "mkdir aindex\\bin 2>nul || echo 'aindex\\bin exists'",
-    "copy scripts\\compute_aindex.py bin\\ 2>nul || echo 'scripts copied'",
-    "copy scripts\\compute_index.py bin\\ 2>nul || echo 'scripts copied'",
-    "copy scripts\\reads_to_fasta.py bin\\ 2>nul || echo 'scripts copied'",
+    "copy scripts\\compute_aindex.py aindex\\bin\\ 2>nul || echo 'scripts copied'",
+    "copy scripts\\compute_index.py aindex\\bin\\ 2>nul || echo 'scripts copied'",
+    "copy scripts\\reads_to_fasta.py aindex\\bin\\ 2>nul || echo 'scripts copied'",
+    "echo Creating fallback module for Windows...",
+    "echo # This file is auto-generated for Windows builds > aindex\\core\\aindex_cpp_fallback.py",
+    "echo def build_hash(*args, **kwargs): >> aindex\\core\\aindex_cpp_fallback.py",
+    "echo     raise NotImplementedError(\"C++ backend not available on Windows. Use Linux/macOS or WSL for full functionality.\") >> aindex\\core\\aindex_cpp_fallback.py",
 ]
 
 before-build = [
-    "pip install setuptools wheel pybind11 numpy",
-    "echo Building for Windows {wheel} - Python-only functionality",
-    "python setup.py build_ext --inplace",
+    "pip install setuptools wheel numpy",
+    "echo Building for Windows {wheel} - Python-only build, C++ extensions skipped",
+    "echo Windows build completed - only Python functionality available",
 ]
+
+# Windows-specific environment to disable C++ build
+environment = { WINDOWS_PYTHON_ONLY = "1" }
