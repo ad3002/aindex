@@ -1,5 +1,8 @@
 name: Build and Publish
 
+# Simplified CI/CD after emphf integration - no external dependencies required
+# Builds wheels for Linux and macOS using local emphf sources
+
 on:
   pull_request:
   release:
@@ -12,7 +15,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest] # Тестируем исправления только на Linux
+        os: [ubuntu-latest, macos-latest] # Возвращаем macOS после упрощения зависимостей
     steps:
       - uses: actions/checkout@v4
 
@@ -25,12 +28,13 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake make build-essential git
+          sudo apt-get install -y make build-essential
 
       - name: Install system dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install cmake
+          # No additional dependencies needed - Xcode tools provide make and g++
+          echo "macOS build tools ready"
 
       - name: Install system dependencies (Windows)
         if: runner.os == 'Windows'
@@ -49,66 +53,31 @@ jobs:
         env:
           # Build for all supported Python versions
           CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-*"
-          CIBW_SKIP: "*-musllinux* *aarch64* *arm64* *macos*"  # Skip musl Linux, ARM64, and macOS for now
+          CIBW_SKIP: "*-musllinux*"  # Пропускаем только musl Linux
           
           # Platform-specific before_all commands
           CIBW_BEFORE_ALL_LINUX: |
-            yum install -y cmake make gcc-c++ git || apt-get update && apt-get install -y cmake make build-essential git
-            echo "Building external dependencies..."
-            mkdir -p external
-            cd external
-            if [ ! -d "emphf" ]; then
-              git clone https://github.com/ad3002/emphf.git
-            fi
-            cd emphf
-            patch -p1 < ../../patches/emphf_cmake_version.patch
-            cmake .
-            make
-            cd ../../
-            echo "Building all C++ binaries..."
-            mkdir -p bin obj aindex/core
-            make clean
-            make external
+            yum install -y make gcc-c++ || apt-get update && apt-get install -y make build-essential
+            echo "Building with local emphf sources..."
             echo "=== Debug Makefile Variables ==="
             make debug-vars
-            echo "=== Building all binaries at once ==="
-            make bin obj
-            make bin/compute_index bin/compute_aindex bin/compute_reads bin/kmer_counter bin/generate_all_13mers bin/build_13mer_hash bin/count_kmers13 bin/compute_aindex13
+            echo "=== Building all binaries using local sources ==="
+            make clean
+            make all
             echo "Available binaries:"
             ls -la bin/
-            echo "Copying binaries to aindex/bin for packaging..."
-            mkdir -p aindex/bin
-            cp bin/* aindex/bin/
-            ls -la aindex/bin/
+            echo "✓ Local build completed successfully"
           
           CIBW_BEFORE_ALL_MACOS: |
-            echo "Building external dependencies on macOS..."
-            brew install cmake
-            mkdir -p external
-            cd external
-            if [ ! -d "emphf" ]; then
-              git clone https://github.com/ad3002/emphf.git
-            fi
-            cd emphf
-            patch -p1 < ../../patches/emphf_cmake_version.patch
-            cmake .
-            make
-            cd ../../
-            echo "Building all C++ binaries..."
-            mkdir -p bin obj aindex/core
-            make clean
-            make external
+            echo "Building with local emphf sources on macOS..."
             echo "=== Debug Makefile Variables ==="
             make debug-vars
-            echo "=== Building all binaries at once ==="
-            make bin obj
-            make bin/compute_index bin/compute_aindex bin/compute_reads bin/kmer_counter bin/generate_all_13mers bin/build_13mer_hash bin/count_kmers13 bin/compute_aindex13
+            echo "=== Building all binaries using local sources ==="
+            make clean
+            make all
             echo "Available binaries:"
             ls -la bin/
-            echo "Copying binaries to aindex/bin for packaging..."
-            mkdir -p aindex/bin
-            cp bin/* aindex/bin/
-            ls -la aindex/bin/
+            echo "✓ Local build completed successfully"
           
           CIBW_BEFORE_ALL_WINDOWS: |
             mkdir external
@@ -121,12 +90,12 @@ jobs:
           
           # Platform-specific before_build commands
           CIBW_BEFORE_BUILD: |
-            pip install cmake pybind11 numpy
+            pip install pybind11 numpy
             python -c "import sys; print(f'Building for Python {sys.version}')"
             python -c "import pybind11; print(f'pybind11 include: {pybind11.get_include()}')"
           
           CIBW_BEFORE_BUILD_LINUX: |
-            pip install cmake pybind11 numpy
+            pip install pybind11 numpy
             python -c "import sys; print(f'Python: {sys.executable}')"
             python -c "import pybind11; print(f'pybind11: {pybind11.get_include()}')"
             # Set environment variable for cibuildwheel detection
@@ -135,7 +104,7 @@ jobs:
             make pybind11
           
           CIBW_BEFORE_BUILD_MACOS: |
-            pip install cmake pybind11 numpy
+            pip install pybind11 numpy
             python -c "import sys; print(f'Python: {sys.executable}')"
             python -c "import pybind11; print(f'pybind11: {pybind11.get_include()}')"
             # Set environment variable for cibuildwheel detection
@@ -160,9 +129,7 @@ jobs:
             python -c "import aindex; print('✓ Import successful')"
           
           CIBW_TEST_COMMAND_MACOS: |
-            python -c "print('✓ Basic Python test passed')"
-            # Skip import test on macOS for now due to arch issues
-            # python -c "import aindex; print('✓ Import successful')"
+            python -c "import aindex; print('✓ Import successful')"
           
           CIBW_TEST_COMMAND_WINDOWS: |
             python -c "import aindex; print('✓ Import successful')"
@@ -195,7 +162,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake make build-essential git
+          sudo apt-get install -y make build-essential
 
       - name: Build sdist
         run: |

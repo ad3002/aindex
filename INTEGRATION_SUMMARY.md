@@ -28,14 +28,18 @@ Successfully integrated emphf library sources directly into the aindex project, 
 ### 3. New Build Commands
 
 ```bash
-# Recommended local build (no external dependencies)
-make all-local
-
-# Traditional build (with external emphf repository)
+# Standard build (no external dependencies) - DEFAULT
 make all
+
+# ARM64-optimized build for Apple Silicon
+make arm64
 
 # Show all available options
 make help
+
+# Legacy builds (deprecated)
+make all-external    # Build with external emphf repository  
+make simple-all      # Safe build for problematic platforms
 ```
 
 ## Benefits
@@ -64,17 +68,17 @@ make help
 ## Migration Guide
 
 ### For Existing Users
-Replace your build command:
+The default build command now uses local sources:
 ```bash
-# Old way
+# New default (no external dependencies)
 make all
 
-# New recommended way  
-make all-local
+# Legacy external build (deprecated)
+make all-external
 ```
 
 ### For CI/CD Systems
-Update build scripts to use `make all-local` for faster, more reliable builds without external dependencies.
+Update build scripts to use the standard `make all` command for faster, more reliable builds without external dependencies.
 
 ### For Developers
 The integration is transparent - all existing code continues to work unchanged. The only difference is the build process.
@@ -93,4 +97,4 @@ The integration is transparent - all existing code continues to work unchanged. 
 
 ## Recommendation
 
-**Use `make all-local` as the default build method** for all new development and deployment scenarios.
+**Use `make all` as the default build method** for all development and deployment scenarios. External dependencies are now optional and deprecated.

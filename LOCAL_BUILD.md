@@ -1,13 +1,13 @@
 # Local Build Instructions
 
-This document describes how to build aindex using integrated emphf sources instead of external dependencies.
+This document describes how to build aindex using integrated emphf sources.
 
-## Local Build (Recommended)
+## Standard Build
 
-The project now includes all necessary emphf sources in `src/emphf/` directory, allowing you to build without external Git dependencies:
+The project includes all necessary emphf sources in `src/emphf/` directory, allowing you to build without external Git dependencies:
 
 ```bash
-make all-local
+make all
 ```
 
 This command will:
@@ -26,13 +26,18 @@ This command will:
 
 ## Build Targets
 
-- `make all-local` - Complete build using local emphf sources (RECOMMENDED)
-- `make all` - Traditional build with external emphf repository
+- `make all` - Complete build using local emphf sources (DEFAULT)
+- `make arm64` - ARM64-optimized build for Apple Silicon
 - `make help` - Show all available targets
+
+## Legacy Targets (Deprecated)
+
+- `make all-external` - Build with external emphf repository
+- `make simple-all` - Safe build for problematic platforms
 
 ## Integrated Files
 
-The following emphf files are now integrated in `src/emphf/`:
+The following emphf files are integrated in `src/emphf/`:
 
 - `compute_mphf_seq.cpp` - Main target file
 - `compute_mphf_generic.hpp` - Core MPHF algorithm
@@ -45,6 +50,4 @@ The following emphf files are now integrated in `src/emphf/`:
 
 ## Migration Notes
 
-If you were previously using `make all`, you can now use `make all-local` for the same functionality without external dependencies.
-
-The local build produces identical results to the external build but is more reliable and faster.
+The default `make all` now uses local sources. External dependencies are no longer required.

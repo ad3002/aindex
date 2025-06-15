@@ -75,15 +75,11 @@ pip install aindex2
 git clone https://github.com/ad3002/aindex.git
 cd aindex
 
-# Recommended: Local build (no external dependencies)
-make all-local
-pip install .
-
-# Alternative: Traditional build (with external emphf repository)
+# Standard build (no external dependencies)
 make all
 pip install .
 
-# For Apple Silicon with ARM64 optimizations
+# For Apple Silicon with ARM64 optimizations  
 make arm64
 pip install .
 ```
@@ -91,7 +87,7 @@ pip install .
 **Platform-specific notes:**
 - **Linux x86_64**: Pre-built wheels available via pip
 - **Intel Mac**: Pre-built wheels available via pip  
-- **Apple Silicon Mac (M1/M2)**: Install from source with `make all-local` or `make arm64`
+- **Apple Silicon Mac (M1/M2)**: Install from source with `make all` or `make arm64`
 - **Windows**: Install from source (WSL recommended)
 
 This will create the necessary executables in the `bin` directory.

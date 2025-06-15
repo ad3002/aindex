@@ -11,7 +11,7 @@ import platform
 
 # Important: define package metadata at the beginning of the file
 PACKAGE_NAME = "aindex2"
-PACKAGE_VERSION = "1.3.25"
+PACKAGE_VERSION = "1.4.0"
 
 def check_dependencies():
     """Check if required build dependencies are available"""
@@ -23,23 +23,11 @@ def check_dependencies():
     except (subprocess.CalledProcessError, FileNotFoundError):
         missing_deps.append('make')
     
-    # Check for cmake
-    try:
-        subprocess.check_call(['cmake', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        missing_deps.append('cmake')
-    
     # Check for g++
     try:
         subprocess.check_call(['g++', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except (subprocess.CalledProcessError, FileNotFoundError):
         missing_deps.append('g++')
-    
-    # Check for git
-    try:
-        subprocess.check_call(['git', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        missing_deps.append('git')
     
     return missing_deps
 
@@ -50,7 +38,7 @@ def install_colab_dependencies():
     try:
         # Install build essentials
         subprocess.check_call(['apt-get', 'update'], stdout=subprocess.DEVNULL)
-        subprocess.check_call(['apt-get', 'install', '-y', 'build-essential', 'cmake', 'git'], 
+        subprocess.check_call(['apt-get', 'install', '-y', 'build-essential'], 
                             stdout=subprocess.DEVNULL)
         print("Build dependencies installed successfully.")
         return True

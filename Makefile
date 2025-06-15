@@ -120,12 +120,12 @@ endif
 # Binary targets with platform-appropriate extensions
 BINARIES = $(BIN_DIR)/compute_index$(BIN_EXT) $(BIN_DIR)/compute_aindex$(BIN_EXT) $(BIN_DIR)/compute_reads$(BIN_EXT) $(BIN_DIR)/kmer_counter$(BIN_EXT) $(BIN_DIR)/generate_all_13mers$(BIN_EXT) $(BIN_DIR)/build_13mer_hash$(BIN_EXT) $(BIN_DIR)/count_kmers13$(BIN_EXT) $(BIN_DIR)/compute_aindex13$(BIN_EXT) $(BIN_DIR)/compute_mphf_seq$(BIN_EXT)
 
-all: clean external $(BIN_DIR) $(OBJ_DIR) $(BINARIES) pybind11 copy-to-package
+all: clean $(BIN_DIR) $(OBJ_DIR) local-scripts $(BINARIES) pybind11 copy-to-package
 
-# New target: build everything using local emphf sources
-all-local: clean $(BIN_DIR) $(OBJ_DIR) local-scripts $(BINARIES) pybind11 copy-to-package
+# Alternative build with external dependencies (deprecated - use 'all' instead)
+all-external: clean external $(BIN_DIR) $(OBJ_DIR) $(BINARIES) pybind11 copy-to-package
 
-# Alternative simplified all target that matches what's used in setup.py
+# Alternative simplified build for problematic platforms (deprecated)
 simple-all: clean external-safe $(BIN_DIR) $(OBJ_DIR) $(BINARIES) pybind11 copy-to-package
 
 # Build only object files for debugging
@@ -386,9 +386,9 @@ debug-platform:
 # Help target
 help:
 	@echo "Available targets:"
-	@echo "  all              - Build all binaries and Python extension (with external emphf)"
-	@echo "  all-local        - Build all binaries and Python extension (using local emphf sources)"
-	@echo "  simple-all       - Build with safe external dependencies"
+	@echo "  all              - Build all binaries and Python extension (using local emphf sources)"
+	@echo "  all-external     - Build with external emphf repository (deprecated)"
+	@echo "  simple-all       - Build with safe external dependencies (deprecated)"
 	@echo "  clean            - Clean build artifacts"
 	@echo "  pybind11         - Build only the Python extension"
 	@echo "  test             - Run Python API tests"
@@ -406,9 +406,7 @@ else
 endif
 	@echo ""
 	@echo "Recommended usage:"
-	@echo "  make all-local   - Complete build using local emphf sources (RECOMMENDED)"
-	@echo "  make all         - Complete build (external dependencies + binaries + Python)"
-	@echo "  make simple-all  - Safe build for problematic platforms"
+	@echo "  make all         - Complete build using local emphf sources (RECOMMENDED)"
 ifeq ($(ARM64_ENABLED),true)
 	@echo "  make arm64       - Optimized build for Apple Silicon (recommended for M1/M2 Macs)"
 endif
@@ -416,7 +414,10 @@ endif
 	@echo ""
 	@echo "Cross-platform debugging:"
 	@echo "  make debug-platform - Show platform information"
-	@echo "  make external-safe - Safe build for problematic platforms"
+	@echo ""
+	@echo "Legacy targets (deprecated):"
+	@echo "  make all-external - Build with external emphf repository"
+	@echo "  make simple-all   - Safe build for problematic platforms"
 	@echo ""
 	@echo "Documentation:"
 	@echo "  See CROSS_PLATFORM.md for cross-platform compatibility details"
@@ -450,4 +451,4 @@ debug-vars:
 	@echo "PYTHON_SUFFIX: $(PYTHON_SUFFIX)"
 	@echo "============================="
 
-.PHONY: all all-local simple-all clean external external-safe install macos macos-simple arm64 test test-all debug-platform help debug-vars copy-to-package objects local-scripts
+.PHONY: all all-external simple-all clean external external-safe install macos macos-simple arm64 test test-all debug-platform help debug-vars copy-to-package objects local-scripts
