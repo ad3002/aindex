@@ -65,14 +65,15 @@ before-all = [
 before-build = [
     "pip install pybind11 numpy",
     "echo 'Building for Linux {wheel}'",
-    "make clean",
+    "make clean || true",
+    "mkdir -p bin obj aindex/core aindex/bin",
     "make all",
 ]
 
 repair-wheel-command = "auditwheel repair -w {dest_dir} {wheel}"
 
 [tool.cibuildwheel.linux.environment]
-MAKEFLAGS = "-j$(nproc)"
+MAKEFLAGS = "-j1"
 
 # ============================================================================
 # macOS configuration  
