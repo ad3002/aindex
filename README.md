@@ -36,15 +36,25 @@ pip install aindex2
 ```
 
 **✅ Optimized builds available for all platforms:**
-- **Linux**: x86_64, aarch64 (ARM64)
-- **macOS**: x86_64 (Intel), arm64 (Apple Silicon M1/M2/M3)
-- **Windows**: AMD64
+- **Linux**: x86_64, aarch64 (ARM64) - full functionality with C++ optimizations
+- **macOS**: x86_64 (Intel), arm64 (Apple Silicon M1/M2/M3) - full functionality with C++ optimizations
+- **Windows**: AMD64 - Python-only build with limited functionality
 
 **⚡ ARM64-optimized builds for Apple Silicon:**
 Our builds include ARM64 optimizations for Apple M1/M2/M3 processors, providing:
 - Up to 30% faster k-mer querying
 - Native ARM64 SIMD optimizations
 - Optimized for Apple Silicon architecture
+
+**⚠️ Windows Limitations:**
+Windows builds provide Python-only functionality due to POSIX-specific dependencies in the C++ backend. The Windows version:
+- ✅ Installs without errors via `pip install aindex2`
+- ❌ C++ k-mer counting and indexing tools not available
+- ❌ High-performance k-mer queries not available
+- ✅ Python scripts and utilities work normally
+- ℹ️ For full functionality, use Linux or macOS
+
+**Recommended platforms for production use:** Linux or macOS
 
 **Building from source (optional):**
 ```bash
@@ -90,11 +100,50 @@ pip install .
 ```
 
 **Platform support:**
-- **Linux**: x86_64, aarch64 (ARM64) - pre-built wheels available
-- **macOS**: x86_64 (Intel), arm64 (Apple Silicon) - pre-built wheels available  
-- **Windows**: AMD64 - pre-built wheels available
+- **Linux**: x86_64, aarch64 (ARM64) - pre-built wheels available with full C++ functionality
+- **macOS**: x86_64 (Intel), arm64 (Apple Silicon) - pre-built wheels available with full C++ functionality  
+- **Windows**: AMD64 - pre-built wheels available with Python-only functionality
 
 All platforms include optimized builds with no external dependencies required.
+
+### Windows-Specific Notes
+
+**Current Status:** Python-only functionality
+- The Windows build installs successfully but has limited functionality
+- C++ k-mer counting and high-performance indexing are not available on Windows
+- This is due to POSIX-specific dependencies (`sys/mman.h`, memory mapping) in the C++ backend
+
+**What works on Windows:**
+```python
+# Python utilities and scripts work normally
+import aindex
+
+# File format conversion utilities
+aindex.reads_to_fasta(input_file, output_file)
+
+# Command-line utilities for file processing
+# Note: High-performance k-mer operations require Linux/macOS
+```
+
+**What doesn't work on Windows:**
+```python
+# These operations require C++ backend (Linux/macOS only)
+from aindex.core.aindex import AIndex  # Will show clear error message
+index = AIndex.load_from_prefix("data")  # Not available on Windows
+```
+
+**For Windows users who need full functionality:**
+1. **Use WSL (Windows Subsystem for Linux)**: Install Linux subsystem and use the Linux version
+2. **Use Docker**: Run aindex in a Linux container
+3. **Use cloud/remote Linux machine**: Process data on Linux and transfer results
+
+**Alternative for Windows users:**
+```bash
+# Use WSL or Docker to get full functionality
+wsl --install
+wsl
+pip install aindex2  # Now runs Linux version with full functionality
+```
 
 ### Google Colab Installation
 
@@ -164,6 +213,8 @@ The project has been fully ported to ARM64/macOS, removing x86-specific dependen
 **Performance Note**: The new built-in `kmer_counter` utility is approximately 5x faster than jellyfish for k-mer counting tasks.
 
 ## Usage
+
+> **Note**: The examples below demonstrate full functionality available on Linux and macOS. Windows users have access to Python utilities only. See [Windows-Specific Notes](#windows-specific-notes) for details.
 
 ### Command Line Interface (CLI)
 
@@ -280,6 +331,8 @@ Both pipelines generate identical output files:
 - `.stat` - Statistics and metadata
 
 ## Usage from Python
+
+> **Platform Note**: Full Python API with C++ backend is available on Linux and macOS. Windows provides Python utilities only.
 
 ### Modern API
 
