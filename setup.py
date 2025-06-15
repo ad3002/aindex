@@ -50,10 +50,11 @@ class build_ext(build_ext_orig):
     def run(self):
         # Check if we're on Windows
         is_windows = platform.system() == 'Windows'
-        windows_python_only = os.environ.get('WINDOWS_PYTHON_ONLY', '0') == '1'
         
-        if is_windows and windows_python_only:
-            print("Windows Python-only build - skipping C++ binaries due to POSIX dependencies")
+        # On Windows, always use Python-only build due to POSIX dependencies
+        if is_windows:
+            print("Windows detected - using Python-only build (C++ binaries not available)")
+            print("For full functionality, please use Linux or macOS")
             # Only build the essential Python extension without make
             super().run()
             return
@@ -182,14 +183,13 @@ with open('README.md', 'r', encoding='utf-8') as f:
 
 # Conditional extension modules based on platform
 is_windows = platform.system() == 'Windows'
-windows_python_only = os.environ.get('WINDOWS_PYTHON_ONLY', '0') == '1'
 
-if is_windows and windows_python_only:
-    # On Windows with Python-only build, don't build C++ extensions
+if is_windows:
+    # On Windows, always use Python-only build due to POSIX dependencies
     ext_modules = []
-    print("Windows Python-only build: skipping C++ extensions")
+    print("Windows build: skipping C++ extensions (use Linux/macOS for full functionality)")
 else:
-    # Standard build with C++ extensions
+    # Standard build with C++ extensions for Linux/macOS
     ext_modules = [
         Extension(
             'aindex.core.aindex_cpp', 

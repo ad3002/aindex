@@ -119,8 +119,6 @@ before-all = [
 
 before-build = [
     "pip install setuptools wheel pybind11 numpy",
-    "echo Building for Windows {wheel}",
-    # Skip C++ binaries on Windows due to POSIX dependencies, build only Python extension
-    "set WINDOWS_PYTHON_ONLY=1",
+    "echo Building for Windows {wheel} - Python-only functionality",
     "python setup.py build_ext --inplace",
 ]
