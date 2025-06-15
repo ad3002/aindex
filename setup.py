@@ -48,6 +48,16 @@ def install_colab_dependencies():
 
 class build_ext(build_ext_orig):
     def run(self):
+        # Check if we're on Windows
+        is_windows = platform.system() == 'Windows'
+        windows_python_only = os.environ.get('WINDOWS_PYTHON_ONLY', '0') == '1'
+        
+        if is_windows and windows_python_only:
+            print("Windows Python-only build - skipping C++ binaries due to POSIX dependencies")
+            # Only build the essential Python extension without make
+            super().run()
+            return
+        
         # Check if we're in Google Colab
         in_colab = 'google.colab' in sys.modules
         
@@ -170,6 +180,25 @@ class CustomInstall(install):
 with open('README.md', 'r', encoding='utf-8') as f:
     long_description = f.read()
 
+# Conditional extension modules based on platform
+is_windows = platform.system() == 'Windows'
+windows_python_only = os.environ.get('WINDOWS_PYTHON_ONLY', '0') == '1'
+
+if is_windows and windows_python_only:
+    # On Windows with Python-only build, don't build C++ extensions
+    ext_modules = []
+    print("Windows Python-only build: skipping C++ extensions")
+else:
+    # Standard build with C++ extensions
+    ext_modules = [
+        Extension(
+            'aindex.core.aindex_cpp', 
+            sources=[],  # Built by Makefile
+            include_dirs=[],
+            library_dirs=[],
+        ),
+    ]
+
 setup(
     name=PACKAGE_NAME,
     version=PACKAGE_VERSION,
@@ -180,15 +209,7 @@ setup(
     author_email="ad3002@gmail.com",
     url="https://github.com/ad3002/aindex",
     packages=find_packages(),
-    ext_modules=[
-        Extension(
-            'aindex.core.aindex_cpp', 
-            sources=[],  # Built by Makefile
-            # Add empty include_dirs and library_dirs for compatibility
-            include_dirs=[],
-            library_dirs=[],
-        ),
-    ],
+    ext_modules=ext_modules,
     cmdclass={
         'build_ext': build_ext,
         'install': CustomInstall,

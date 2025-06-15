@@ -24,7 +24,7 @@ Google Colab has a conflict between the Python `cmake` package and system cmake.
 
 ```python
 # 1. Fix cmake conflict
-!pip uninstall -y cmake || true
+!pip uninstall -y cmake
 !apt-get update
 !apt-get install -y build-essential cmake git python3-dev
 
@@ -50,7 +50,7 @@ If you have a local copy:
 ```python
 # Upload files to Google Colab (use Files -> Upload)
 # Then:
-!pip uninstall -y cmake || true
+!pip uninstall -y cmake
 !apt-get update
 !apt-get install -y build-essential cmake git python3-dev
 !pip install -r requirements.txt

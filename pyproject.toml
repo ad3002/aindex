@@ -112,14 +112,15 @@ before-all = [
     "mkdir obj 2>nul || echo 'obj exists'", 
     "mkdir aindex\\core 2>nul || echo 'aindex\\core exists'",
     "mkdir aindex\\bin 2>nul || echo 'aindex\\bin exists'",
-    "copy scripts\\compute_aindex.py bin\\ || echo 'scripts copied'",
-    "copy scripts\\compute_index.py bin\\ || echo 'scripts copied'",
-    "copy scripts\\reads_to_fasta.py bin\\ || echo 'scripts copied'",
+    "copy scripts\\compute_aindex.py bin\\ 2>nul || echo 'scripts copied'",
+    "copy scripts\\compute_index.py bin\\ 2>nul || echo 'scripts copied'",
+    "copy scripts\\reads_to_fasta.py bin\\ 2>nul || echo 'scripts copied'",
 ]
 
 before-build = [
-    "pip install setuptools pybind11 numpy",
+    "pip install setuptools wheel pybind11 numpy",
     "echo Building for Windows {wheel}",
-    # Use setup.py for Windows builds (simpler than make)
+    # Skip C++ binaries on Windows due to POSIX dependencies, build only Python extension
+    "set WINDOWS_PYTHON_ONLY=1",
     "python setup.py build_ext --inplace",
 ]
