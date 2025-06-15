@@ -61,9 +61,8 @@ Load hash index from explicit file paths.
 Load reads file for positional queries.
 - `reads_file`: Path to .reads file
 
-**`load_aindex(pos_file: str, index_file: str, indices_file: str, max_tf: int)`**
+**`load_aindex(index_file: str, indices_file: str, max_tf: int)`**
 Load positional index files.
-- `pos_file`: Path to .pos.bin file
 - `index_file`: Path to .index.bin file
 - `indices_file`: Path to .indices.bin file
 - `max_tf`: Maximum term frequency threshold
@@ -278,7 +277,7 @@ Load hash index files.
 **`load_reads(reads_file)`**
 Load reads file with memory mapping.
 
-**`load_aindex(pos_file, index_file, indices_file, max_tf)`**
+**`load_aindex(index_file, indices_file, max_tf)`**
 Load positional index files.
 
 **`get_tf_value(kmer) -> uint64_t`**
