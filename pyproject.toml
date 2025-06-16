@@ -46,8 +46,13 @@ include = ["aindex*"]
 build = "cp38-* cp39-* cp310-* cp311-* cp312-*"
 skip = "*-musllinux* *-win*"  # Skip musl Linux and Windows distributions
 
-# Test that wheels work
-test-command = "python -c 'import aindex; print(\"✓ aindex import successful\")'"
+# Test that wheels work - more robust test
+test-command = [
+    "python -c 'import sys; print(f\"Python {sys.version}\")'",
+    "python -c 'import aindex; print(\"✓ aindex import successful\")'",
+    "python -c 'from aindex import AIndex; print(\"✓ AIndex class available\")'",
+]
+test-skip = "cp38-macosx_*:arm64"  # Skip ARM64 tests for Python 3.8 due to cibuildwheel limitations
 
 # ============================================================================
 # Linux configuration
@@ -87,16 +92,19 @@ before-all = [
 
 before-build = [
     "pip install pybind11 numpy",
+    "echo 'Building for macOS {wheel}'",
     "make clean || true",
     "mkdir -p bin obj aindex/core aindex/bin",
     "if echo '{wheel}' | grep -q 'arm64'; then echo 'Building ARM64 version' && make arm64; else echo 'Building x86_64 version' && make all; fi",
+    "ls -la aindex/core/ || echo 'aindex/core not found'",
+    "ls -la bin/ || echo 'bin not found'",
 ]
 
 # Use simple copy instead of delocate for cross-arch compatibility
 repair-wheel-command = "cp {wheel} {dest_dir}"
 
 [tool.cibuildwheel.macos.environment]
-MACOSX_DEPLOYMENT_TARGET = "10.15"
+MACOSX_DEPLOYMENT_TARGET = "11.0"  # Updated for better compatibility with Python 3.8+
 MAKEFLAGS = "-j1"
 
 # Note: Windows support is planned for future releases
