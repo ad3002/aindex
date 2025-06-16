@@ -93,8 +93,19 @@ COMPUTE_AINDEX13_SRC = $(SRC_DIR)/compute_aindex13.cpp
 COMPUTE_AINDEX13_FLAGS = 
 CROSS_COMPILE_FLAGS = 
 
-# Cross-compilation support for x86_64 on ARM64
-TARGET_ARCH ?= $(shell uname -m)
+# Cross-compilation support and architecture detection
+# In cibuildwheel, respect the explicitly set TARGET_ARCH
+ifneq ($(CIBUILDWHEEL),)
+    # In CI, use TARGET_ARCH if set, otherwise auto-detect
+    ifeq ($(TARGET_ARCH),)
+        TARGET_ARCH := $(shell uname -m)
+    endif
+else
+    # Local build - auto-detect if not explicitly set
+    TARGET_ARCH ?= $(shell uname -m)
+endif
+
+# Cross-compilation flags for x86_64 on ARM64 macOS
 ifeq ($(TARGET_ARCH),x86_64)
     ifeq ($(shell uname -m),arm64)
         # Cross-compile x86_64 on ARM64 macOS
@@ -109,25 +120,34 @@ ifeq ($(TARGET_ARCH),x86_64)
     endif
 endif
 
-# ARM64/Apple Silicon detection and optimization (only if not cross-compiling)
+# ARM64/Apple Silicon detection and optimization
 UNAME_M := $(shell uname -m)
 ifeq ($(UNAME_S),Darwin)
-    ifeq ($(UNAME_M),arm64)
-        ifneq ($(TARGET_ARCH),x86_64)
-            ARM64_FLAGS = -mcpu=apple-m1 -mtune=apple-m1 -DARM64_OPTIMIZED
-            ARM64_ENABLED = true
-            # On ARM64, use ARM64-optimized source files
-            KMER_COUNTER_SRC = $(SRC_DIR)/count_kmers.arm64.cpp
-            KMER_COUNTER_FLAGS = $(ARM64_FLAGS)
-            COUNT_KMERS13_SRC = $(SRC_DIR)/count_kmers13.arm64.cpp
-            COUNT_KMERS13_FLAGS = $(ARM64_FLAGS)
-            COMPUTE_AINDEX13_SRC = $(SRC_DIR)/compute_aindex13.arm64.cpp
-            COMPUTE_AINDEX13_FLAGS = $(ARM64_FLAGS)
-        endif
+    # Use ARM64 optimizations only if TARGET_ARCH is arm64 (or aarch64)
+    ifeq ($(TARGET_ARCH),arm64)
+        ARM64_FLAGS = -mcpu=apple-m1 -mtune=apple-m1 -DARM64_OPTIMIZED
+        ARM64_ENABLED = true
+        # On ARM64, use ARM64-optimized source files
+        KMER_COUNTER_SRC = $(SRC_DIR)/count_kmers.arm64.cpp
+        KMER_COUNTER_FLAGS = $(ARM64_FLAGS)
+        COUNT_KMERS13_SRC = $(SRC_DIR)/count_kmers13.arm64.cpp
+        COUNT_KMERS13_FLAGS = $(ARM64_FLAGS)
+        COMPUTE_AINDEX13_SRC = $(SRC_DIR)/compute_aindex13.arm64.cpp
+        COMPUTE_AINDEX13_FLAGS = $(ARM64_FLAGS)
+    else ifeq ($(TARGET_ARCH),aarch64)
+        ARM64_FLAGS = -mcpu=apple-m1 -mtune=apple-m1 -DARM64_OPTIMIZED
+        ARM64_ENABLED = true
+        # On ARM64, use ARM64-optimized source files
+        KMER_COUNTER_SRC = $(SRC_DIR)/count_kmers.arm64.cpp
+        KMER_COUNTER_FLAGS = $(ARM64_FLAGS)
+        COUNT_KMERS13_SRC = $(SRC_DIR)/count_kmers13.arm64.cpp
+        COUNT_KMERS13_FLAGS = $(ARM64_FLAGS)
+        COMPUTE_AINDEX13_SRC = $(SRC_DIR)/compute_aindex13.arm64.cpp
+        COMPUTE_AINDEX13_FLAGS = $(ARM64_FLAGS)
     else
         ARM64_ENABLED = false
         KMER_COUNTER_SRC = $(SRC_DIR)/count_kmers.cpp
-        KMER_COUNTER_FLAGS = 
+        KMER_COUNTER_FLAGS = $(CROSS_COMPILE_FLAGS) 
         COUNT_KMERS13_SRC = $(SRC_DIR)/count_kmers13.cpp
         COUNT_KMERS13_FLAGS = 
         COMPUTE_AINDEX13_SRC = $(SRC_DIR)/compute_aindex13.cpp
@@ -149,7 +169,21 @@ OBJ_CXXFLAGS = -std=c++17 -pthread -O3 -fPIC -Wall -Wextra $(CROSS_COMPILE_FLAGS
 # Binary targets with platform-appropriate extensions
 BINARIES = $(BIN_DIR)/compute_index$(BIN_EXT) $(BIN_DIR)/compute_aindex$(BIN_EXT) $(BIN_DIR)/compute_reads$(BIN_EXT) $(BIN_DIR)/kmer_counter$(BIN_EXT) $(BIN_DIR)/generate_all_13mers$(BIN_EXT) $(BIN_DIR)/build_13mer_hash$(BIN_EXT) $(BIN_DIR)/count_kmers13$(BIN_EXT) $(BIN_DIR)/compute_aindex13$(BIN_EXT) $(BIN_DIR)/compute_mphf_seq$(BIN_EXT)
 
-all: clean $(BIN_DIR) $(OBJ_DIR) local-scripts $(BINARIES) pybind11 copy-to-package
+all: debug-info clean $(BIN_DIR) $(OBJ_DIR) local-scripts $(BINARIES) pybind11 copy-to-package
+
+# Debug target to show build configuration
+debug-info:
+	@echo "=== Build Configuration ==="
+	@echo "UNAME_S: $(UNAME_S)"
+	@echo "UNAME_M: $(shell uname -m)"
+	@echo "TARGET_ARCH: $(TARGET_ARCH)"
+	@echo "CIBUILDWHEEL: $(CIBUILDWHEEL)"
+	@echo "ARM64_ENABLED: $(ARM64_ENABLED)"
+	@echo "CROSS_COMPILE_FLAGS: $(CROSS_COMPILE_FLAGS)"
+	@echo "PYTHON_CMD: $(PYTHON_CMD)"
+	@echo "PYTHON_CONFIG: $(PYTHON_CONFIG)"
+	@echo "PYTHON_SUFFIX: $(PYTHON_SUFFIX)"
+	@echo "==========================="
 
 # Alternative build with external dependencies (deprecated - use 'all' instead)
 all-external: clean external $(BIN_DIR) $(OBJ_DIR) $(BINARIES) pybind11 copy-to-package
@@ -329,21 +363,11 @@ clean:
 	rm -rf external
 	rm -rf aindex/bin
 
-# ARM64 target for Apple Silicon Macs
-arm64: clean $(PACKAGE_DIR) $(OBJ_DIR) $(BIN_DIR)
+# ARM64 target for Apple Silicon Macs  
+arm64: debug-info clean $(PACKAGE_DIR) $(OBJ_DIR) $(BIN_DIR)
 	@echo "Building ARM64-optimized version for Apple Silicon..."
-ifeq ($(ARM64_ENABLED),true)
-	@echo "Platform: Apple Silicon ($(UNAME_M))"
-	mkdir -p $(PACKAGE_DIR)
-	mkdir -p $(OBJ_DIR)
-	mkdir -p $(BIN_DIR)
-	@echo "Copying Python scripts to bin directory..."
-	cp scripts/compute_aindex.py $(BIN_DIR)/
-	cp scripts/compute_index.py $(BIN_DIR)/
-	cp scripts/reads_to_fasta.py $(BIN_DIR)/
-	@echo "Building ARM64-optimized object files..."
-	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -c $(SRC_DIR)/helpers.cpp -o $(OBJ_DIR)/helpers.o
-	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -c $(SRC_DIR)/debrujin.cpp -o $(OBJ_DIR)/debrujin.o
+	@echo "Forcing TARGET_ARCH=arm64 for ARM64 build"
+	$(MAKE) all TARGET_ARCH=arm64
 	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -c $(SRC_DIR)/hash.cpp -o $(OBJ_DIR)/hash.o
 	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -c $(SRC_DIR)/read.cpp -o $(OBJ_DIR)/read.o
 	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -c $(SRC_DIR)/settings.cpp -o $(OBJ_DIR)/settings.o
