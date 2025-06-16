@@ -368,29 +368,6 @@ arm64: debug-info clean $(PACKAGE_DIR) $(OBJ_DIR) $(BIN_DIR)
 	@echo "Building ARM64-optimized version for Apple Silicon..."
 	@echo "Forcing TARGET_ARCH=arm64 for ARM64 build"
 	$(MAKE) all TARGET_ARCH=arm64
-	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -c $(SRC_DIR)/hash.cpp -o $(OBJ_DIR)/hash.o
-	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -c $(SRC_DIR)/read.cpp -o $(OBJ_DIR)/read.o
-	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -c $(SRC_DIR)/settings.cpp -o $(OBJ_DIR)/settings.o
-	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -c $(SRC_DIR)/kmers.cpp -o $(OBJ_DIR)/kmers.o
-	@echo "Building all ARM64-optimized binaries..."
-	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) $(SRC_DIR)/compute_index.cpp $(OBJ_DIR)/helpers.o $(OBJ_DIR)/debrujin.o $(OBJ_DIR)/read.o $(OBJ_DIR)/kmers.o $(OBJ_DIR)/settings.o $(OBJ_DIR)/hash.o -o $(BIN_DIR)/compute_index$(BIN_EXT)
-	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) $(SRC_DIR)/compute_aindex.cpp $(OBJ_DIR)/helpers.o $(OBJ_DIR)/debrujin.o $(OBJ_DIR)/read.o $(OBJ_DIR)/kmers.o $(OBJ_DIR)/settings.o $(OBJ_DIR)/hash.o -o $(BIN_DIR)/compute_aindex$(BIN_EXT)
-	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) $(SRC_DIR)/compute_reads.cpp $(OBJ_DIR)/helpers.o $(OBJ_DIR)/debrujin.o $(OBJ_DIR)/read.o $(OBJ_DIR)/kmers.o $(OBJ_DIR)/settings.o $(OBJ_DIR)/hash.o -o $(BIN_DIR)/compute_reads$(BIN_EXT)
-	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) $(KMER_COUNTER_SRC) -o $(BIN_DIR)/kmer_counter$(BIN_EXT)
-	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) $(SRC_DIR)/generate_all_13mers.cpp $(OBJ_DIR)/kmers.o -o $(BIN_DIR)/generate_all_13mers$(BIN_EXT)
-	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -I$(SRC_DIR) $(SRC_DIR)/build_13mer_hash.cpp $(OBJ_DIR)/helpers.o $(OBJ_DIR)/debrujin.o $(OBJ_DIR)/read.o $(OBJ_DIR)/kmers.o $(OBJ_DIR)/settings.o $(OBJ_DIR)/hash.o -o $(BIN_DIR)/build_13mer_hash$(BIN_EXT)
-	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -I$(SRC_DIR) $(COUNT_KMERS13_SRC) $(OBJ_DIR)/helpers.o $(OBJ_DIR)/hash.o $(OBJ_DIR)/kmers.o $(OBJ_DIR)/settings.o -o $(BIN_DIR)/count_kmers13$(BIN_EXT)
-	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -I$(SRC_DIR) $(COMPUTE_AINDEX13_SRC) $(OBJ_DIR)/helpers.o $(OBJ_DIR)/debrujin.o $(OBJ_DIR)/read.o $(OBJ_DIR)/kmers.o $(OBJ_DIR)/settings.o $(OBJ_DIR)/hash.o -o $(BIN_DIR)/compute_aindex13$(BIN_EXT)
-	$(CXX) $(OBJ_CXXFLAGS) $(ARM64_FLAGS) -I$(SRC_DIR) $(SRC_DIR)/emphf/compute_mphf_seq.cpp -o $(BIN_DIR)/compute_mphf_seq$(BIN_EXT)
-	@echo "Building ARM64-optimized Python extension..."
-	$(MAKE) pybind11
-	$(MAKE) copy-to-package
-	@echo "✅ ARM64 build complete! All binaries optimized for Apple M1/M2 processors."
-else
-	@echo "Error: ARM64 target is only available on Apple Silicon Macs"
-	@echo "Current platform: $(UNAME_S) $(UNAME_M)"
-	@false
-endif
 
 # macOS simplified target for testing without emphf dependencies
 macos-simple: clean $(PACKAGE_DIR) $(OBJ_DIR)

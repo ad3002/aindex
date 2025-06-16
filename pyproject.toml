@@ -71,8 +71,7 @@ before-build = [
     "echo 'Building for Linux {wheel}'",
     "make clean || true",
     "mkdir -p bin obj aindex/core aindex/bin",
-    # Set TARGET_ARCH based on wheel architecture for cross-compilation support
-    "if echo '{wheel}' | grep -q 'aarch64'; then export TARGET_ARCH=aarch64 && echo 'Building aarch64 version' && make all TARGET_ARCH=aarch64; else export TARGET_ARCH=x86_64 && echo 'Building x86_64 version' && make all TARGET_ARCH=x86_64; fi",
+    "make all",
 ]
 
 repair-wheel-command = "auditwheel repair -w {dest_dir} {wheel}"
@@ -97,7 +96,7 @@ before-build = [
     "make clean || true",
     "mkdir -p bin obj aindex/core aindex/bin",
     # Set TARGET_ARCH based on wheel name for cross-compilation
-    "if echo '{wheel}' | grep -q 'arm64'; then export TARGET_ARCH=arm64 && echo 'Building ARM64 version' && make arm64 TARGET_ARCH=arm64; else export TARGET_ARCH=x86_64 && echo 'Building x86_64 version' && make all TARGET_ARCH=x86_64; fi",
+    "if echo '{wheel}' | grep -q 'arm64'; then echo 'Building ARM64 version' && make arm64 TARGET_ARCH=arm64; else echo 'Building x86_64 version' && make all TARGET_ARCH=x86_64; fi",
     "ls -la aindex/core/ || echo 'aindex/core not found'",
     "ls -la bin/ || echo 'bin not found'",
 ]
