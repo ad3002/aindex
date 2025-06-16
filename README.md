@@ -35,24 +35,21 @@
 pip install aindex2
 ```
 
-**✅ Optimized builds available for all platforms:**
+**✅ Optimized builds available for supported platforms:**
 - **Linux**: x86_64, aarch64 (ARM64) - full functionality with C++ optimizations
 - **macOS**: x86_64 (Intel), arm64 (Apple Silicon M1/M2/M3) - full functionality with C++ optimizations
-- **Windows**: AMD64 - Python-only build with limited functionality
+
+**🔄 Windows Support:**
+Windows support is planned for future releases. Currently, Windows users can:
+- Use **Windows Subsystem for Linux (WSL)** for full functionality
+- Use **Docker** containers with Linux base images
+- Use cloud environments (Google Colab, Jupyter notebooks, etc.)
 
 **⚡ ARM64-optimized builds for Apple Silicon:**
 Our builds include ARM64 optimizations for Apple M1/M2/M3 processors, providing:
 - Up to 30% faster k-mer querying
 - Native ARM64 SIMD optimizations
 - Optimized for Apple Silicon architecture
-
-**⚠️ Windows Limitations:**
-Windows builds provide Python-only functionality due to POSIX-specific dependencies in the C++ backend. The Windows version:
-- ✅ Installs without errors via `pip install aindex2`
-- ❌ C++ k-mer counting and indexing tools not available
-- ❌ High-performance k-mer queries not available
-- ✅ Python scripts and utilities work normally
-- ℹ️ For full functionality, use Linux or macOS
 
 **Recommended platforms for production use:** Linux or macOS
 
