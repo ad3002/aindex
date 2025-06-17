@@ -1,5 +1,6 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -pthread -O3 -fPIC -Wall -Wextra
+# Базовые флаги компиляции (без архитектуры)
+BASE_CXXFLAGS = -std=c++17 -pthread -O3 -fPIC -Wall -Wextra
 
 LDFLAGS = -shared -Wl,--export-dynamic
 SRC_DIR = src
@@ -12,9 +13,8 @@ PACKAGE_DIR = aindex/core
 PREFIX = $(CONDA_PREFIX)
 INSTALL_DIR = $(PREFIX)/bin
 
-# ОПРЕДЕЛЕНИЕ АРХИТЕКТУРЫ (ВАШЕ ПРЕДЛОЖЕНИЕ)
+# 1. СНАЧАЛА определяем архитектуру
 # Проверяем ARCHFLAGS (устанавливается cibuildwheel)
-# Это самый надежный способ для CI
 ifdef ARCHFLAGS
     ifeq ($(findstring arm64,$(ARCHFLAGS)),arm64)
         TARGET_ARCH = arm64
@@ -23,19 +23,20 @@ ifdef ARCHFLAGS
     endif
 endif
 
-# Устанавливаем TARGET_ARCH по умолчанию, если ARCHFLAGS не задана (для локальной сборки)
+# Устанавливаем TARGET_ARCH по умолчанию, если не определена
 TARGET_ARCH ?= $(shell uname -m)
 
-# Настройка флагов кросс-компиляции на основе TARGET_ARCH
+# 2. ЗАТЕМ определяем флаги кросс-компиляции
 CROSS_COMPILE_FLAGS =
-ifeq ($(shell uname -s),Darwin)
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
     # На Apple Silicon (arm64) при сборке для x86_64
     ifeq ($(TARGET_ARCH),x86_64)
         ifeq ($(shell uname -m),arm64)
             CROSS_COMPILE_FLAGS = -arch x86_64
         endif
     endif
-    # На Intel (x86_64) при сборке для arm64 (требует Rosetta 2)
+    # На Intel (x86_64) при сборке для arm64
     ifeq ($(TARGET_ARCH),arm64)
         ifeq ($(shell uname -m),x86_64)
             CROSS_COMPILE_FLAGS = -arch arm64
@@ -43,13 +44,7 @@ ifeq ($(shell uname -s),Darwin)
     endif
 endif
 
-# Добавляем флаги кросс-компиляции к основным флагам
-CXXFLAGS += $(CROSS_COMPILE_FLAGS)
-LDFLAGS_PYBIND = -shared $(CROSS_COMPILE_FLAGS)
-
-
-# Python and pybind11 configuration - auto-detect available Python
-# In cibuildwheel, use the current Python; otherwise try to find the best one
+# Python configuration
 PYTHON_CMD := $(shell \
     if [ -n "$$CIBUILDWHEEL" ] && which python >/dev/null 2>&1; then \
         echo python; \
@@ -65,11 +60,8 @@ PYTHON_CMD := $(shell \
         echo python3; \
     fi)
 
-# Auto-detect Python version and corresponding config
 PYTHON_VERSION := $(shell $(PYTHON_CMD) -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
 
-# Try to find the correct python-config for the active Python
-# In cibuildwheel, try the most common patterns first
 PYTHON_CONFIG_CANDIDATES := $(shell \
     if [ -n "$$CIBUILDWHEEL" ]; then \
         echo "$(PYTHON_CMD)-config python$(PYTHON_VERSION)-config python3-config python-config"; \
@@ -83,44 +75,38 @@ PYTHON_CONFIG = $(shell for cmd in $(PYTHON_CONFIG_CANDIDATES); do \
     fi; \
 done)
 
-# Fallback if no config found
 ifeq ($(PYTHON_CONFIG),)
     PYTHON_CONFIG = python3-config
 endif
 
-# Safely get pybind11 include path
-PYTHON_INCLUDE := $(shell $(PYTHON_CMD) -c "import pybind11; print(pybind11.get_include())" 2>/dev/null || echo "")
+PYTHON_INCLUDE := $(shell $(PYTHON_CMD) -c "try: import pybind11; print(pybind11.get_include());\nexcept: print('')" 2>/dev/null)
 PYTHON_HEADERS := $(shell $(PYTHON_CONFIG) --includes)
 PYTHON_SUFFIX := $(shell $(PYTHON_CONFIG) --extension-suffix)
 
-# Добавляем заголовки Python к CXXFLAGS
-CXXFLAGS += $(PYTHON_HEADERS)
-ifeq ($(PYTHON_INCLUDE),)
-    $(error "pybind11 include path not found. Is pybind11 installed?")
-else
+# 3. ТЕПЕРЬ собираем финальные CXXFLAGS
+CXXFLAGS = $(BASE_CXXFLAGS) $(CROSS_COMPILE_FLAGS) $(PYTHON_HEADERS)
+ifneq ($(PYTHON_INCLUDE),)
     CXXFLAGS += -I$(PYTHON_INCLUDE)
 endif
 
 # Настройка флагов для macOS
-UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
     CXXFLAGS += -stdlib=libc++
-    LDFLAGS_PYBIND += -undefined dynamic_lookup
+    LDFLAGS_PYBIND = -shared -undefined dynamic_lookup $(CROSS_COMPILE_FLAGS)
     MACOS = true
 else
-    LDFLAGS_PYBIND += -Wl,--export-dynamic
+    LDFLAGS_PYBIND = -shared -Wl,--export-dynamic
     MACOS = false
 endif
 
-
-# Platform-specific binary extensions and flags
+# Platform-specific binary extensions
 ifeq ($(UNAME_S),Windows_NT)
     BIN_EXT = .exe
 else
     BIN_EXT = 
 endif
 
-# Default values for architecture-specific variables
+# Architecture-specific variables
 ARM64_ENABLED = false
 KMER_COUNTER_SRC = $(SRC_DIR)/count_kmers.cpp
 KMER_COUNTER_FLAGS = 
@@ -128,43 +114,12 @@ COUNT_KMERS13_SRC = $(SRC_DIR)/count_kmers13.cpp
 COUNT_KMERS13_FLAGS = 
 COMPUTE_AINDEX13_SRC = $(SRC_DIR)/compute_aindex13.cpp
 COMPUTE_AINDEX13_FLAGS = 
-CROSS_COMPILE_FLAGS = 
 
-# Cross-compilation support and architecture detection
-# In cibuildwheel, respect the explicitly set TARGET_ARCH
-ifneq ($(CIBUILDWHEEL),)
-    # In CI, use TARGET_ARCH if set, otherwise auto-detect
-    ifeq ($(TARGET_ARCH),)
-        TARGET_ARCH := $(shell uname -m)
-    endif
-else
-    # Local build - auto-detect if not explicitly set
-    TARGET_ARCH ?= $(shell uname -m)
-endif
-
-# Cross-compilation flags for x86_64 on ARM64 macOS
-ifeq ($(TARGET_ARCH),x86_64)
-    ifeq ($(shell uname -m),arm64)
-        # Cross-compile x86_64 on ARM64 macOS
-        CROSS_COMPILE_FLAGS = -arch x86_64
-        ARM64_ENABLED = false
-        KMER_COUNTER_SRC = $(SRC_DIR)/count_kmers.cpp
-        KMER_COUNTER_FLAGS = $(CROSS_COMPILE_FLAGS)
-        COUNT_KMERS13_SRC = $(SRC_DIR)/count_kmers13.cpp
-        COUNT_KMERS13_FLAGS = $(CROSS_COMPILE_FLAGS)
-        COMPUTE_AINDEX13_SRC = $(SRC_DIR)/compute_aindex13.cpp
-        COMPUTE_AINDEX13_FLAGS = $(CROSS_COMPILE_FLAGS)
-    endif
-endif
-
-# ARM64/Apple Silicon detection and optimization
-UNAME_M := $(shell uname -m)
+# ARM64/Apple Silicon optimization
 ifeq ($(UNAME_S),Darwin)
-    # Use ARM64 optimizations only if TARGET_ARCH is arm64 (or aarch64)
     ifeq ($(TARGET_ARCH),arm64)
         ARM64_FLAGS = -mcpu=apple-m1 -mtune=apple-m1 -DARM64_OPTIMIZED
         ARM64_ENABLED = true
-        # On ARM64, use ARM64-optimized source files
         KMER_COUNTER_SRC = $(SRC_DIR)/count_kmers.arm64.cpp
         KMER_COUNTER_FLAGS = $(ARM64_FLAGS)
         COUNT_KMERS13_SRC = $(SRC_DIR)/count_kmers13.arm64.cpp
@@ -174,52 +129,38 @@ ifeq ($(UNAME_S),Darwin)
     else ifeq ($(TARGET_ARCH),aarch64)
         ARM64_FLAGS = -mcpu=apple-m1 -mtune=apple-m1 -DARM64_OPTIMIZED
         ARM64_ENABLED = true
-        # On ARM64, use ARM64-optimized source files
         KMER_COUNTER_SRC = $(SRC_DIR)/count_kmers.arm64.cpp
         KMER_COUNTER_FLAGS = $(ARM64_FLAGS)
         COUNT_KMERS13_SRC = $(SRC_DIR)/count_kmers13.arm64.cpp
         COUNT_KMERS13_FLAGS = $(ARM64_FLAGS)
         COMPUTE_AINDEX13_SRC = $(SRC_DIR)/compute_aindex13.arm64.cpp
         COMPUTE_AINDEX13_FLAGS = $(ARM64_FLAGS)
-    else
-        ARM64_ENABLED = false
-        KMER_COUNTER_SRC = $(SRC_DIR)/count_kmers.cpp
-        KMER_COUNTER_FLAGS = $(CROSS_COMPILE_FLAGS) 
-        COUNT_KMERS13_SRC = $(SRC_DIR)/count_kmers13.cpp
-        COUNT_KMERS13_FLAGS = 
-        COMPUTE_AINDEX13_SRC = $(SRC_DIR)/compute_aindex13.cpp
-        COMPUTE_AINDEX13_FLAGS = 
     endif
-else
-    ARM64_ENABLED = false
-    KMER_COUNTER_SRC = $(SRC_DIR)/count_kmers.cpp
-    KMER_COUNTER_FLAGS = 
-    COUNT_KMERS13_SRC = $(SRC_DIR)/count_kmers13.cpp
-    COUNT_KMERS13_FLAGS = 
-    COMPUTE_AINDEX13_SRC = $(SRC_DIR)/compute_aindex13.cpp
-    COMPUTE_AINDEX13_FLAGS = 
 endif
 
-# Separate flags for object files (without Python includes but with cross-compilation flags)
-OBJ_CXXFLAGS = -std=c++17 -pthread -O3 -fPIC -Wall -Wextra $(CROSS_COMPILE_FLAGS)
+# Флаги для объектных файлов (с кросс-компиляцией)
+OBJ_CXXFLAGS = $(BASE_CXXFLAGS) $(CROSS_COMPILE_FLAGS)
 
-# Binary targets with platform-appropriate extensions
+# Binary targets
 BINARIES = $(BIN_DIR)/compute_index$(BIN_EXT) $(BIN_DIR)/compute_aindex$(BIN_EXT) $(BIN_DIR)/compute_reads$(BIN_EXT) $(BIN_DIR)/kmer_counter$(BIN_EXT) $(BIN_DIR)/generate_all_13mers$(BIN_EXT) $(BIN_DIR)/build_13mer_hash$(BIN_EXT) $(BIN_DIR)/count_kmers13$(BIN_EXT) $(BIN_DIR)/compute_aindex13$(BIN_EXT) $(BIN_DIR)/compute_mphf_seq$(BIN_EXT)
 
 all: debug-info clean $(BIN_DIR) $(OBJ_DIR) local-scripts $(BINARIES) pybind11 copy-to-package
 
-# Debug target to show build configuration
+# Debug target
 debug-info:
 	@echo "=== Build Configuration ==="
 	@echo "UNAME_S: $(UNAME_S)"
 	@echo "UNAME_M: $(shell uname -m)"
 	@echo "TARGET_ARCH: $(TARGET_ARCH)"
-	@echo "CIBUILDWHEEL: $(CIBUILDWHEEL)"
+	@echo "ARCHFLAGS: $$ARCHFLAGS"
+	@echo "CIBUILDWHEEL: $$CIBUILDWHEEL"
 	@echo "ARM64_ENABLED: $(ARM64_ENABLED)"
 	@echo "CROSS_COMPILE_FLAGS: $(CROSS_COMPILE_FLAGS)"
 	@echo "PYTHON_CMD: $(PYTHON_CMD)"
 	@echo "PYTHON_CONFIG: $(PYTHON_CONFIG)"
 	@echo "PYTHON_SUFFIX: $(PYTHON_SUFFIX)"
+	@echo "CXXFLAGS: $(CXXFLAGS)"
+	@echo "LDFLAGS_PYBIND: $(LDFLAGS_PYBIND)"
 	@echo "==========================="
 
 # Alternative build with external dependencies (deprecated - use 'all' instead)
@@ -297,14 +238,16 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(INCLUDES) | $(OBJ_DIR)
 # Pybind11 module
 # ГЛАВНОЕ ИЗМЕНЕНИЕ: Упрощенная цель pybind11
 # Вся логика теперь в CXXFLAGS и LDFLAGS_PYBIND
+# Pybind11 module - упрощенная версия
 pybind11: $(OBJECTS) $(SRC_DIR)/python_wrapper.cpp | $(PACKAGE_DIR)
 	@echo "=== Building Python extension ==="
 	@echo "Target Arch: $(TARGET_ARCH)"
+	@echo "ARCHFLAGS: $$ARCHFLAGS"
 	@echo "Cross-compile flags: $(CROSS_COMPILE_FLAGS)"
 	@echo "Final CXXFLAGS: $(CXXFLAGS)"
 	@echo "Pybind LDFLAGS: $(LDFLAGS_PYBIND)"
 	$(CXX) $(CXXFLAGS) -I$(SRC_DIR) $(LDFLAGS_PYBIND) -o $(PACKAGE_DIR)/aindex_cpp$(PYTHON_SUFFIX) $(SRC_DIR)/python_wrapper.cpp $(OBJECTS)
-
+	
 external:
 	@echo "Setting up external dependencies..."
 	mkdir -p ${BIN_DIR}
