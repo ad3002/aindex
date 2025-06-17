@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aindex2"
-version = "1.4.0"
+version = "1.4.2"
 description = "Perfect hash based index for genome data."
 authors = [{name = "Aleksey Komissarov", email = "ad3002@gmail.com"}]
 readme = "README.md"
@@ -59,7 +59,7 @@ test-skip = "cp38-macosx_*:arm64"  # Skip ARM64 tests for Python 3.8 due to cibu
 # ============================================================================
 
 [tool.cibuildwheel.linux]
-archs = ["x86_64", "aarch64"]
+archs = ["x86_64"]
 
 before-all = [
     "yum install -y make gcc-c++ || (apt-get update && apt-get install -y make build-essential)",
@@ -84,7 +84,7 @@ MAKEFLAGS = "-j1"
 # ============================================================================
 
 [tool.cibuildwheel.macos]
-archs = ["x86_64", "arm64"]
+archs = ["arm64"]
 
 before-all = [
     "mkdir -p bin obj aindex/core aindex/bin",
