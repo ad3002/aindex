@@ -79,15 +79,13 @@ ifeq ($(PYTHON_CONFIG),)
     PYTHON_CONFIG = python3-config
 endif
 
-PYTHON_INCLUDE := $(shell $(PYTHON_CMD) -c "try: import pybind11; print(pybind11.get_include());\nexcept: print('')" 2>/dev/null)
+# Получаем путь к pybind11 с лучшей обработкой ошибок
+PYTHON_INCLUDE := $(shell $(PYTHON_CMD) -c "try: import pybind11; print(pybind11.get_include());\nexcept: pass" 2>/dev/null)
 PYTHON_HEADERS := $(shell $(PYTHON_CONFIG) --includes)
 PYTHON_SUFFIX := $(shell $(PYTHON_CONFIG) --extension-suffix)
 
 # 3. ТЕПЕРЬ собираем финальные CXXFLAGS
 CXXFLAGS = $(BASE_CXXFLAGS) $(CROSS_COMPILE_FLAGS) $(PYTHON_HEADERS)
-ifneq ($(PYTHON_INCLUDE),)
-    CXXFLAGS += -I$(PYTHON_INCLUDE)
-endif
 
 # Настройка флагов для macOS
 ifeq ($(UNAME_S),Darwin)
@@ -239,14 +237,24 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(INCLUDES) | $(OBJ_DIR)
 # ГЛАВНОЕ ИЗМЕНЕНИЕ: Упрощенная цель pybind11
 # Вся логика теперь в CXXFLAGS и LDFLAGS_PYBIND
 # Pybind11 module - упрощенная версия
+# Pybind11 module - с динамическим получением пути к pybind11
 pybind11: $(OBJECTS) $(SRC_DIR)/python_wrapper.cpp | $(PACKAGE_DIR)
 	@echo "=== Building Python extension ==="
 	@echo "Target Arch: $(TARGET_ARCH)"
 	@echo "ARCHFLAGS: $$ARCHFLAGS"
 	@echo "Cross-compile flags: $(CROSS_COMPILE_FLAGS)"
-	@echo "Final CXXFLAGS: $(CXXFLAGS)"
-	@echo "Pybind LDFLAGS: $(LDFLAGS_PYBIND)"
-	$(CXX) $(CXXFLAGS) -I$(SRC_DIR) $(LDFLAGS_PYBIND) -o $(PACKAGE_DIR)/aindex_cpp$(PYTHON_SUFFIX) $(SRC_DIR)/python_wrapper.cpp $(OBJECTS)
+	@echo "Python command: $(PYTHON_CMD)"
+	@# Динамически получаем путь к pybind11 прямо перед компиляцией
+	@PYBIND11_INCLUDE=$$($(PYTHON_CMD) -c "import pybind11; print(pybind11.get_include())" 2>/dev/null) && \
+	if [ -z "$$PYBIND11_INCLUDE" ]; then \
+		echo "Error: pybind11 not found. Please install pybind11: pip install pybind11"; \
+		exit 1; \
+	else \
+		echo "pybind11 include path: $$PYBIND11_INCLUDE"; \
+		echo "Final CXXFLAGS: $(CXXFLAGS) -I$$PYBIND11_INCLUDE"; \
+		echo "Pybind LDFLAGS: $(LDFLAGS_PYBIND)"; \
+		$(CXX) $(CXXFLAGS) -I$$PYBIND11_INCLUDE -I$(SRC_DIR) $(LDFLAGS_PYBIND) -o $(PACKAGE_DIR)/aindex_cpp$(PYTHON_SUFFIX) $(SRC_DIR)/python_wrapper.cpp $(OBJECTS); \
+	fi
 	
 external:
 	@echo "Setting up external dependencies..."
