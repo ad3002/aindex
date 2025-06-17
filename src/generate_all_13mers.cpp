@@ -8,8 +8,8 @@
 #include "kmers.hpp"
 
 /**
- * Генератор всех возможных 13-меров
- * Создает полный набор из 4^13 = 67,108,864 k-меров
+ * Generator of all possible 13-mers
+ * Creates a complete set of 4^13 = 67,108,864 k-mers
  */
 class All13MerGenerator {
 private:
@@ -18,7 +18,7 @@ private:
     
 public:
     /**
-     * Генерирует k-мер по его числовому индексу (0 до 4^13-1)
+     * Generates a k-mer by its numeric index (0 to 4^13-1)
      */
     std::string index_to_kmer(uint32_t index) {
         std::string kmer(13, 'A');
@@ -33,17 +33,17 @@ public:
     }
     
     /**
-     * Преобразует k-мер обратно в индекс для проверки
+     * Converts a k-mer back to its index for verification
      */
     uint32_t kmer_to_index(const std::string& kmer) {
         return get_dna13_bitset(kmer);
     }
     
     /**
-     * Генерирует все 13-меры и сохраняет в файл
-     * @param output_file - имя выходного файла
-     * @param with_indices - добавлять ли числовые индексы
-     * @param binary_format - сохранять в бинарном формате
+     * Generates all 13-mers and saves them to a file
+     * @param output_file - output file name
+     * @param with_indices - whether to include numeric indices
+     * @param binary_format - whether to save in binary format
      */
     void generate_all_kmers(const std::string& output_file, 
                            bool with_indices = false, 
@@ -67,7 +67,7 @@ public:
     }
     
     /**
-     * Генерирует текстовый файл с k-мерами
+     * Generates a text file with k-mers
      */
     void generate_text(const std::string& output_file, bool with_indices) {
         std::ofstream out(output_file);
@@ -75,7 +75,7 @@ public:
             throw std::runtime_error("Cannot create output file: " + output_file);
         }
         
-        const uint32_t progress_step = TOTAL_13MERS / 100; // для прогресс-бара
+        const uint32_t progress_step = TOTAL_13MERS / 100; // for progress bar
         
         for (uint32_t i = 0; i < TOTAL_13MERS; i++) {
             std::string kmer = index_to_kmer(i);
@@ -86,7 +86,7 @@ public:
                 out << kmer << "\n";
             }
             
-            // Показываем прогресс каждый 1%
+            // Show progress every 1%
             if (i % progress_step == 0) {
                 int percent = (i * 100) / TOTAL_13MERS;
                 std::cout << "\rProgress: " << percent << "%" << std::flush;
@@ -98,7 +98,7 @@ public:
     }
     
     /**
-     * Генерирует бинарный файл с k-мерами (более компактный)
+     * Generates a binary file with k-mers (more compact)
      */
     void generate_binary(const std::string& output_file) {
         std::ofstream out(output_file + ".bin", std::ios::binary);
@@ -106,8 +106,8 @@ public:
             throw std::runtime_error("Cannot create binary output file");
         }
         
-        // Заголовок: магическое число, версия, k, количество k-меров
-        uint32_t magic = 0x4B4D5233; // "KMR3" для 13-меров
+        // Header: magic number, version, k, number of k-mers
+        uint32_t magic = 0x4B4D5233; // "KMR3" for 13-mers
         uint32_t version = 1;
         uint32_t k = 13;
         uint32_t count = TOTAL_13MERS;
@@ -119,7 +119,7 @@ public:
         
         const uint32_t progress_step = TOTAL_13MERS / 100;
         
-        // Записываем все k-меры как uint32_t
+        // Write all k-mers as uint32_t
         for (uint32_t i = 0; i < TOTAL_13MERS; i++) {
             out.write(reinterpret_cast<const char*>(&i), sizeof(uint32_t));
             
@@ -134,7 +134,7 @@ public:
     }
     
     /**
-     * Проверяет корректность генерации (тестовая функция)
+     * Checks the correctness of generation (test function)
      */
     void validate_generation(uint32_t num_samples = 1000) {
         std::cout << "Validating generation with " << num_samples << " random samples..." << std::endl;
@@ -158,7 +158,7 @@ public:
     }
     
     /**
-     * Показывает статистику о 13-мерах
+     * Shows statistics about 13-mers
      */
     void print_statistics() {
         std::cout << "\n=== 13-mer Statistics ===" << std::endl;
@@ -167,7 +167,7 @@ public:
         std::cout << "Each 13-mer uses: " << sizeof(uint32_t) << " bytes (vs " << 13 << " bytes as string)" << std::endl;
         std::cout << "Compression ratio: " << (13.0 / sizeof(uint32_t)) << "x" << std::endl;
         
-        // Показываем примеры
+        // Show examples
         std::cout << "\nExamples:" << std::endl;
         for (uint32_t i = 0; i < 10; i++) {
             std::string kmer = index_to_kmer(i);
@@ -175,7 +175,7 @@ public:
                      << " -> " << std::setw(8) << kmer_to_index(kmer) << std::endl;
         }
         
-        // Последние несколько
+        // Last few
         std::cout << "  ..." << std::endl;
         for (uint32_t i = TOTAL_13MERS - 3; i < TOTAL_13MERS; i++) {
             std::string kmer = index_to_kmer(i);
@@ -209,7 +209,7 @@ int main(int argc, char* argv[]) {
         bool stats_only = false;
         bool validate = false;
         
-        // Парсинг опций
+        // Parse options
         for (int i = 2; i < argc; i++) {
             std::string arg = argv[i];
             if (arg == "-i" || arg == "--with-indices") {
@@ -225,19 +225,19 @@ int main(int argc, char* argv[]) {
         
         All13MerGenerator generator;
         
-        // Показываем статистику
+        // Show statistics
         generator.print_statistics();
         
-        // Валидация если запрошена
+        // Run validation if requested
         if (validate) {
             generator.validate_generation();
         }
         
-        // Генерируем файл если не только статистика
+        // Generate file if not stats only
         if (!stats_only) {
             generator.generate_all_kmers(output_file, with_indices, binary_format);
             
-            // Проверяем размер созданного файла
+            // Check the size of the created file
             std::ifstream file(output_file, std::ios::ate | std::ios::binary);
             if (file.is_open()) {
                 auto size = file.tellg();

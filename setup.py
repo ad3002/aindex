@@ -170,15 +170,8 @@ class CustomInstall(install):
 with open('README.md', 'r', encoding='utf-8') as f:
     long_description = f.read()
 
-# Standard build with C++ extensions for Linux/macOS  
-ext_modules = [
-    Extension(
-        'aindex.core.aindex_cpp', 
-        sources=[],  # Built by Makefile
-        include_dirs=[],
-        library_dirs=[],
-    ),
-]
+# No ext_modules - we build everything through Makefile
+ext_modules = []
 
 setup(
     name=PACKAGE_NAME,

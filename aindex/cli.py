@@ -660,7 +660,7 @@ def cmd_help(args):
         'compute-index': 'Compute LU index for reads with perfect hash',
         'reads-to-fasta': 'Convert reads to FASTA format',
         'version': 'Show version information',
-        'info': 'Show system and installation information',
+        'info': 'Show system and installation information (use --skip-cpp-test if crashes)',
         'platform': 'Show platform optimization information'
     }
     
@@ -706,11 +706,24 @@ def cmd_version(args):
         # Show available tools
         bin_dir = get_bin_path()
         if bin_dir.exists():
-            executables = [f.name for f in bin_dir.iterdir() if f.is_file() and not f.name.endswith('.py') and not f.name.startswith('__')]
-            if executables:
-                print(f"Available executables in {bin_dir}:")
-                for exe in sorted(executables):
-                    print(f"  {exe}")
+            try:
+                executables = []
+                for f in bin_dir.iterdir():
+                    try:
+                        if (f.is_file() and 
+                            not f.name.endswith('.py') and 
+                            not f.name.startswith('__') and
+                            not f.name.startswith('.')):
+                            executables.append(f.name)
+                    except (OSError, PermissionError):
+                        continue  # Skip problematic files silently
+                
+                if executables:
+                    print(f"Available executables in {bin_dir}:")
+                    for exe in sorted(executables):
+                        print(f"  {exe}")
+            except (OSError, PermissionError) as e:
+                print(f"Warning: Could not list bin directory: {e}")
         
         return 0
     except ImportError:
@@ -720,22 +733,42 @@ def cmd_version(args):
 
 def cmd_info(args):
     """Show system and installation information"""
+    # Parse args to check for --skip-cpp-test
+    parser = argparse.ArgumentParser(
+        prog='aindex info',
+        description='Show system and installation information'
+    )
+    parser.add_argument('--skip-cpp-test', action='store_true', 
+                       help='Skip C++ API test (use if experiencing crashes)')
+    
+    try:
+        parsed_args = parser.parse_args(args)
+    except:
+        # If parsing fails, proceed with default behavior
+        parsed_args = argparse.Namespace(skip_cpp_test=False)
+    
     try:
         import aindex
-        import aindex.core.aindex_cpp as aindex_cpp
-        
         print("=== aindex System Information ===")
         print(f"Version: {aindex.__version__}")
         print(f"Python: {sys.version}")
         print(f"Platform: {sys.platform}")
         
-        # Test C++ module
-        try:
-            wrapper = aindex_cpp.AindexWrapper()
-            methods = [m for m in dir(wrapper) if not m.startswith('_')]
-            print(f"C++ API: Available ({len(methods)} methods)")
-        except Exception as e:
-            print(f"C++ API: Error - {e}")
+        # Test C++ module safely
+        if parsed_args.skip_cpp_test:
+            print("C++ API: Test skipped (--skip-cpp-test)")
+        else:
+            try:
+                print("Testing C++ API...")
+                import aindex.core.aindex_cpp as aindex_cpp
+                wrapper = aindex_cpp.AindexWrapper()
+                methods = [m for m in dir(wrapper) if not m.startswith('_')]
+                print(f"C++ API: Available ({len(methods)} methods)")
+            except ImportError as e:
+                print(f"C++ API: Import Error - {e}")
+            except Exception as e:
+                print(f"C++ API: Error - {e}")
+                print("Note: Use --skip-cpp-test if this causes crashes")
         
         # Show detailed path information
         print("\n=== Path Information ===")
@@ -745,24 +778,48 @@ def cmd_info(args):
             package_dir = Path(aindex.__file__).parent
             print(f"Package location: {package_dir}")
             print(f"Package type: {'Development' if str(package_dir).endswith('workspace/aindex/aindex') else 'Installed'}")
-        except:
-            print("Package location: Unknown")
+        except Exception as e:
+            print(f"Package location: Error - {e}")
         
-        # Show bin directory search results
-        bin_dir = get_bin_path()
-        print(f"Bin directory: {bin_dir}")
-        print(f"Bin exists: {bin_dir.exists()}")
-        
-        if bin_dir.exists():
-            files = list(bin_dir.iterdir())
-            print(f"Bin files: {len(files)} files")
+        # Show bin directory search results with enhanced error handling
+        try:
+            bin_dir = get_bin_path()
+            print(f"Bin directory: {bin_dir}")
+            print(f"Bin exists: {bin_dir.exists()}")
             
-            # Show executables
-            executables = [f.name for f in files if f.is_file() and not f.name.endswith('.py') and not f.name.startswith('__')]
-            if executables:
-                print("Executables:", ", ".join(sorted(executables)))
+            if bin_dir.exists():
+                try:
+                    files = list(bin_dir.iterdir())
+                    print(f"Bin files: {len(files)} files")
+                    
+                    # Show executables with safe file checking
+                    executables = []
+                    for f in files:
+                        try:
+                            if (f.is_file() and 
+                                not f.name.endswith('.py') and 
+                                not f.name.startswith('__') and
+                                not f.name.startswith('.')):
+                                executables.append(f.name)
+                        except (OSError, PermissionError) as e:
+                            print(f"Warning: Could not check file {f.name}: {e}")
+                            continue
+                    
+                    if executables:
+                        print("Executables:", ", ".join(sorted(executables)))
+                    else:
+                        print("No valid executables found")
+                except (OSError, PermissionError) as e:
+                    print(f"Error accessing bin directory: {e}")
+            else:
+                print("Bin directory does not exist")
+        except Exception as e:
+            print(f"Error checking bin directory: {e}")
         
         return 0
+    except ImportError as e:
+        print(f"Error: aindex module not found - {e}")
+        return 1
     except Exception as e:
         print(f"Error getting info: {e}")
         return 1
@@ -801,19 +858,30 @@ def cmd_platform_info(args):
         print("\n=== Available Executables ===")
         bin_dir = get_bin_path()
         if bin_dir.exists():
-            executables = []
-            for file_path in bin_dir.iterdir():
-                if file_path.is_file() and os.access(file_path, os.X_OK):
-                    executables.append(file_path.name)
-            
-            if executables:
-                for exe in sorted(executables):
-                    if platform_info['is_apple_silicon']:
-                        print(f"✓ {exe} (ARM64-optimized)")
-                    else:
-                        print(f"✓ {exe}")
-            else:
-                print("No executables found in bin directory")
+            try:
+                executables = []
+                for file_path in bin_dir.iterdir():
+                    try:
+                        if (file_path.is_file() and 
+                            os.access(file_path, os.R_OK) and  # Check readable instead of executable
+                            not file_path.name.endswith('.py') and
+                            not file_path.name.startswith('__') and
+                            not file_path.name.startswith('.')):
+                            executables.append(file_path.name)
+                    except (OSError, PermissionError) as e:
+                        print(f"Warning: Could not check file {file_path.name}: {e}")
+                        continue
+                
+                if executables:
+                    for exe in sorted(executables):
+                        if platform_info['is_apple_silicon']:
+                            print(f"✓ {exe} (ARM64-optimized)")
+                        else:
+                            print(f"✓ {exe}")
+                else:
+                    print("No executables found in bin directory")
+            except (OSError, PermissionError) as e:
+                print(f"Error accessing bin directory: {e}")
         else:
             print(f"Bin directory not found: {bin_dir}")
     

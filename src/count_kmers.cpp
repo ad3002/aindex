@@ -13,10 +13,10 @@
 #include <immintrin.h>
 #include <iomanip>
 
-// Версия с локальными хеш-таблицами для каждого потока
+// Version with local hash tables for each thread
 using kmer_t = uint64_t;
 
-// Оптимизированная хеш-функция для k-меров
+// Optimized hash function for k-mers
 struct KmerHash {
     size_t operator()(kmer_t k) const {
         // MurmurHash-inspired mixing
@@ -29,7 +29,7 @@ struct KmerHash {
     }
 };
 
-// Используем robin_hood map или просто резервируем больше места
+// Use robin_hood map or just reserve more space
 template<typename K, typename V>
 using FastMap = std::unordered_map<K, V, KmerHash>;
 
@@ -39,10 +39,10 @@ private:
     size_t num_threads;
     size_t min_count;
     bool use_canonical;
-    static constexpr size_t BATCH_SIZE = 1000;  // Обрабатываем пачками
-    static constexpr size_t BUFFER_SIZE = 16 * 1024 * 1024; // 16MB буфер для чтения
+    static constexpr size_t BATCH_SIZE = 1000;  // Process in batches
+    static constexpr size_t BUFFER_SIZE = 16 * 1024 * 1024; // 16MB read buffer
     
-    // Каждый поток имеет свою локальную таблицу
+    // Each thread has its own local table
     struct ThreadData {
         FastMap<kmer_t, uint32_t> local_kmers;
         std::vector<std::string> batch;
@@ -51,7 +51,7 @@ private:
         char* read_buffer = nullptr;
         
         ThreadData() {
-            local_kmers.reserve(1 << 20); // Резервируем место для 1M k-меров
+            local_kmers.reserve(1 << 20); // Reserve space for 1M k-mers
             batch.reserve(BATCH_SIZE);
             read_buffer = new char[BUFFER_SIZE];
         }
@@ -89,12 +89,12 @@ private:
     
     static constexpr char bits_to_char[4] = {'A', 'C', 'G', 'T'};
     
-    // Оптимизированное преобразование с проверкой валидности
+    // Optimized conversion with validity check
     inline bool string_to_kmer_fast(const char* seq, size_t pos, kmer_t& kmer) {
         kmer = 0;
         const char* p = seq + pos;
         
-        // Развернутый цикл для малых k
+        // Unrolled loop for small k
         if (k <= 16) {
             for (size_t i = 0; i < k; ++i) {
                 uint8_t bits = char_to_bits[(uint8_t)p[i]];
@@ -102,7 +102,7 @@ private:
                 kmer = (kmer << 2) | bits;
             }
         } else {
-            // Для больших k используем обычный цикл
+            // For large k use regular loop
             for (size_t i = 0; i < k; ++i) {
                 uint8_t bits = char_to_bits[(uint8_t)p[i]];
                 if (bits == 4) return false;
@@ -112,9 +112,9 @@ private:
         return true;
     }
     
-    // Быстрый reverse complement
+    // Fast reverse complement
     inline kmer_t reverse_complement_fast(kmer_t kmer) {
-        // Используем bit manipulation tricks
+        // Use bit manipulation tricks
         kmer = ((kmer & 0xAAAAAAAAAAAAAAAA) >> 1) | ((kmer & 0x5555555555555555) << 1);
         kmer = ((kmer & 0xCCCCCCCCCCCCCCCC) >> 2) | ((kmer & 0x3333333333333333) << 2);
         kmer = ((kmer & 0xF0F0F0F0F0F0F0F0) >> 4) | ((kmer & 0x0F0F0F0F0F0F0F0F) << 4);
@@ -166,13 +166,13 @@ private:
             
             auto [start_pos, block_size] = file_blocks[block_idx];
             
-            // Читаем блок файла
+            // Read file block
             std::ifstream file("temp_input.dat", std::ios::binary);
             file.seekg(start_pos);
             file.read(td.read_buffer, block_size);
             file.close();
             
-            // Парсим последовательности из блока
+            // Parse sequences from block
             std::string current_seq;
             bool in_sequence = false;
             
@@ -213,7 +213,7 @@ private:
         size_t file_size = file.tellg();
         file.close();
         
-        // Делим файл на блоки для параллельной обработки
+        // Split file into blocks for parallel processing
         size_t block_size = std::max(size_t(1024 * 1024), file_size / (num_threads * 4));
         
         for (size_t pos = 0; pos < file_size; pos += block_size) {
@@ -235,10 +235,10 @@ public:
     void count_kmers_from_file(const std::string& filename) {
         auto start_time = std::chrono::high_resolution_clock::now();
         
-        // Сначала копируем файл в память или создаем memory-mapped file
+        // First, copy file into memory or create memory-mapped file
         std::cout << "Preparing file for parallel processing..." << std::endl;
         
-        // Простой подход - читаем весь файл в память
+        // Simple approach - read the whole file into memory
         std::ifstream input(filename, std::ios::binary | std::ios::ate);
         size_t file_size = input.tellg();
         input.seekg(0);
@@ -247,7 +247,7 @@ public:
         input.read(file_buffer.data(), file_size);
         input.close();
         
-        // Считаем последовательности и делим на блоки
+        // Count sequences and split into blocks
         std::vector<size_t> sequence_starts;
         for (size_t i = 0; i < file_size; ++i) {
             if (file_buffer[i] == '>') {
@@ -259,12 +259,12 @@ public:
         std::cout << "Found " << total_sequences << " sequences" << std::endl;
         std::cout << "Starting parallel k-mer counting with " << num_threads << " threads..." << std::endl;
         
-        // Делим последовательности между потоками
+        // Split sequences between threads
         size_t seqs_per_thread = (sequence_starts.size() + num_threads - 1) / num_threads;
         
         std::vector<std::thread> workers;
         
-        // Каждый поток обрабатывает свой диапазон последовательностей
+        // Each thread processes its own range of sequences
         for (size_t t = 0; t < num_threads; ++t) {
             workers.emplace_back([this, t, &file_buffer, &sequence_starts, seqs_per_thread]() {
                 auto& td = *thread_data[t];
@@ -277,11 +277,11 @@ public:
                     size_t seq_end = (i + 1 < sequence_starts.size()) ? 
                                     sequence_starts[i + 1] : file_buffer.size();
                     
-                    // Найти начало последовательности (после заголовка)
+                    // Find start of sequence (after header)
                     while (seq_start < seq_end && file_buffer[seq_start] != '\n') seq_start++;
-                    seq_start++; // Пропускаем \n
+                    seq_start++; // Skip \n
                     
-                    // Собираем последовательность
+                    // Collect sequence
                     std::string sequence;
                     sequence.reserve(seq_end - seq_start);
                     
@@ -293,7 +293,7 @@ public:
                         if (c == '>') break;
                     }
                     
-                    // Обрабатываем последовательность
+                    // Process sequence
                     if (sequence.length() >= k) {
                         const char* s = sequence.c_str();
                         size_t len = sequence.length();
@@ -311,7 +311,7 @@ public:
                     td.sequences_processed++;
                     sequences_processed.fetch_add(1);
                     
-                    // Периодический вывод прогресса
+                    // Periodic progress output
                     if (td.sequences_processed % 10000 == 0) {
                         size_t total_proc = sequences_processed.load();
                         double progress = 100.0 * total_proc / total_sequences;
@@ -323,16 +323,16 @@ public:
             });
         }
         
-        // Ждем завершения всех потоков
+        // Wait for all threads to finish
         for (auto& t : workers) {
             t.join();
         }
         
         std::cout << "\nMerging results from all threads..." << std::endl;
         
-        // Объединяем результаты
+        // Merge results
         FastMap<kmer_t, size_t> final_kmers;
-        final_kmers.reserve(10000000); // Резервируем место
+        final_kmers.reserve(10000000); // Reserve space
         
         for (const auto& td : thread_data) {
             for (const auto& [kmer, count] : td->local_kmers) {
@@ -347,7 +347,7 @@ public:
         std::cout << "Processing rate: " << (sequences_processed.load() * 1000.0 / duration.count()) 
                   << " sequences/second" << std::endl;
         
-        // Статистика
+        // Statistics
         size_t total_kmers = 0;
         for (const auto& td : thread_data) {
             total_kmers += td->kmers_processed;
@@ -355,7 +355,7 @@ public:
         std::cout << "Total k-mers processed: " << total_kmers << std::endl;
         std::cout << "Unique k-mers found: " << final_kmers.size() << std::endl;
         
-        // Сохранение результатов...
+        // Save results...
         save_results(final_kmers, "output.txt");
     }
     
@@ -368,7 +368,7 @@ public:
             }
         }
         
-        // Сортировка по частоте
+        // Sort by frequency
         std::sort(sorted_kmers.begin(), sorted_kmers.end(),
                   [](const auto& a, const auto& b) { return a.second > b.second; });
         
@@ -404,7 +404,7 @@ int main(int argc, char* argv[]) {
     size_t threads = std::thread::hardware_concurrency();
     size_t min_count = 1;
     
-    // Парсинг дополнительных аргументов
+    // Parse additional arguments
     for (int i = 4; i < argc; i++) {
         if (std::string(argv[i]) == "-t" && i + 1 < argc) {
             threads = std::stoul(argv[++i]);

@@ -17,10 +17,10 @@
 #include <arm_neon.h>
 #endif
 
-// ARM64 оптимизированная версия для M1 Mac
+// ARM64 optimized version for M1 Mac
 using kmer_t = uint64_t;
 
-// Оптимизированная хеш-функция для ARM64
+// Optimized hash function for ARM64
 struct KmerHashARM64 {
     size_t operator()(kmer_t k) const {
         // ARM64-optimized hash using multiply-add instructions
@@ -34,7 +34,7 @@ struct KmerHashARM64 {
     }
 };
 
-// Robin Hood hash map для лучшей производительности на ARM64
+// Robin Hood hash map for better performance on ARM64
 template<typename K, typename V>
 using FastMapARM64 = std::unordered_map<K, V, KmerHashARM64>;
 
@@ -44,8 +44,8 @@ private:
     size_t num_threads;
     size_t min_count;
     bool use_canonical;
-    static constexpr size_t BATCH_SIZE = 2000;  // Увеличено для ARM64
-    static constexpr size_t BUFFER_SIZE = 32 * 1024 * 1024; // 32MB буфер для M1
+    static constexpr size_t BATCH_SIZE = 2000;  // Increased for ARM64
+    static constexpr size_t BUFFER_SIZE = 32 * 1024 * 1024; // 32MB buffer for M1
     static constexpr size_t CACHE_LINE_SIZE = 128; // ARM64 cache line
     
     // Thread-local data with cache alignment
@@ -60,7 +60,7 @@ private:
         char padding[CACHE_LINE_SIZE - sizeof(size_t) * 2];
         
         ThreadDataARM64() {
-            local_kmers.reserve(1 << 21); // 2M k-меров для M1
+            local_kmers.reserve(1 << 21); // 2M k-mers for M1
             batch.reserve(BATCH_SIZE);
             read_buffer = new char[BUFFER_SIZE];
         }
@@ -98,19 +98,19 @@ private:
     
     static constexpr char bits_to_char_arm64[4] = {'A', 'C', 'G', 'T'};
     
-    // ARM64-оптимизированное преобразование с NEON (если доступно)
+    // ARM64-optimized conversion with NEON (if available)
     inline bool string_to_kmer_arm64(const char* seq, size_t pos, kmer_t& kmer) {
         kmer = 0;
         const char* p = seq + pos;
         
 #ifdef __aarch64__
-        // Используем ARM64 NEON для ускорения при больших k
+        // Use ARM64 NEON for acceleration with large k
         if (k >= 16) {
-            // Векторизованная обработка для длинных k-меров
-            size_t vec_len = k & ~7; // Кратно 8
+            // Vectorized processing for long k-mers
+            size_t vec_len = k & ~7; // Multiple of 8
             for (size_t i = 0; i < vec_len; i += 8) {
-                // Загружаем 8 символов и проверяем их скалярно
-                // Это быстрее и проще чем векторная проверка
+                // Load 8 characters and check them scalar
+                // This is faster and simpler than vector check
                 bool all_valid = true;
                 for (int j = 0; j < 8; ++j) {
                     uint8_t bits = char_to_bits_arm64[(uint8_t)p[i + j]];
@@ -124,7 +124,7 @@ private:
                 if (!all_valid) return false;
             }
             
-            // Обрабатываем оставшиеся символы
+            // Process remaining characters
             for (size_t i = vec_len; i < k; ++i) {
                 uint8_t bits = char_to_bits_arm64[(uint8_t)p[i]];
                 if (bits == 4) return false;
@@ -134,7 +134,7 @@ private:
         }
 #endif
 
-        // Скалярная обработка для коротких k-меров или fallback
+        // Scalar processing for short k-mers or fallback
         for (size_t i = 0; i < k; ++i) {
             uint8_t bits = char_to_bits_arm64[(uint8_t)p[i]];
             if (bits == 4) return false;
@@ -143,21 +143,21 @@ private:
         return true;
     }
     
-    // ARM64-оптимизированный reverse complement
+    // ARM64-optimized reverse complement
     inline kmer_t reverse_complement_arm64(kmer_t kmer) {
-        // ARM64 имеет эффективные bit manipulation инструкции
+        // ARM64 has efficient bit manipulation instructions
         
 #ifdef __aarch64__
-        // Используем ARM64 rbit инструкцию для реверса битов
+        // Use ARM64 rbit instruction for bit reversal
         asm("rbit %0, %1" : "=r"(kmer) : "r"(kmer));
         
-        // Комплемент (XOR с маской)
+        // Complement (XOR with mask)
         kmer = kmer ^ 0xAAAAAAAAAAAAAAAAULL;
         
-        // Сдвигаем к правильной позиции
+        // Shift to correct position
         return kmer >> (64 - 2 * k);
 #else
-        // Fallback для других архитектур
+        // Fallback for other architectures
         kmer = ((kmer & 0xAAAAAAAAAAAAAAAA) >> 1) | ((kmer & 0x5555555555555555) << 1);
         kmer = ((kmer & 0xCCCCCCCCCCCCCCCC) >> 2) | ((kmer & 0x3333333333333333) << 2);
         kmer = ((kmer & 0xF0F0F0F0F0F0F0F0) >> 4) | ((kmer & 0x0F0F0F0F0F0F0F0F) << 4);
@@ -176,7 +176,7 @@ private:
     }
     
     void process_sequence_batch_arm64(ThreadDataARM64& td) {
-        // Предзагружаем данные в кэш M1
+        // Preload data into M1 cache
         __builtin_prefetch(&td.local_kmers, 1, 1);
         
         for (const auto& seq : td.batch) {
@@ -185,7 +185,7 @@ private:
             const char* s = seq.c_str();
             size_t len = seq.length();
             
-            // Предзагружаем строку в кэш
+            // Preload string into cache
             __builtin_prefetch(s, 0, 1);
             __builtin_prefetch(s + 64, 0, 1);
             
@@ -197,7 +197,7 @@ private:
                 td.local_kmers[canonical]++;
                 td.kmers_processed++;
                 
-                // Предзагружаем следующие данные
+                // Preload next data
                 if (i % 32 == 0 && i + 96 < len) {
                     __builtin_prefetch(s + i + 96, 0, 1);
                 }
@@ -212,8 +212,8 @@ private:
     void worker_thread_arm64(size_t thread_id) {
         auto& td = *thread_data[thread_id];
         
-        // Устанавливаем thread affinity для M1 (если поддерживается)
-        // M1 имеет P-cores и E-cores
+        // Set thread affinity for M1 (if supported)
+        // M1 has P-cores and E-cores
         
         while (true) {
             size_t block_idx = current_block.fetch_add(1);
@@ -221,21 +221,21 @@ private:
             
             auto [start_pos, block_size] = file_blocks[block_idx];
             
-            // Читаем блок файла с оптимизацией для M1 SSD
+            // Read file block with optimization for M1 SSD
             std::ifstream file("temp_input.dat", std::ios::binary);
             file.rdbuf()->pubsetbuf(td.read_buffer, BUFFER_SIZE);
             file.seekg(start_pos);
             file.read(td.read_buffer, block_size);
             file.close();
             
-            // Парсим последовательности с ARM64 оптимизациями
+            // Parse sequences with ARM64 optimizations
             process_file_block_arm64(td, block_size);
         }
     }
     
     void process_file_block_arm64(ThreadDataARM64& td, size_t block_size) {
         std::string current_seq;
-        current_seq.reserve(1024); // Предварительное выделение памяти
+        current_seq.reserve(1024); // Preallocate memory
         bool in_sequence = false;
         
         char* buffer = td.read_buffer;
@@ -276,10 +276,10 @@ public:
     ARM64KmerCounter(size_t k_value, size_t threads, size_t min_count_filter = 1, bool canonical = true)
         : k(k_value), num_threads(threads), min_count(min_count_filter), use_canonical(canonical) {
         
-        // M1 Mac оптимизация: используем все P-cores + некоторые E-cores
+        // M1 Mac optimization: use all P-cores + some E-cores
         if (threads == 0) {
             num_threads = std::thread::hardware_concurrency();
-            // На M1 обычно 8 cores (4 P + 4 E), используем все
+            // On M1 usually 8 cores (4 P + 4 E), use all
         }
         
         thread_data.reserve(num_threads);
@@ -297,7 +297,7 @@ public:
         std::cout << "ARM64 optimized k-mer counting starting..." << std::endl;
         std::cout << "Preparing file for parallel processing..." << std::endl;
         
-        // Читаем файл в память (M1 имеет много RAM)
+        // Read file into memory (M1 has a lot of RAM)
         std::ifstream input(filename, std::ios::binary | std::ios::ate);
         if (!input) {
             throw std::runtime_error("Cannot open input file: " + filename);
@@ -312,9 +312,9 @@ public:
         
         std::cout << "File loaded: " << file_size << " bytes" << std::endl;
         
-        // Находим последовательности
+        // Find sequences
         std::vector<size_t> sequence_starts;
-        sequence_starts.reserve(100000); // Предварительное выделение
+        sequence_starts.reserve(100000); // Preallocate
         
         for (size_t i = 0; i < file_size; ++i) {
             if (file_buffer[i] == '>') {
@@ -326,7 +326,7 @@ public:
         std::cout << "Found " << total_sequences << " sequences" << std::endl;
         std::cout << "Starting ARM64 optimized parallel processing..." << std::endl;
         
-        // Запускаем worker threads
+        // Launch worker threads
         std::vector<std::thread> workers;
         workers.reserve(num_threads);
         
@@ -336,14 +336,14 @@ public:
             });
         }
         
-        // Ждем завершения
+        // Wait for completion
         for (auto& t : workers) {
             t.join();
         }
         
         std::cout << "\nMerging results from " << num_threads << " threads..." << std::endl;
         
-        // Объединяем результаты с ARM64 оптимизациями
+        // Merge results with ARM64 optimizations
         auto final_kmers = merge_results_arm64();
         
         auto end_time = std::chrono::high_resolution_clock::now();
@@ -382,11 +382,11 @@ private:
         size_t seq_end = (seq_idx + 1 < sequence_starts.size()) ? 
                         sequence_starts[seq_idx + 1] : file_buffer.size();
         
-        // Пропускаем заголовок
+        // Skip header
         while (seq_start < seq_end && file_buffer[seq_start] != '\n') seq_start++;
         seq_start++;
         
-        // Собираем последовательность с ARM64 оптимизациями
+        // Collect sequence with ARM64 optimizations
         std::string sequence;
         sequence.reserve(seq_end - seq_start);
         
@@ -398,12 +398,12 @@ private:
             if (c == '>') break;
         }
         
-        // Обрабатываем k-меры
+        // Process k-mers
         if (sequence.length() >= k) {
             const char* s = sequence.c_str();
             size_t len = sequence.length();
             
-            // Предзагружаем в кэш M1
+            // Preload into M1 cache
             __builtin_prefetch(s, 0, 1);
             
             for (size_t pos = 0; pos <= len - k; ++pos) {
@@ -422,7 +422,7 @@ private:
     
     FastMapARM64<kmer_t, size_t> merge_results_arm64() {
         FastMapARM64<kmer_t, size_t> final_kmers;
-        final_kmers.reserve(5000000); // 5M k-меров для M1
+        final_kmers.reserve(5000000); // 5M k-mers for M1
         
         for (const auto& td : thread_data) {
             for (const auto& [kmer, count] : td->local_kmers) {
@@ -459,7 +459,7 @@ private:
             }
         }
         
-        // ARM64 оптимизированная сортировка
+        // ARM64 optimized sorting
         std::sort(sorted_kmers.begin(), sorted_kmers.end(),
                   [](const auto& a, const auto& b) { return a.second > b.second; });
         
@@ -504,7 +504,7 @@ int main(int argc, char* argv[]) {
     size_t threads = 0; // Auto-detect
     size_t min_count = 1;
     
-    // Парсинг аргументов
+    // Parse arguments
     for (int i = 4; i < argc; i++) {
         if (std::string(argv[i]) == "-t" && i + 1 < argc) {
             threads = std::stoul(argv[++i]);
