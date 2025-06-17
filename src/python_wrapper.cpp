@@ -154,6 +154,7 @@ public:
     
     uint64_t reads_size = 0;
     char *reads = nullptr;
+    bool reads_is_mmaped = false;  // Track allocation method
 
     std::unordered_map<uint64_t, uint32_t> start2rid;
     std::unordered_map<uint64_t, uint64_t> start2end;
@@ -161,29 +162,76 @@ public:
 
     IntervalTree pos_intervalTree;
     
-    AindexWrapper() {}
+    AindexWrapper() : 
+        positions(nullptr),
+        indices(nullptr),
+        n(0),
+        max_tf(0),
+        indices_length(0),
+        is_13mer_mode(false),
+        tf_array_13mer(nullptr),
+        positions_13mer(nullptr),
+        indices_13mer(nullptr),
+        n_13mer(0),
+        indices_length_13mer(0),
+        aindex_loaded(false),
+        hash_map(nullptr),
+        n_reads(0),
+        n_kmers(0),
+        reads_size(0),
+        reads(nullptr),
+        reads_is_mmaped(false) {}
 
     ~AindexWrapper() {
-        if (positions != nullptr) munmap(positions, n*sizeof(uint64_t));
-        if (indices != nullptr) munmap(indices, indices_length);
-        if (reads != nullptr) munmap(reads, reads_size);
-        if (tf_array_13mer != nullptr) munmap(tf_array_13mer, TOTAL_13MERS * sizeof(uint64_t));
-        if (positions_13mer != nullptr) munmap(positions_13mer, indices_length_13mer);
-        if (indices_13mer != nullptr) munmap(indices_13mer, (TOTAL_13MERS + 1) * sizeof(uint64_t));
-        if (positions_13mer != nullptr) munmap(positions_13mer, n_13mer*sizeof(uint64_t));
-        if (indices_13mer != nullptr) munmap(indices_13mer, indices_length_13mer);
+        // Safely unmap memory-mapped files
+        if (positions != nullptr) {
+            munmap(positions, n * sizeof(uint64_t));
+            positions = nullptr;
+        }
+        
+        if (indices != nullptr) {
+            munmap(indices, indices_length);
+            indices = nullptr;
+        }
+        
+        if (reads != nullptr) {
+            if (reads_is_mmaped) {
+                munmap(reads, reads_size);
+            } else {
+                delete[] reads;
+            }
+            reads = nullptr;
+        }
+        
+        if (tf_array_13mer != nullptr) {
+            munmap(tf_array_13mer, TOTAL_13MERS * sizeof(uint64_t));
+            tf_array_13mer = nullptr;
+        }
+        
+        if (positions_13mer != nullptr) {
+            munmap(positions_13mer, n_13mer * sizeof(uint64_t));
+            positions_13mer = nullptr;
+        }
+        
+        if (indices_13mer != nullptr) {
+            munmap(indices_13mer, indices_length_13mer);
+            indices_13mer = nullptr;
+        }
 
-        delete hash_map;
-
-        reads = nullptr;
-        indices = nullptr;
-        positions = nullptr;
-        tf_array_13mer = nullptr;
-        positions_13mer = nullptr;
-        indices_13mer = nullptr;
+        // Safely delete hash_map
+        if (hash_map != nullptr) {
+            delete hash_map;
+            hash_map = nullptr;
+        }
     }
 
     void load(std::string hash_filename, std::string tf_file, std::string kmers_bin_filename, std::string kmers_text_filename){
+        // Clean up existing hash_map if it exists
+        if (hash_map != nullptr) {
+            delete hash_map;
+            hash_map = nullptr;
+        }
+        
         hash_map = new PHASH_MAP();
         // Load perfect hash into hash_map into memory
         emphf::logger() << "Reading index and hash..." << std::endl;
@@ -198,6 +246,13 @@ public:
 
     void load_hash_file(std::string hash_filename, std::string tf_file, std::string kmers_bin_filename, std::string kmers_text_filename) {
         emphf::logger() << "Loading hash with all files..." << std::endl;
+        
+        // Clean up existing hash_map if it exists
+        if (hash_map != nullptr) {
+            delete hash_map;
+            hash_map = nullptr;
+        }
+        
         hash_map = new PHASH_MAP();
         load_hash(*hash_map, hash_filename, tf_file, kmers_bin_filename, kmers_text_filename);
         n_kmers = hash_map->n;
@@ -224,6 +279,17 @@ public:
     }
 
     void load_reads(std::string reads_file) {
+        // Clean up existing reads mapping if it exists
+        if (reads != nullptr) {
+            if (reads_is_mmaped) {
+                munmap(reads, reads_size);
+            } else {
+                delete[] reads;
+            }
+            reads = nullptr;
+            reads_size = 0;
+        }
+        
         // Memory map reads
         emphf::logger() << "Memory mapping reads file..." << std::endl;
         std::ifstream fout(reads_file, std::ios::in | std::ios::binary);
@@ -232,14 +298,22 @@ public:
         fout.close();
 
         FILE* in = std::fopen(reads_file.c_str(), "rb");
+        if (in == nullptr) {
+            std::cerr << "Failed to open reads file: " << reads_file << std::endl;
+            return;
+        }
+        
         reads = (char*)mmap(NULL, length, PROT_READ|PROT_WRITE, MAP_PRIVATE, fileno(in), 0);
-        if (reads == nullptr) {
-            std::cerr << "Failed position loading" << std::endl;
-            exit(10);
+        if (reads == MAP_FAILED) {
+            std::cerr << "Failed to mmap reads file" << std::endl;
+            reads = nullptr;
+            fclose(in);
+            return;
         }
         fclose(in);
 
         reads_size = length;
+        reads_is_mmaped = true;
 
         emphf::logger() << "\tbuilding start pos index over reads: " << std::endl;
         std::string index_file = reads_file.substr(0, reads_file.find_last_of(".")) + ".ridx";
@@ -248,12 +322,23 @@ public:
     }
 
     void load_reads_in_memory(std::string reads_file) {
+        // Clean up existing reads if it exists
+        if (reads != nullptr) {
+            if (reads_is_mmaped) {
+                munmap(reads, reads_size);
+            } else {
+                delete[] reads;
+            }
+            reads = nullptr;
+            reads_size = 0;
+        }
+        
         // Load reads into memory
         emphf::logger() << "Loading reads file into memory..." << std::endl;
         std::ifstream fin(reads_file, std::ios::in | std::ios::binary);
         if (!fin) {
             std::cerr << "Failed to open file" << std::endl;
-            exit(1);
+            return;
         }
 
         fin.seekg(0, std::ios::end);
@@ -265,6 +350,7 @@ public:
         fin.close();
 
         reads_size = length;
+        reads_is_mmaped = false;  // This is allocated with new[]
 
         emphf::logger() << "\tbuilding start pos index over reads: " << std::endl;
         std::string index_file = reads_file.substr(0, reads_file.find_last_of(".")) + ".ridx";
