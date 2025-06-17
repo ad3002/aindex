@@ -71,3 +71,4 @@ pyvenv.cfg
 kmers_analysis.trues.summary
 kmers_analysis.trues
 test_env
+obj
