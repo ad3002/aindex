@@ -86,29 +86,19 @@ MAKEFLAGS = "-j1"
 [tool.cibuildwheel.macos]
 archs = ["x86_64", "arm64"]
 
-before-all = [
-    "mkdir -p bin obj aindex/core aindex/bin",
-]
+before-all = "mkdir -p bin obj aindex/core aindex/bin"
 
-# Update this section
-before-build = [
-    "pip install pybind11 numpy",
-    "echo 'Building for macOS {wheel}'",
-    "make clean || true",
-    "mkdir -p bin obj aindex/core aindex/bin",
-    # Use the {arch} variable for robust architecture detection
-    "if [ \"{arch}\" = \"arm64\" ]; then echo 'Building ARM64 version' && make arm64 TARGET_ARCH=arm64; else echo 'Building x86_64 version' && make all TARGET_ARCH=x86_64; fi",
-    "ls -la aindex/core/ || echo 'aindex/core not found'",
-    "ls -la bin/ || echo 'bin not found'",
-]
+# Call the build script, passing the architecture.
+# This is much more robust than a complex inline command.
+before-build = "./scripts/build_macos.sh {arch}"
 
-# Use simple copy instead of delocate for cross-arch compatibility
+# Use a simple copy for the repair step.
 repair-wheel-command = "cp {wheel} {dest_dir}"
 
+# CRITICAL: Set ARCHFLAGS to ensure pip and compilers target the correct architecture.
 [tool.cibuildwheel.macos.environment]
-MACOSX_DEPLOYMENT_TARGET = "11.0"  # Updated for better compatibility with Python 3.8+
+MACOSX_DEPLOYMENT_TARGET = "11.0"
 MAKEFLAGS = "-j1"
-# Add this line to correctly set the architecture for build tools
 ARCHFLAGS = "-arch {arch}"
 # Note: Windows support is planned for future releases
 # Currently supported platforms: Linux (x86_64, ARM64), macOS (x86_64, ARM64)
