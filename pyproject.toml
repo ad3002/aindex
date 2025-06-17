@@ -90,7 +90,7 @@ before-all = "mkdir -p bin obj aindex/core aindex/bin"
 
 # Call the build script, passing the architecture.
 # This is much more robust than a complex inline command.
-before-build = "./scripts/build_macos.sh {arch}"
+before-build = "./build_macos.sh {arch}"
 
 # Use a simple copy for the repair step.
 repair-wheel-command = "cp {wheel} {dest_dir}"
