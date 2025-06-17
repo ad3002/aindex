@@ -1,41 +1,6 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel", "pybind11>=2.6.0"]
+requires = ["setuptools>=45", "wheel", "pybind11>=2.6.0", "numpy"]
 build-backend = "setuptools.build_meta"
-
-[project]
-name = "aindex2"
-version = "1.4.2"
-description = "Perfect hash based index for genome data."
-authors = [{name = "Aleksey Komissarov", email = "ad3002@gmail.com"}]
-readme = "README.md"
-requires-python = ">=3.8"
-dependencies = [
-    "numpy>=1.20.0",
-    "intervaltree==3.1.0",
-    "editdistance==0.8.1",
-    "psutil>=5.8.0",
-]
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: C++",
-    "Operating System :: POSIX :: Linux",
-    "Operating System :: MacOS",
-]
-
-[project.urls]
-Homepage = "https://github.com/ad3002/aindex"
-
-[project.scripts]
-aindex = "aindex.cli:main"
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["aindex*"]
 
 # ============================================================================
 # cibuildwheel configuration - optimized for cross-platform builds

@@ -3,6 +3,20 @@
 ## Overview
 AIndex is a k-mer indexing tool for efficient genomic sequence analysis. It provides both C++ command-line tools and Python API for indexing and querying genomic data.
 
+## System Requirements
+
+**Supported Platforms:**
+- **macOS arm64** (Apple Silicon M1/M2/M3) - Recommended
+- **Linux x86_64** - Recommended
+
+**For other platforms:**
+- Build from source (requires make, g++, Python development headers)
+- Use Docker or WSL (Windows Subsystem for Linux)
+
+**Python Requirements:**
+- Python 3.8+
+- pip (for package installation)
+
 ## Quick Setup
 
 ### 1. Build Everything

@@ -35,23 +35,24 @@
 pip install aindex2
 ```
 
-**✅ Optimized builds available for supported platforms:**
-- **Linux**: x86_64, aarch64 (ARM64) - full functionality with C++ optimizations
-- **macOS**: x86_64 (Intel), arm64 (Apple Silicon M1/M2/M3) - full functionality with C++ optimizations
+**✅ Supported platforms (pre-built wheels available):**
+- **macOS**: arm64 (Apple Silicon M1/M2/M3) - full functionality with C++ optimizations
+- **Linux**: x86_64 - full functionality with C++ optimizations
 
-**🔄 Windows Support:**
-Windows support is planned for future releases. Currently, Windows users can:
-- Use **Windows Subsystem for Linux (WSL)** for full functionality
-- Use **Docker** containers with Linux base images
+**⚡ Currently optimized for:**
+Our builds are specifically optimized for the most widely used platforms:
+- **Apple Silicon** (M1/M2/M3): Native ARM64 optimizations with up to 30% faster performance
+- **Linux x86_64**: Standard Intel/AMD processors with full C++ backend
+
+**🔄 Other platforms:**
+For platforms not listed above (Windows, Linux ARM64, macOS Intel), you can:
+- Use **Windows Subsystem for Linux (WSL)** for Windows users
+- Build from source (see building instructions below)
 - Use cloud environments (Google Colab, Jupyter notebooks, etc.)
 
-**⚡ ARM64-optimized builds for Apple Silicon:**
-Our builds include ARM64 optimizations for Apple M1/M2/M3 processors, providing:
-- Up to 30% faster k-mer querying
-- Native ARM64 SIMD optimizations
-- Optimized for Apple Silicon architecture
+**Recommended platforms for production use:** Linux x86_64 or macOS arm64
 
-**Recommended platforms for production use:** Linux or macOS
+📋 **For detailed platform support information, see [PLATFORM_SUPPORT.md](PLATFORM_SUPPORT.md)**
 
 **Building from source (optional):**
 ```bash
@@ -97,7 +98,9 @@ pip install .
 ```
 
 **Platform support:**
-- **Linux**: x86_64, aarch64 (ARM64) - pre-built wheels available with full C++ functionality
+- **macOS arm64** (Apple Silicon M1/M2/M3): Pre-built wheels with ARM64 optimizations
+- **Linux x86_64**: Pre-built wheels with full C++ functionality
+- **Other platforms**: Build from source or use alternative environments (WSL, Docker, Colab)
 - **macOS**: x86_64 (Intel), arm64 (Apple Silicon) - pre-built wheels available with full C++ functionality  
 - **Windows**: AMD64 - pre-built wheels available with Python-only functionality
 
