@@ -86,19 +86,26 @@ MAKEFLAGS = "-j1"
 [tool.cibuildwheel.macos]
 archs = ["x86_64", "arm64"]
 
-before-all = "mkdir -p bin obj aindex/core aindex/bin"
+# Команда before-build теперь очень проста
+before-build = [
+    "pip install pybind11 numpy",
+    "echo '--- Building wheel for {arch} ---'",
+    "echo 'ARCHFLAGS environment variable is: ${ARCHFLAGS:-not set}'", # Проверка переменной
+    "make clean",
+    "make all", # Просто вызываем make, он сам разберется
+    # Проверяем архитектуру собранного файла для отладки
+    "echo '--- Verifying architecture of built extension ---'",
+    "lipo -info aindex/core/aindex_cpp*.so"
+]
 
-# Call the build script, passing the architecture.
-# This is much more robust than a complex inline command.
-before-build = "./build_macos.sh {arch}"
-
-# Use a simple copy for the repair step.
+# Используем простую команду копирования
 repair-wheel-command = "cp {wheel} {dest_dir}"
 
-# CRITICAL: Set ARCHFLAGS to ensure pip and compilers target the correct architecture.
+# КРИТИЧЕСКИ ВАЖНО: эта секция передает ARCHFLAGS в среду сборки
 [tool.cibuildwheel.macos.environment]
 MACOSX_DEPLOYMENT_TARGET = "11.0"
 MAKEFLAGS = "-j1"
+# cibuildwheel заменит {arch} на 'x86_64' или 'arm64'
 ARCHFLAGS = "-arch {arch}"
 # Note: Windows support is planned for future releases
 # Currently supported platforms: Linux (x86_64, ARM64), macOS (x86_64, ARM64)

@@ -1,5 +1,6 @@
 CXX = g++
 CXXFLAGS = -std=c++17 -pthread -O3 -fPIC -Wall -Wextra
+
 LDFLAGS = -shared -Wl,--export-dynamic
 SRC_DIR = src
 OBJ_DIR = obj
@@ -10,6 +11,42 @@ BIN_DIR = bin
 PACKAGE_DIR = aindex/core
 PREFIX = $(CONDA_PREFIX)
 INSTALL_DIR = $(PREFIX)/bin
+
+# ОПРЕДЕЛЕНИЕ АРХИТЕКТУРЫ (ВАШЕ ПРЕДЛОЖЕНИЕ)
+# Проверяем ARCHFLAGS (устанавливается cibuildwheel)
+# Это самый надежный способ для CI
+ifdef ARCHFLAGS
+    ifeq ($(findstring arm64,$(ARCHFLAGS)),arm64)
+        TARGET_ARCH = arm64
+    else ifeq ($(findstring x86_64,$(ARCHFLAGS)),x86_64)
+        TARGET_ARCH = x86_64
+    endif
+endif
+
+# Устанавливаем TARGET_ARCH по умолчанию, если ARCHFLAGS не задана (для локальной сборки)
+TARGET_ARCH ?= $(shell uname -m)
+
+# Настройка флагов кросс-компиляции на основе TARGET_ARCH
+CROSS_COMPILE_FLAGS =
+ifeq ($(shell uname -s),Darwin)
+    # На Apple Silicon (arm64) при сборке для x86_64
+    ifeq ($(TARGET_ARCH),x86_64)
+        ifeq ($(shell uname -m),arm64)
+            CROSS_COMPILE_FLAGS = -arch x86_64
+        endif
+    endif
+    # На Intel (x86_64) при сборке для arm64 (требует Rosetta 2)
+    ifeq ($(TARGET_ARCH),arm64)
+        ifeq ($(shell uname -m),x86_64)
+            CROSS_COMPILE_FLAGS = -arch arm64
+        endif
+    endif
+endif
+
+# Добавляем флаги кросс-компиляции к основным флагам
+CXXFLAGS += $(CROSS_COMPILE_FLAGS)
+LDFLAGS_PYBIND = -shared $(CROSS_COMPILE_FLAGS)
+
 
 # Python and pybind11 configuration - auto-detect available Python
 # In cibuildwheel, use the current Python; otherwise try to find the best one
@@ -52,29 +89,29 @@ ifeq ($(PYTHON_CONFIG),)
 endif
 
 # Safely get pybind11 include path
-PYTHON_INCLUDE := $(shell $(PYTHON_CMD) -c "try: import pybind11; print(pybind11.get_include());\nexcept: print('')" 2>/dev/null)
+PYTHON_INCLUDE := $(shell $(PYTHON_CMD) -c "import pybind11; print(pybind11.get_include())" 2>/dev/null || echo "")
 PYTHON_HEADERS := $(shell $(PYTHON_CONFIG) --includes)
 PYTHON_SUFFIX := $(shell $(PYTHON_CONFIG) --extension-suffix)
 
-# Detect OS for macOS-specific settings
+# Добавляем заголовки Python к CXXFLAGS
+CXXFLAGS += $(PYTHON_HEADERS)
+ifeq ($(PYTHON_INCLUDE),)
+    $(error "pybind11 include path not found. Is pybind11 installed?")
+else
+    CXXFLAGS += -I$(PYTHON_INCLUDE)
+endif
+
+# Настройка флагов для macOS
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
-    ifneq ($(PYTHON_INCLUDE),)
-        CXXFLAGS += -stdlib=libc++ -I$(PYTHON_INCLUDE) $(PYTHON_HEADERS)
-    else
-        CXXFLAGS += -stdlib=libc++ $(PYTHON_HEADERS)
-    endif
-    LDFLAGS = -shared -undefined dynamic_lookup
+    CXXFLAGS += -stdlib=libc++
+    LDFLAGS_PYBIND += -undefined dynamic_lookup
     MACOS = true
 else
-    ifneq ($(PYTHON_INCLUDE),)
-        CXXFLAGS += -I$(PYTHON_INCLUDE) $(PYTHON_HEADERS)
-    else
-        CXXFLAGS += $(PYTHON_HEADERS)
-    endif
-    LDFLAGS = -shared
+    LDFLAGS_PYBIND += -Wl,--export-dynamic
     MACOS = false
 endif
+
 
 # Platform-specific binary extensions and flags
 ifeq ($(UNAME_S),Windows_NT)
@@ -258,25 +295,15 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(INCLUDES) | $(OBJ_DIR)
 	$(CXX) $(OBJ_CXXFLAGS) -c $< -o $@
 
 # Pybind11 module
+# ГЛАВНОЕ ИЗМЕНЕНИЕ: Упрощенная цель pybind11
+# Вся логика теперь в CXXFLAGS и LDFLAGS_PYBIND
 pybind11: $(OBJECTS) $(SRC_DIR)/python_wrapper.cpp | $(PACKAGE_DIR)
 	@echo "=== Building Python extension ==="
-	@echo "Python command: $(PYTHON_CMD)"
-	@echo "Python version: $(PYTHON_VERSION)"
-	@echo "Python config: $(PYTHON_CONFIG)"
-	@echo "Extension suffix: $(PYTHON_SUFFIX)"
-	@echo "CIBUILDWHEEL env: $$CIBUILDWHEEL"
-	@$(PYTHON_CMD) -c "import sys; print(f'Active Python: {sys.executable}')"
-	@PYBIND11_INCLUDE=$$($(PYTHON_CMD) -c "import pybind11; print(pybind11.get_include())" 2>/dev/null) && \
-	if [ -z "$$PYBIND11_INCLUDE" ]; then \
-		echo "Error: pybind11 not found. Please install pybind11: pip install pybind11"; \
-		exit 1; \
-	else \
-		echo "pybind11 include path: $$PYBIND11_INCLUDE"; \
-		$(CXX) $(CXXFLAGS) $(CROSS_COMPILE_FLAGS) -I$$PYBIND11_INCLUDE -I$(SRC_DIR) $(LDFLAGS) -o $(PACKAGE_DIR)/aindex_cpp$(PYTHON_SUFFIX) $(SRC_DIR)/python_wrapper.cpp $(OBJECTS); \
-	fi
-
-$(PACKAGE_DIR)/python_wrapper.so: $(SRC_DIR)/python_wrapper.o $(OBJECTS) | $(PACKAGE_DIR)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $^
+	@echo "Target Arch: $(TARGET_ARCH)"
+	@echo "Cross-compile flags: $(CROSS_COMPILE_FLAGS)"
+	@echo "Final CXXFLAGS: $(CXXFLAGS)"
+	@echo "Pybind LDFLAGS: $(LDFLAGS_PYBIND)"
+	$(CXX) $(CXXFLAGS) -I$(SRC_DIR) $(LDFLAGS_PYBIND) -o $(PACKAGE_DIR)/aindex_cpp$(PYTHON_SUFFIX) $(SRC_DIR)/python_wrapper.cpp $(OBJECTS)
 
 external:
 	@echo "Setting up external dependencies..."
