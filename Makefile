@@ -327,14 +327,34 @@ install: all
 	mkdir -p ${BIN_DIR}
 	mkdir -p $(PACKAGE_DIR)
 	mkdir -p $(INSTALL_DIR)
-	cp bin/compute_index.exe $(INSTALL_DIR)/
-	cp bin/compute_aindex.exe $(INSTALL_DIR)/
-	cp bin/compute_reads.exe $(INSTALL_DIR)/
-	cp bin/kmer_counter.exe $(INSTALL_DIR)/
-	cp bin/generate_all_13mers.exe $(INSTALL_DIR)/
-	cp bin/build_13mer_hash.exe $(INSTALL_DIR)/
-	cp bin/compute_aindex13.exe $(INSTALL_DIR)/
-	cp bin/count_kmers13.exe $(INSTALL_DIR)/
+	@echo "Installing binaries to $(INSTALL_DIR)..."
+	cp bin/compute_index$(BIN_EXT) $(INSTALL_DIR)/
+	cp bin/compute_aindex$(BIN_EXT) $(INSTALL_DIR)/
+	cp bin/compute_reads$(BIN_EXT) $(INSTALL_DIR)/
+	cp bin/kmer_counter$(BIN_EXT) $(INSTALL_DIR)/
+	cp bin/generate_all_13mers$(BIN_EXT) $(INSTALL_DIR)/
+	cp bin/build_13mer_hash$(BIN_EXT) $(INSTALL_DIR)/
+	cp bin/compute_aindex13$(BIN_EXT) $(INSTALL_DIR)/
+	cp bin/count_kmers13$(BIN_EXT) $(INSTALL_DIR)/
+	cp bin/compute_mphf_seq$(BIN_EXT) $(INSTALL_DIR)/
+	@echo "Installing Python package with aindex CLI..."
+	$(PYTHON_CMD) -m pip install -e .
+	@echo "Installation complete. You can now use 'aindex' command and all binaries."
+
+uninstall:
+	@echo "Removing aindex binaries from $(INSTALL_DIR)..."
+	rm -f $(INSTALL_DIR)/compute_index$(BIN_EXT)
+	rm -f $(INSTALL_DIR)/compute_aindex$(BIN_EXT)
+	rm -f $(INSTALL_DIR)/compute_reads$(BIN_EXT)
+	rm -f $(INSTALL_DIR)/kmer_counter$(BIN_EXT)
+	rm -f $(INSTALL_DIR)/generate_all_13mers$(BIN_EXT)
+	rm -f $(INSTALL_DIR)/build_13mer_hash$(BIN_EXT)
+	rm -f $(INSTALL_DIR)/compute_aindex13$(BIN_EXT)
+	rm -f $(INSTALL_DIR)/count_kmers13$(BIN_EXT)
+	rm -f $(INSTALL_DIR)/compute_mphf_seq$(BIN_EXT)
+	@echo "Uninstalling Python package and aindex CLI..."
+	$(PYTHON_CMD) -m pip uninstall -y aindex2
+	@echo "Uninstall complete."
 
 clean:
 	rm -rf $(OBJ_DIR) $(SRC_DIR)/*.so $(BIN_DIR) $(PACKAGE_DIR)/python_wrapper.so $(PACKAGE_DIR)/aindex_cpp*.so
@@ -410,6 +430,7 @@ help:
 	@echo "  test-all         - Run Python API tests"
 	@echo "  debug-platform   - Display platform and build environment information"
 	@echo "  install          - Install binaries to system (requires CONDA_PREFIX)"
+	@echo "  uninstall        - Remove installed binaries from system"
 	@echo "  arm64            - Build ARM64-optimized version for Apple Silicon"
 	@echo "  help             - Show this help message"
 	@echo ""
@@ -466,4 +487,4 @@ debug-vars:
 	@echo "PYTHON_SUFFIX: $(PYTHON_SUFFIX)"
 	@echo "============================="
 
-.PHONY: all all-external simple-all clean external external-safe install macos macos-simple arm64 test test-all debug-platform help debug-vars copy-to-package objects local-scripts
+.PHONY: all all-external simple-all clean external external-safe install uninstall macos macos-simple arm64 test test-all debug-platform help debug-vars copy-to-package objects local-scripts
