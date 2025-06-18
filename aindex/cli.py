@@ -20,6 +20,62 @@ except ImportError:
     import importlib_metadata
 
 
+def validate_input_output_files(input_file, output_file, command_name):
+    """Validate that input and output files are different to prevent data loss"""
+    if not input_file or not output_file:
+        return True  # Skip validation if either is empty
+    
+    try:
+        # Convert to Path objects for robust comparison
+        input_path = Path(input_file).resolve()
+        output_path = Path(output_file).resolve()
+        
+        # Check if they are the same file
+        if input_path == output_path:
+            print(f"Error in {command_name}: Input and output files cannot be the same!")
+            print(f"Input file:  {input_file}")
+            print(f"Output file: {output_file}")
+            print("This would overwrite your input data. Please specify a different output file.")
+            return False
+            
+        # Check if output file is a prefix of input file (e.g., input.fastq vs input.fastq.counts)
+        # This is usually okay, but warn the user
+        if str(input_path).startswith(str(output_path)) or str(output_path).startswith(str(input_path)):
+            print(f"Warning in {command_name}: Input and output files have similar names:")
+            print(f"Input file:  {input_file}")
+            print(f"Output file: {output_file}")
+            print("Please verify this is intentional to avoid confusion.")
+            
+    except Exception as e:
+        # If we can't resolve paths, just warn and continue
+        print(f"Warning: Could not validate input/output paths: {e}")
+    
+    return True
+
+
+def validate_output_file_overwrite(output_file, command_name, force_overwrite=False):
+    """Check if output file exists and warn about overwriting"""
+    if not output_file:
+        return True
+    
+    try:
+        output_path = Path(output_file)
+        if output_path.exists():
+            if force_overwrite:
+                print(f"Warning in {command_name}: Overwriting existing file {output_file}")
+                return True
+            else:
+                print(f"Warning in {command_name}: Output file already exists: {output_file}")
+                print("This will overwrite the existing file. Use --force to suppress this warning.")
+                # For now, we'll continue but warn the user
+                # In the future, we could add --force flag to each command
+                return True
+    except Exception as e:
+        print(f"Warning: Could not check output file: {e}")
+    
+    return True
+
+
 def detect_platform():
     """Detect current platform and return optimization info"""
     system = platform.system()
@@ -270,6 +326,10 @@ def cmd_compute_aindex(args):
     
     parsed_args = parser.parse_args(args)
     
+    # Validate input and output files are different
+    if not validate_input_output_files(parsed_args.input, parsed_args.output, 'compute-aindex'):
+        return 1
+    
     # Convert to arguments for the underlying script
     script_args = [
         '-i', parsed_args.input,
@@ -367,6 +427,15 @@ def cmd_compute_reads(args):
         print("Error: -1/--input1 is required when using -2/--input2")
         return 1
     
+    # Validate input and output files are different
+    input_file = parsed_args.input or parsed_args.input1
+    if input_file and not validate_input_output_files(input_file, parsed_args.output, 'compute-reads'):
+        return 1
+    
+    # Also check second input file if paired-end
+    if parsed_args.input2 and not validate_input_output_files(parsed_args.input2, parsed_args.output, 'compute-reads'):
+        return 1
+    
     # Determine mode and files
     if parsed_args.input:
         # Single file mode
@@ -444,6 +513,10 @@ def cmd_count_kmers(args):
     
     parsed_args = parser.parse_args(args)
     
+    # Validate input and output files are different
+    if not validate_input_output_files(parsed_args.input, parsed_args.output, 'count'):
+        return 1
+    
     platform_info = detect_platform()
     if parsed_args.verbose:
         print_platform_info()
@@ -491,6 +564,10 @@ def cmd_count_kmers_direct(args):
     
     parsed_args = parser.parse_args(args)
     
+    # Validate input and output files are different
+    if not validate_input_output_files(parsed_args.input, parsed_args.output, 'count-direct'):
+        return 1
+    
     platform_info = detect_platform()
     if parsed_args.verbose:
         print_platform_info()
@@ -528,6 +605,10 @@ def cmd_build_hash(args):
     
     parsed_args = parser.parse_args(args)
     
+    # Validate input and output files are different
+    if not validate_input_output_files(parsed_args.input, parsed_args.output, 'build-hash'):
+        return 1
+    
     if parsed_args.kmer_size == 13:
         print(f"Building 13-mer hash for {parsed_args.input}")
         # build_13mer_hash expects: kmers_file output_hash_file
@@ -547,7 +628,6 @@ def cmd_generate_kmers(args):
         description='Generate all possible k-mers'
     )
     parser.add_argument('-o', '--output', required=True, help='Output file')
-    parser.add_argument('-k', '--kmer-size', type=int, choices=[13, 23], default=13, help='K-mer size')
     parser.add_argument('-i', '--with-indices', action='store_true', help='Include numerical indices in output')
     parser.add_argument('-b', '--binary', action='store_true', help='Generate binary format')
     parser.add_argument('-s', '--stats', action='store_true', help='Show statistics only')
@@ -555,23 +635,23 @@ def cmd_generate_kmers(args):
     
     parsed_args = parser.parse_args(args)
     
-    if parsed_args.kmer_size == 13:
-        print(f"Generating all 13-mers to {parsed_args.output}")
-        # generate_all_13mers expects: output_file [options]
-        exe_args = [parsed_args.output]
-        if parsed_args.with_indices:
-            exe_args.append('-i')
-        if parsed_args.binary:
-            exe_args.append('-b')
-        if parsed_args.stats:
-            exe_args.append('-s')
-        if parsed_args.validate:
-            exe_args.append('-v')
-        return run_executable('generate_all_13mers', exe_args)
-    else:
-        print(f"Generating all {parsed_args.kmer_size}-mers is not supported (too many combinations)")
+    # Check if output file already exists
+    if not validate_output_file_overwrite(parsed_args.output, 'generate'):
         return 1
-
+    
+    print(f"Generating all 13-mers to {parsed_args.output}")
+    # generate_all_13mers expects: output_file [options]
+    exe_args = [parsed_args.output]
+    if parsed_args.with_indices:
+        exe_args.append('-i')
+    if parsed_args.binary:
+        exe_args.append('-b')
+    if parsed_args.stats:
+        exe_args.append('-s')
+    if parsed_args.validate:
+        exe_args.append('-v')
+    return run_executable('generate_all_13mers', exe_args)
+   
 
 def cmd_compute_aindex_direct(args):
     """Direct call to compute_aindex binary for expert users"""
@@ -634,6 +714,10 @@ def cmd_reads_to_fasta(args):
     
     parsed_args = parser.parse_args(args)
     
+    # Validate input and output files are different
+    if not validate_input_output_files(parsed_args.input, parsed_args.output, 'reads-to-fasta'):
+        return 1
+    
     print(f"Converting reads from {parsed_args.input} to FASTA format...")
     script_args = ['-i', parsed_args.input, '-o', parsed_args.output]
     return run_python_script('reads_to_fasta.py', script_args)
@@ -660,8 +744,9 @@ def cmd_help(args):
         'compute-index': 'Compute LU index for reads with perfect hash',
         'reads-to-fasta': 'Convert reads to FASTA format',
         'version': 'Show version information',
-        'info': 'Show system and installation information (use --skip-cpp-test if crashes)',
-        'platform': 'Show platform optimization information'
+        'info': 'Show system and installation information (--skip-cpp-test, --verbose-debug, --file-details available)',
+        'platform': 'Show platform optimization information',
+        'api-docs': 'Show detailed C++ API documentation'
     }
     
     for cmd, desc in commands.items():
@@ -694,6 +779,7 @@ def cmd_help(args):
     
     print("Use 'aindex <command> --help' for detailed help on specific commands.")
     print("Use 'aindex platform --list-executables' to see all available tools.")
+    print("Use 'aindex api-docs' to see detailed C++ API documentation.")
     return 0
 
 
@@ -733,19 +819,39 @@ def cmd_version(args):
 
 def cmd_info(args):
     """Show system and installation information"""
-    # Parse args to check for --skip-cpp-test
+    # Parse args to check for debug options
     parser = argparse.ArgumentParser(
         prog='aindex info',
         description='Show system and installation information'
     )
     parser.add_argument('--skip-cpp-test', action='store_true', 
                        help='Skip C++ API test (use if experiencing crashes)')
+    parser.add_argument('--verbose-debug', action='store_true',
+                       help='Show very detailed debug information for troubleshooting')
+    parser.add_argument('--file-details', action='store_true',
+                       help='Show detailed file information (size, permissions, etc.)')
+    parser.add_argument('--skip-bin-check', action='store_true',
+                       help='Skip bin directory analysis entirely')
+    parser.add_argument('--minimal', action='store_true',
+                       help='Show only basic information')
+    parser.add_argument('--force-gc', action='store_true',
+                       help='Force garbage collection to trigger potential issues early')
+    parser.add_argument('--test-only', choices=['cpp', 'path', 'bin'], 
+                       help='Test only specific component (cpp, path, or bin)')
     
     try:
         parsed_args = parser.parse_args(args)
     except:
         # If parsing fails, proceed with default behavior
-        parsed_args = argparse.Namespace(skip_cpp_test=False)
+        parsed_args = argparse.Namespace(
+            skip_cpp_test=False, 
+            verbose_debug=False, 
+            file_details=False,
+            skip_bin_check=False,
+            minimal=False,
+            force_gc=False,
+            test_only=None
+        )
     
     try:
         import aindex
@@ -755,73 +861,384 @@ def cmd_info(args):
         print(f"Platform: {sys.platform}")
         
         # Test C++ module safely
-        if parsed_args.skip_cpp_test:
-            print("C++ API: Test skipped (--skip-cpp-test)")
-        else:
-            try:
-                print("Testing C++ API...")
-                import aindex.core.aindex_cpp as aindex_cpp
-                wrapper = aindex_cpp.AindexWrapper()
-                methods = [m for m in dir(wrapper) if not m.startswith('_')]
-                print(f"C++ API: Available ({len(methods)} methods)")
-            except ImportError as e:
-                print(f"C++ API: Import Error - {e}")
-            except Exception as e:
-                print(f"C++ API: Error - {e}")
-                print("Note: Use --skip-cpp-test if this causes crashes")
+        if not parsed_args.test_only or parsed_args.test_only == 'cpp':
+            if parsed_args.skip_cpp_test:
+                print("C++ API: Test skipped (--skip-cpp-test)")
+            else:
+                try:
+                    print("Testing C++ API...")
+                    import aindex.core.aindex_cpp as aindex_cpp
+                    wrapper = aindex_cpp.AindexWrapper()
+                    methods = [m for m in dir(wrapper) if not m.startswith('_')]
+                    print(f"C++ API: Available ({len(methods)} methods)")
+                    
+                    # Show method descriptions if verbose
+                    if parsed_args.verbose_debug:
+                        print("\nC++ API Methods:")
+                        for method_name in sorted(methods):
+                            try:
+                                method = getattr(wrapper, method_name)
+                                if hasattr(method, '__doc__') and method.__doc__:
+                                    doc = method.__doc__.strip()
+                                    # Format multi-line docstrings nicely
+                                    doc_lines = doc.split('\n')
+                                    if len(doc_lines) > 1:
+                                        print(f"  {method_name}:")
+                                        for line in doc_lines:
+                                            if line.strip():
+                                                print(f"    {line.strip()}")
+                                    else:
+                                        print(f"  {method_name}: {doc}")
+                                else:
+                                    print(f"  {method_name}: (no documentation)")
+                            except Exception as e:
+                                print(f"  {method_name}: (error getting info: {e})")
+                    
+                    # Test if we can safely create and destroy multiple instances
+                    if parsed_args.verbose_debug:
+                        print("\nDEBUG: Testing multiple wrapper instances...")
+                        for i in range(3):
+                            test_wrapper = aindex_cpp.AindexWrapper()
+                            print(f"DEBUG: Created wrapper {i+1}")
+                            del test_wrapper
+                            print(f"DEBUG: Deleted wrapper {i+1}")
+                    
+                    # Explicitly delete the wrapper to avoid potential destructor issues
+                    print("DEBUG: Deleting main C++ wrapper...")
+                    del wrapper
+                    if parsed_args.verbose_debug:
+                        print("DEBUG: Main wrapper deleted successfully")
+                    
+                    # Force cleanup of the module reference
+                    del aindex_cpp
+                    if parsed_args.verbose_debug:
+                        print("DEBUG: Module reference deleted")
+                        
+                    sys.stdout.flush()
+                    
+                except ImportError as e:
+                    print(f"C++ API: Import Error - {e}")
+                except Exception as e:
+                    print(f"C++ API: Error - {e}")
+                    print("Note: Use --skip-cpp-test if this causes crashes")
         
         # Show detailed path information
-        print("\n=== Path Information ===")
-        
-        # Show aindex package location
-        try:
-            package_dir = Path(aindex.__file__).parent
-            print(f"Package location: {package_dir}")
-            print(f"Package type: {'Development' if str(package_dir).endswith('workspace/aindex/aindex') else 'Installed'}")
-        except Exception as e:
-            print(f"Package location: Error - {e}")
-        
-        # Show bin directory search results with enhanced error handling
-        try:
-            bin_dir = get_bin_path()
-            print(f"Bin directory: {bin_dir}")
-            print(f"Bin exists: {bin_dir.exists()}")
+        if (not parsed_args.minimal and 
+            (not parsed_args.test_only or parsed_args.test_only == 'path')):
+            print("\n=== Path Information ===")
             
-            if bin_dir.exists():
-                try:
-                    files = list(bin_dir.iterdir())
-                    print(f"Bin files: {len(files)} files")
-                    
-                    # Show executables with safe file checking
-                    executables = []
-                    for f in files:
-                        try:
-                            if (f.is_file() and 
-                                not f.name.endswith('.py') and 
-                                not f.name.startswith('__') and
-                                not f.name.startswith('.')):
-                                executables.append(f.name)
-                        except (OSError, PermissionError) as e:
-                            print(f"Warning: Could not check file {f.name}: {e}")
-                            continue
-                    
-                    if executables:
-                        print("Executables:", ", ".join(sorted(executables)))
-                    else:
-                        print("No valid executables found")
-                except (OSError, PermissionError) as e:
-                    print(f"Error accessing bin directory: {e}")
-            else:
-                print("Bin directory does not exist")
-        except Exception as e:
-            print(f"Error checking bin directory: {e}")
+            # Show aindex package location
+            try:
+                package_dir = Path(aindex.__file__).parent
+                print(f"Package location: {package_dir}")
+                print(f"Package type: {'Development' if str(package_dir).endswith('workspace/aindex/aindex') else 'Installed'}")
+            except Exception as e:
+                print(f"Package location: Error - {e}")
         
+        # Show bin directory search results with enhanced error handling and detailed debugging
+        if (not parsed_args.skip_bin_check and not parsed_args.minimal and 
+            (not parsed_args.test_only or parsed_args.test_only == 'bin')):
+            try:
+                print("DEBUG: Starting bin directory analysis...")
+                bin_dir = get_bin_path()
+                print(f"Bin directory: {bin_dir}")
+                print(f"Bin exists: {bin_dir.exists()}")
+                
+                if bin_dir.exists():
+                    try:
+                        print("DEBUG: Listing directory contents...")
+                        files = list(bin_dir.iterdir())
+                        print(f"Bin files: {len(files)} files")
+                        
+                        print("DEBUG: Starting file analysis...")
+                        # Show executables with safe file checking and detailed debugging
+                        executables = []
+                        for i, f in enumerate(files):
+                            try:
+                                if parsed_args.verbose_debug:
+                                    print(f"DEBUG: Checking file {i+1}/{len(files)}: {f.name}")
+                                
+                                # Check if it's a file
+                                is_file = f.is_file()
+                                if parsed_args.verbose_debug:
+                                    print(f"DEBUG:   - is_file(): {is_file}")
+                                
+                                if parsed_args.file_details:
+                                    try:
+                                        stat_info = f.stat()
+                                        print(f"DEBUG:   - File size: {stat_info.st_size} bytes")
+                                        print(f"DEBUG:   - Permissions: {oct(stat_info.st_mode)}")
+                                        print(f"DEBUG:   - Is executable: {bool(stat_info.st_mode & 0o111)}")
+                                    except Exception as e:
+                                        print(f"DEBUG:   - Could not get file stats: {e}")
+                                
+                                if is_file:
+                                    # Check file name conditions
+                                    not_py = not f.name.endswith('.py')
+                                    not_dunder = not f.name.startswith('__')
+                                    not_hidden = not f.name.startswith('.')
+                                    
+                                    if parsed_args.verbose_debug:
+                                        print(f"DEBUG:   - not .py: {not_py}")
+                                        print(f"DEBUG:   - not __*: {not_dunder}")
+                                        print(f"DEBUG:   - not hidden: {not_hidden}")
+                                    
+                                    if not_py and not_dunder and not_hidden:
+                                        if parsed_args.verbose_debug:
+                                            print(f"DEBUG:   - Adding {f.name} to executables")
+                                        executables.append(f.name)
+                                    else:
+                                        if parsed_args.verbose_debug:
+                                            print(f"DEBUG:   - Skipping {f.name} (failed conditions)")
+                                else:
+                                    if parsed_args.verbose_debug:
+                                        print(f"DEBUG:   - Skipping {f.name} (not a file)")
+                                    
+                            except (OSError, PermissionError) as e:
+                                print(f"WARNING: Could not check file {f.name}: {e}")
+                                continue
+                            except Exception as e:
+                                print(f"ERROR: Unexpected error checking file {f.name}: {e}")
+                                continue
+                        
+                        if parsed_args.verbose_debug:
+                            print("DEBUG: File analysis complete")
+                        
+                        if executables:
+                            if parsed_args.verbose_debug:
+                                print("DEBUG: Preparing to display executables list...")
+                            sorted_executables = sorted(executables)
+                            if parsed_args.verbose_debug:
+                                print(f"DEBUG: Sorted {len(sorted_executables)} executables")
+                                print("DEBUG: About to join and print executables...")
+                                
+                            # Try to print executables one by one to isolate the problem
+                            if parsed_args.file_details:
+                                print("Executables (detailed):")
+                                for exe in sorted_executables:
+                                    try:
+                                        print(f"  - {exe}")
+                                        sys.stdout.flush()  # Force flush after each line
+                                    except Exception as e:
+                                        print(f"ERROR printing executable name {exe}: {e}")
+                            else:
+                                try:
+                                    exe_list = ", ".join(sorted_executables)
+                                    if parsed_args.verbose_debug:
+                                        print(f"DEBUG: Joined string length: {len(exe_list)}")
+                                    print("Executables:", exe_list)
+                                    sys.stdout.flush()
+                                except Exception as e:
+                                    print(f"ERROR creating executables list: {e}")
+                                    # Fallback: print one by one
+                                    print("Executables (fallback):")
+                                    for exe in sorted_executables:
+                                        try:
+                                            print(f"  - {exe}")
+                                            sys.stdout.flush()
+                                        except Exception as e:
+                                            print(f"ERROR printing {exe}: {e}")
+                            
+                            if parsed_args.verbose_debug:
+                                print("DEBUG: Executables list displayed successfully")
+                        else:
+                            print("No valid executables found")
+                            
+                    except (OSError, PermissionError) as e:
+                        print(f"Error accessing bin directory: {e}")
+                    except Exception as e:
+                        print(f"Unexpected error in bin directory processing: {e}")
+                else:
+                    print("Bin directory does not exist")
+                    
+                print("DEBUG: Bin directory analysis complete")
+            except Exception as e:
+                print(f"Error checking bin directory: {e}")
+        else:
+            if parsed_args.skip_bin_check:
+                print("Bin directory check skipped (--skip-bin-check)")
+            
+        print("DEBUG: About to return from cmd_info function...")
+        sys.stdout.flush()  # Force flush output before potential crash
+        
+        # Explicitly clean up variables that might cause issues on destruction
+        try:
+            print("DEBUG: Cleaning up variables...")
+            if 'bin_dir' in locals():
+                del bin_dir
+            if 'files' in locals():
+                del files
+            if 'executables' in locals():
+                del executables
+            if 'sorted_executables' in locals():
+                del sorted_executables
+            if 'package_dir' in locals():
+                del package_dir
+            print("DEBUG: Variables cleaned up")
+            sys.stdout.flush()
+            
+            # Force garbage collection if requested
+            if parsed_args.force_gc:
+                import gc
+                print("DEBUG: Forcing garbage collection...")
+                collected = gc.collect()
+                print(f"DEBUG: Collected {collected} objects")
+                sys.stdout.flush()
+                
+        except Exception as e:
+            print(f"DEBUG: Error during cleanup: {e}")
+        
+        print("DEBUG: About to return 0...")
+        sys.stdout.flush()
         return 0
     except ImportError as e:
         print(f"Error: aindex module not found - {e}")
         return 1
     except Exception as e:
         print(f"Error getting info: {e}")
+        return 1
+
+
+def cmd_api_docs(args):
+    """Show detailed C++ API documentation"""
+    parser = argparse.ArgumentParser(
+        prog='aindex api-docs',
+        description='Show detailed C++ API documentation'
+    )
+    parser.add_argument('--method', type=str, help='Show documentation for specific method')
+    parser.add_argument('--category', choices=['loading', 'query', 'utility', 'all'], 
+                       default='all', help='Show methods by category')
+    parser.add_argument('--examples', action='store_true', help='Show usage examples')
+    
+    parsed_args = parser.parse_args(args)
+    
+    try:
+        import aindex.core.aindex_cpp as aindex_cpp
+        wrapper = aindex_cpp.AindexWrapper()
+        
+        # Categorize methods
+        loading_methods = [
+            'load', 'load_hash_file', 'load_reads', 'load_reads_in_memory', 
+            'load_aindex', 'load_13mer_index', 'load_13mer_aindex',
+            'load_from_prefix_23mer', 'load_aindex_from_prefix_23mer',
+            'load_from_prefix_13mer', 'load_aindex_from_prefix_13mer'
+        ]
+        
+        query_methods = [
+            'get_tf_value', 'get_tf_values', 'get_hash_value', 'get_hash_values',
+            'get_positions', 'get_reads_se_by_kmer', 'get_read_by_rid', 'get_read',
+            'get_kid_by_kmer', 'get_kmer_by_kid', 'get_strand', 'get_kmer_info',
+            'get_rid', 'get_start', 'get_hash_size', 'get_reads_size',
+            'get_tf_value_13mer', 'get_tf_values_13mer', 'get_total_tf_value_13mer',
+            'get_tf_both_directions_13mer', 'get_positions_13mer'
+        ]
+        
+        utility_methods = [
+            'get_index_info', 'get_13mer_statistics', 'get_23mer_statistics',
+            'get_reverse_complement_13mer', 'get_reverse_complement_23mer',
+            'debug_kmer_tf_values'
+        ]
+        
+        all_methods = [m for m in dir(wrapper) if not m.startswith('_')]
+        
+        # Filter methods by category
+        if parsed_args.category == 'loading':
+            methods_to_show = loading_methods
+        elif parsed_args.category == 'query':
+            methods_to_show = query_methods
+        elif parsed_args.category == 'utility':
+            methods_to_show = utility_methods
+        else:
+            methods_to_show = all_methods
+        
+        # Filter by specific method if requested
+        if parsed_args.method:
+            if parsed_args.method in all_methods:
+                methods_to_show = [parsed_args.method]
+            else:
+                print(f"Method '{parsed_args.method}' not found in C++ API")
+                print(f"Available methods: {', '.join(sorted(all_methods))}")
+                return 1
+        
+        print("=== aindex C++ API Documentation ===")
+        print(f"Total methods: {len(all_methods)}")
+        print(f"Showing category: {parsed_args.category}")
+        print()
+        
+        for method_name in sorted(methods_to_show):
+            if method_name not in all_methods:
+                continue
+                
+            try:
+                method = getattr(wrapper, method_name)
+                print(f"📎 {method_name}")
+                
+                # Show category
+                if method_name in loading_methods:
+                    print("   Category: Loading")
+                elif method_name in query_methods:
+                    print("   Category: Query")
+                elif method_name in utility_methods:
+                    print("   Category: Utility")
+                else:
+                    print("   Category: Other")
+                
+                # Show documentation
+                if hasattr(method, '__doc__') and method.__doc__:
+                    doc = method.__doc__.strip()
+                    doc_lines = doc.split('\n')
+                    print("   Description:")
+                    for line in doc_lines:
+                        if line.strip():
+                            print(f"     {line.strip()}")
+                else:
+                    print("   Description: (no documentation available)")
+                
+                # Show signature if available
+                try:
+                    import inspect
+                    sig = inspect.signature(method)
+                    print(f"   Signature: {method_name}{sig}")
+                except:
+                    pass
+                
+                # Show usage examples for common methods
+                if parsed_args.examples and method_name in ['get_tf_value', 'load_from_prefix_13mer', 'get_positions']:
+                    print("   Example:")
+                    if method_name == 'get_tf_value':
+                        print("     wrapper.get_tf_value('ATCGATCGATCGA')")
+                    elif method_name == 'load_from_prefix_13mer':
+                        print("     wrapper.load_from_prefix_13mer('data/13mer_index')")
+                    elif method_name == 'get_positions':
+                        print("     positions = wrapper.get_positions('ATCGATCGATCGA')")
+                
+                print()
+                
+            except Exception as e:
+                print(f"   Error getting info for {method_name}: {e}")
+                print()
+        
+        # Show category summary
+        print("=== Category Summary ===")
+        print(f"Loading methods ({len(loading_methods)}): Data loading and initialization")
+        print(f"Query methods ({len(query_methods)}): K-mer and read queries") 
+        print(f"Utility methods ({len(utility_methods)}): Statistics and utilities")
+        print()
+        print("Use 'aindex api-docs --category <category>' to filter by category")
+        print("Use 'aindex api-docs --method <method_name>' for specific method info")
+        print("Use 'aindex api-docs --examples' to see usage examples")
+        
+        # Clean up
+        del wrapper
+        del aindex_cpp
+        
+        return 0
+        
+    except ImportError as e:
+        print(f"Error: Cannot import C++ API - {e}")
+        return 1
+    except Exception as e:
+        print(f"Error getting API documentation: {e}")
         return 1
 
 
@@ -912,6 +1329,7 @@ def main():
     subparsers.add_parser('version', help='Show version information')
     subparsers.add_parser('info', help='Show system and installation information')
     subparsers.add_parser('platform', help='Show platform information and optimizations')
+    subparsers.add_parser('api-docs', help='Show detailed C++ API documentation')
     
     # Parse main args
     if len(sys.argv) == 1:
@@ -945,6 +1363,7 @@ def main():
         'version': cmd_version,
         'info': cmd_info,
         'platform': cmd_platform_info,
+        'api-docs': cmd_api_docs,
     }
     
     if args.command in command_map:

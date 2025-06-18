@@ -17,7 +17,7 @@ def demo_basic_usage():
     print("=== 13-mer Integration Demo ===\n")
     
     # File paths
-    hash_file = "/Users/akomissarov/Dropbox2/Dropbox/workspace/aindex/test_13mers/13mer_index.hash"
+    hash_file = "/Users/akomissarov/Dropbox2/Dropbox/workspace/aindex/test_13mers/13mer_index.pf"
     tf_file = "/Users/akomissarov/Dropbox2/Dropbox/workspace/aindex/test_13mers/13mer_index.tf.bin"
     
     print("1. Loading 13-mer index...")
@@ -59,7 +59,7 @@ def demo_performance():
     """Demonstrate performance characteristics"""
     print("\n=== Performance Demonstration ===\n")
     
-    hash_file = "/Users/akomissarov/Dropbox2/Dropbox/workspace/aindex/test_13mers/13mer_index.hash"
+    hash_file = "/Users/akomissarov/Dropbox2/Dropbox/workspace/aindex/test_13mers/13mer_index.pf"
     tf_file = "/Users/akomissarov/Dropbox2/Dropbox/workspace/aindex/test_13mers/13mer_index.tf.bin"
     
     index = aindex.load_13mer_index(hash_file, tf_file)
@@ -100,7 +100,7 @@ def demo_auto_detection():
     """Demonstrate automatic mode detection"""
     print("\n=== Auto-detection Demo ===\n")
     
-    hash_file = "/Users/akomissarov/Dropbox2/Dropbox/workspace/aindex/test_13mers/13mer_index.hash"
+    hash_file = "/Users/akomissarov/Dropbox2/Dropbox/workspace/aindex/test_13mers/13mer_index.pf"
     tf_file = "/Users/akomissarov/Dropbox2/Dropbox/workspace/aindex/test_13mers/13mer_index.tf.bin"
     
     # Test with no index loaded
@@ -131,7 +131,7 @@ def demo_array_analysis():
     """Demonstrate analysis capabilities with full array access"""
     print("\n=== Array Analysis Demo ===\n")
     
-    hash_file = "/Users/akomissarov/Dropbox2/Dropbox/workspace/aindex/test_13mers/13mer_index.hash"
+    hash_file = "/Users/akomissarov/Dropbox2/Dropbox/workspace/aindex/test_13mers/13mer_index.pf"
     tf_file = "/Users/akomissarov/Dropbox2/Dropbox/workspace/aindex/test_13mers/13mer_index.tf.bin"
     
     index = aindex.load_13mer_index(hash_file, tf_file)

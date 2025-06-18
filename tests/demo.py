@@ -37,7 +37,6 @@ hash_file = str(temp_dir / "test_kmer_counter.23.pf")
 tf_bin_file = str(temp_dir / "test_kmer_counter.23.tf.bin")
 kmers_bin_file = str(temp_dir / "test_kmer_counter.23.kmers.bin")
 
-pos_file = str(temp_dir / "test_kmer_counter.23.pos.bin")
 index_file = str(temp_dir / "test_kmer_counter.23.index.bin")
 indices_file = str(temp_dir / "test_kmer_counter.23.indices.bin")
 
@@ -60,7 +59,6 @@ try:
         kmers_bin_file=kmers_bin_file,
         kmers_text_file="",  # Not used in this demo
         reads_file=reads_file,
-        pos_file=pos_file,
         index_file=index_file,
         indices_file=indices_file,
         max_tf=10000

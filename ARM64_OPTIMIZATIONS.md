@@ -68,10 +68,10 @@ python aindex/cli.py count-direct -i input.fastq -k 13 -o output.txt --verbose
 ./aindex-arm64.sh count-direct -i input.fastq -k 13 -o output.txt
 
 # Direct 13-mer counting with ARM64 optimizations
-./bin/count_kmers13 input.fastq all_13mers.hash output.tf.bin
+./bin/count_kmers13 input.fastq all_13mers.pf output.tf.bin
 
 # Build 13-mer index with ARM64 optimizations
-./bin/compute_aindex13 reads.txt all_13mers.hash counts.tf.bin output_prefix 8
+./bin/compute_aindex13 reads.txt all_13mers.pf counts.tf.bin output_prefix 8
 ```
 
 ### Available Commands

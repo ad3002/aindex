@@ -477,13 +477,13 @@ int main(int argc, char* argv[]) {
         std::cerr << std::endl;
         std::cerr << "Arguments:" << std::endl;
         std::cerr << "  input_file     - Input sequences (FASTA, FASTQ, or plain text)" << std::endl;
-        std::cerr << "  hash_file      - Precomputed perfect hash file (.hash)" << std::endl;
+        std::cerr << "  hash_file      - Precomputed perfect hash file (.pf)" << std::endl;
         std::cerr << "  output_tf_file - Output counts file (.tf.bin)" << std::endl;
         std::cerr << "  num_threads    - Number of threads (default: auto for ARM64)" << std::endl;
         std::cerr << std::endl;
         std::cerr << "ARM64 Examples:" << std::endl;
-        std::cerr << "  " << argv[0] << " reads.fastq 13mer_index.hash reads.tf.bin" << std::endl;
-        std::cerr << "  " << argv[0] << " genome.fasta 13mer_index.hash genome.tf.bin 10" << std::endl;
+        std::cerr << "  " << argv[0] << " reads.fastq 13mer_index.pf reads.tf.bin" << std::endl;
+        std::cerr << "  " << argv[0] << " genome.fasta 13mer_index.pf genome.tf.bin 10" << std::endl;
         return 1;
     }
     

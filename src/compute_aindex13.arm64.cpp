@@ -375,14 +375,8 @@ public:
     /**
      * ARM64-optimized save with efficient I/O
      */
-    void save(const std::string& pos_bin_file, const std::string& index_bin_file, 
-              const std::string& indices_bin_file, const std::vector<uint64_t>& start_positions) {
-        
-        std::cout << "[ARM64] Saving pos.bin array..." << std::endl;
-        std::ofstream pos_out(pos_bin_file, std::ios::binary);
-        pos_out.write(reinterpret_cast<const char*>(start_positions.data()), 
-                     start_positions.size() * sizeof(uint64_t));
-        pos_out.close();
+    void save(const std::string& index_bin_file, 
+              const std::string& indices_bin_file) {
         
         std::cout << "[ARM64] Saving index.bin array..." << std::endl;
         std::ofstream index_out(index_bin_file, std::ios::binary);
@@ -464,11 +458,10 @@ int main(int argc, char** argv) {
         std::cerr << std::endl;
         std::cerr << "Arguments:" << std::endl;
         std::cerr << "  reads_file:      Input reads file (one sequence per line)" << std::endl;
-        std::cerr << "  hash_file:       13-mer perfect hash file (.hash)" << std::endl;
+        std::cerr << "  hash_file:       13-mer perfect hash file (.pf)" << std::endl;
         std::cerr << "  tf_file:         13-mer frequencies file (.tf.bin)" << std::endl;
         std::cerr << "  output_prefix:   Prefix for output files" << std::endl;
         std::cerr << "  num_threads:     Number of threads (auto-optimized for Apple Silicon)" << std::endl;
-        std::cerr << "  pos_bin:         Optional: Output pos.bin filename" << std::endl;
         std::cerr << "  index_bin:       Optional: Output index.bin filename" << std::endl;
         std::cerr << "  indices_bin:     Optional: Output indices.bin filename" << std::endl;
         std::cerr << std::endl;
@@ -488,7 +481,6 @@ int main(int argc, char** argv) {
     uint32_t num_threads = std::atoi(argv[5]);
 
     // Optional output filenames
-    std::string pos_bin_file = (argc > 6) ? argv[6] : output_prefix + ".pos.bin";
     std::string index_bin_file = (argc > 7) ? argv[7] : output_prefix + ".index.bin";
     std::string indices_bin_file = (argc > 8) ? argv[8] : output_prefix + ".indices.bin";
 
@@ -552,27 +544,6 @@ int main(int argc, char** argv) {
     start_positions.reserve(length / 50); // Reasonable estimate
     std::unordered_map<uint64_t, uint32_t> start2rid;
     
-    uint32_t rid = 0;
-    uint64_t pos = 0;
-    start_positions.push_back(pos);
-    start2rid[pos] = rid;
-    
-    uint64_t nreads = 0;
-    for (uint64_t i = 0; i < length; i++) {
-        if (contents[i] == '\n') {
-            start_positions.push_back(i + 1);
-            rid++;
-            start2rid[i + 1] = rid;
-            nreads++;
-            
-            if (rid % 1000000 == 0) {
-                std::cout << "[ARM64] Loaded reads: " << rid << std::endl;
-            }
-        }
-    }
-    
-    start_positions.push_back(length);
-    std::cout << "[ARM64] Loaded " << nreads << " reads, " << length << " characters" << std::endl;
 
     // Initialize ARM64AIndex13 and build index
     std::cout << "[ARM64] Initializing AIndex13..." << std::endl;
@@ -582,7 +553,6 @@ int main(int argc, char** argv) {
     aindex.fill_index_from_reads(contents, length, num_threads, hasher);
     
     std::cout << "[ARM64] Saving index..." << std::endl;
-    aindex.save(pos_bin_file, index_bin_file, indices_bin_file, start_positions);
 
 #ifdef __APPLE__
     free(contents);

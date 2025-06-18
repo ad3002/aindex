@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <iomanip>
 
 #include "emphf/common.hpp"
 #include "hash.hpp"
@@ -44,6 +45,12 @@ private:
     std::atomic<uint64_t> valid_kmers{0};
     std::atomic<uint64_t> invalid_kmers{0};
     
+    // Progress tracking
+    std::atomic<bool> show_progress{true};
+    std::chrono::steady_clock::time_point last_progress_update;
+    std::mutex progress_mutex;
+    std::atomic<uint64_t> estimated_total_sequences{0};
+    
     emphf::stl_string_adaptor str_adapter;
     
 public:
@@ -56,6 +63,8 @@ public:
         for (uint32_t i = 0; i < TOTAL_13MERS; i++) {
             kmer_counts[i] = 0;
         }
+        
+        last_progress_update = std::chrono::steady_clock::now();
     }
     
     ~Kmer13Counter() {
@@ -124,6 +133,9 @@ public:
         
         std::string normalized = normalize_sequence(seq);
         total_sequences++;
+        
+        // Update progress periodically
+        update_processing_progress();
         
         // Count k-mers in this sequence
         for (size_t i = 0; i <= normalized.length() - KMER_SIZE; ++i) {
@@ -198,6 +210,7 @@ public:
      */
     void read_fasta_file(std::ifstream& input) {
         std::string line, sequence;
+        
         while (std::getline(input, line)) {
             if (line.empty()) continue;
             
@@ -248,6 +261,7 @@ public:
      */
     void read_plain_file(std::ifstream& input) {
         std::string line;
+        
         while (std::getline(input, line)) {
             if (!line.empty()) {
                 std::lock_guard<std::mutex> lock(queue_mutex);
@@ -283,6 +297,9 @@ public:
             case FileFormat::PLAIN: std::cout << "Plain text" << std::endl; break;
         }
         
+        // Estimate total sequences for accurate progress tracking
+        estimated_total_sequences = estimate_total_sequences(filename, format);
+        
         auto start_time = std::chrono::high_resolution_clock::now();
         
         // Start worker threads
@@ -313,8 +330,18 @@ public:
         done_reading = true;
         cv.notify_all();
         
+        std::cout << "File reading completed. Processing remaining sequences..." << std::endl;
+        
         for (auto& worker : workers) {
             worker.join();
+        }
+        
+        // Final progress update to show 100%
+        uint64_t final_processed = total_sequences.load();
+        uint64_t estimated = estimated_total_sequences.load();
+        if (estimated > 0) {
+            show_progress_bar(final_processed, std::max(final_processed, estimated), "Processing");
+            std::cout << std::endl;
         }
         
         auto end_time = std::chrono::high_resolution_clock::now();
@@ -395,6 +422,125 @@ public:
         std::cout << "Average k-mer frequency: " << (unique_kmers > 0 ? (double)total_count / unique_kmers : 0) << std::endl;
         std::cout << "Threads used: " << num_threads << std::endl;
     }
+    
+    /**
+     * Display progress bar (called periodically to avoid IO overhead)
+     */
+    void show_progress_bar(uint64_t current, uint64_t total, const std::string& prefix = "Progress") {
+        if (!show_progress.load()) return;
+        
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_progress_update);
+        
+        // Update only every 5 seconds to minimize IO overhead
+        if (elapsed.count() < 5000 && current < total) return;
+        
+        std::lock_guard<std::mutex> lock(progress_mutex);
+        
+        const int bar_width = 50;
+        float progress = total > 0 ? static_cast<float>(current) / total : 0.0f;
+        int pos = static_cast<int>(bar_width * progress);
+        
+        std::cout << "\r" << prefix << ": [";
+        for (int i = 0; i < bar_width; ++i) {
+            if (i < pos) std::cout << "=";
+            else if (i == pos) std::cout << ">";
+            else std::cout << " ";
+        }
+        std::cout << "] " << static_cast<int>(progress * 100.0f) << "% (" 
+                 << current << "/" << total << ")";
+        std::cout.flush();
+        
+        last_progress_update = now;
+    }
+    
+    /**
+     * Update progress during file reading
+     */
+    void update_reading_progress(uint64_t bytes_read, uint64_t total_bytes) {
+        show_progress_bar(bytes_read, total_bytes, "Reading");
+    }
+    
+    /**
+     * Update progress during processing
+     */
+    void update_processing_progress() {
+        uint64_t processed = total_sequences.load();
+        uint64_t total = estimated_total_sequences.load();
+        
+        if (processed % 1000 == 0 && total > 0) { // Update every 1000 sequences to reduce overhead
+            show_progress_bar(processed, total, "Processing");
+        }
+    }
+    
+    /**
+     * Estimate total number of sequences from file size and format
+     */
+    uint64_t estimate_total_sequences(const std::string& filename, FileFormat format) {
+        std::ifstream file(filename, std::ios::ate);
+        if (!file.is_open()) return 0;
+        
+        uint64_t file_size = file.tellg();
+        file.close();
+        
+        if (file_size == 0) return 0;
+        
+        // Sample beginning of file to estimate average line/sequence length
+        std::ifstream sample_file(filename);
+        std::string line;
+        uint64_t sample_bytes = 0;
+        uint64_t sample_sequences = 0;
+        const uint64_t SAMPLE_SIZE = std::min(file_size, static_cast<uint64_t>(1024 * 1024)); // 1MB sample
+        
+        switch (format) {
+            case FileFormat::FASTA: {
+                bool in_sequence = false;
+                while (std::getline(sample_file, line) && sample_bytes < SAMPLE_SIZE) {
+                    sample_bytes += line.length() + 1;
+                    if (line.empty()) continue;
+                    
+                    if (line[0] == '>') {
+                        if (in_sequence) sample_sequences++;
+                        in_sequence = true;
+                    }
+                }
+                if (in_sequence) sample_sequences++;
+                break;
+            }
+            case FileFormat::FASTQ: {
+                int line_count = 0;
+                while (std::getline(sample_file, line) && sample_bytes < SAMPLE_SIZE) {
+                    sample_bytes += line.length() + 1;
+                    line_count++;
+                }
+                sample_sequences = line_count / 4; // FASTQ has 4 lines per sequence
+                break;
+            }
+            case FileFormat::PLAIN: {
+                while (std::getline(sample_file, line) && sample_bytes < SAMPLE_SIZE) {
+                    sample_bytes += line.length() + 1;
+                    if (!line.empty()) sample_sequences++;
+                }
+                break;
+            }
+        }
+        
+        if (sample_bytes == 0 || sample_sequences == 0) return 0;
+        
+        // Extrapolate to full file
+        uint64_t estimated = (file_size * sample_sequences) / sample_bytes;
+        
+        std::cout << "Estimated " << estimated << " sequences in " << (file_size / (1024*1024)) << " MB file" << std::endl;
+        
+        return estimated;
+    }
+    
+    /**
+     * Get estimation accuracy information
+     */
+    std::pair<uint64_t, uint64_t> get_sequence_counts() const {
+        return {estimated_total_sequences.load(), total_sequences.load()};
+    }
 };
 
 int main(int argc, char* argv[]) {
@@ -403,14 +549,14 @@ int main(int argc, char* argv[]) {
         std::cerr << std::endl;
         std::cerr << "Arguments:" << std::endl;
         std::cerr << "  input_file     - Input sequences (FASTA, FASTQ, or plain text)" << std::endl;
-        std::cerr << "  hash_file      - Precomputed perfect hash file (.hash)" << std::endl;
+        std::cerr << "  hash_file      - Precomputed perfect hash file (.pf)" << std::endl;
         std::cerr << "  output_tf_file - Output counts file (.tf.bin)" << std::endl;
         std::cerr << "  num_threads    - Number of threads (default: auto)" << std::endl;
         std::cerr << std::endl;
         std::cerr << "Examples:" << std::endl;
-        std::cerr << "  " << argv[0] << " reads.fastq 13mer_index.hash reads.tf.bin" << std::endl;
-        std::cerr << "  " << argv[0] << " genome.fasta 13mer_index.hash genome.tf.bin 8" << std::endl;
-        std::cerr << "  " << argv[0] << " sequences.txt 13mer_index.hash sequences.tf.bin 16" << std::endl;
+        std::cerr << "  " << argv[0] << " reads.fastq 13mer_index.pf reads.tf.bin" << std::endl;
+        std::cerr << "  " << argv[0] << " genome.fasta 13mer_index.pf genome.tf.bin 8" << std::endl;
+        std::cerr << "  " << argv[0] << " sequences.txt 13mer_index.pf sequences.tf.bin 16" << std::endl;
         return 1;
     }
     
@@ -441,6 +587,14 @@ int main(int argc, char* argv[]) {
         
         // Print statistics
         counter.print_statistics();
+        
+        // Final comparison of estimated vs actual
+        auto [estimated, actual] = counter.get_sequence_counts();
+        if (estimated > 0) {
+            double accuracy = 100.0 * std::min(estimated, actual) / std::max(estimated, actual);
+            std::cout << "Sequence count estimation accuracy: " << std::fixed << std::setprecision(1) 
+                     << accuracy << "% (estimated: " << estimated << ", actual: " << actual << ")" << std::endl;
+        }
         
         // Save results
         if (!counter.save_counts(output_file)) {

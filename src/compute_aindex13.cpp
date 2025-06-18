@@ -294,14 +294,10 @@ struct AIndex13 {
         }
     }
     
-    void save(const std::string& pos_bin_file, const std::string& index_bin_file, 
-              const std::string& indices_bin_file, const std::vector<uint64_t>& start_positions) {
+    void save(const std::string& index_bin_file, 
+              const std::string& indices_bin_file) {
         
-        emphf::logger() << "Saving pos.bin array..." << std::endl;
-        std::ofstream pos_out(pos_bin_file, std::ios::binary);
-        pos_out.write(reinterpret_cast<const char*>(start_positions.data()), 
-                     start_positions.size() * sizeof(uint64_t));
-        pos_out.close();
+        
         
         emphf::logger() << "Saving index.bin array..." << std::endl;
         std::ofstream index_out(index_bin_file, std::ios::binary);
@@ -334,11 +330,10 @@ int main(int argc, char** argv) {
                  << " <reads_file> <hash_file> <tf_file> <output_prefix> <num_threads> [pos_bin] [index_bin] [indices_bin]" << std::endl;
         std::cerr << "Where:" << std::endl;
         std::cerr << "  reads_file:      Input reads file (one sequence per line)" << std::endl;
-        std::cerr << "  hash_file:       13-mer perfect hash file (.hash)" << std::endl;
+        std::cerr << "  hash_file:       13-mer perfect hash file (.pf)" << std::endl;
         std::cerr << "  tf_file:         13-mer frequencies file (.tf.bin)" << std::endl;
         std::cerr << "  output_prefix:   Prefix for output files" << std::endl;
         std::cerr << "  num_threads:     Number of threads to use" << std::endl;
-        std::cerr << "  pos_bin:         Optional: Output pos.bin filename" << std::endl;
         std::cerr << "  index_bin:       Optional: Output index.bin filename" << std::endl;
         std::cerr << "  indices_bin:     Optional: Output indices.bin filename" << std::endl;
         return 1;
@@ -351,7 +346,6 @@ int main(int argc, char** argv) {
     uint32_t num_threads = std::atoi(argv[5]);
 
     // Optional output filenames
-    std::string pos_bin_file = (argc > 6) ? argv[6] : output_prefix + ".pos.bin";
     std::string index_bin_file = (argc > 7) ? argv[7] : output_prefix + ".index.bin";
     std::string indices_bin_file = (argc > 8) ? argv[8] : output_prefix + ".indices.bin";
 
@@ -391,31 +385,7 @@ int main(int argc, char** argv) {
     reads_in.close();
     contents[length] = 0;
     
-    // Build read start positions
-    std::vector<uint64_t> start_positions;
-    std::unordered_map<uint64_t, uint32_t> start2rid;
-    
-    uint32_t rid = 0;
-    uint64_t pos = 0;
-    start_positions.push_back(pos);
-    start2rid[pos] = rid;
-    
-    uint64_t nreads = 0;
-    for (uint64_t i = 0; i < length; i++) {
-        if (contents[i] == '\n') {
-            start_positions.push_back(i + 1);
-            rid++;
-            start2rid[i + 1] = rid;
-            nreads++;
-            
-            if (rid % 1000000 == 0) {
-                emphf::logger() << "Loaded reads: " << rid << std::endl;
-            }
-        }
-    }
-    
-    start_positions.push_back(length);
-    emphf::logger() << "Loaded " << nreads << " reads, " << length << " characters" << std::endl;
+    emphf::logger() << "Loaded reads of " << length << " bp" << std::endl;
 
     // Initialize AIndex13 and build index
     emphf::logger() << "Initializing AIndex13..." << std::endl;
@@ -425,7 +395,7 @@ int main(int argc, char** argv) {
     aindex.fill_index_from_reads(contents, length, num_threads, hasher);
     
     emphf::logger() << "Saving index..." << std::endl;
-    aindex.save(pos_bin_file, index_bin_file, indices_bin_file, start_positions);
+    aindex.save(index_bin_file, indices_bin_file);
 
     delete[] contents;
     

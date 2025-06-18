@@ -11,7 +11,7 @@ Modern, safe, and Pythonic interface for k-mer indexing
 All file paths must be provided explicitly - no automatic name generation
 """
 
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple, Iterator
 try:
     from . import aindex_cpp
 except ImportError:
@@ -274,7 +274,7 @@ class AIndex:
             logger.error("Reads were not loaded.")
             raise RuntimeError("Reads were not loaded.")
 
-        for rid in range(self.reads_size):
+        for rid in range(self.n_reads):
             yield rid, self.get_read_by_rid(rid)
 
     def iter_reads_se(self):
@@ -283,7 +283,7 @@ class AIndex:
             logger.error("Reads were not loaded.")
             raise RuntimeError("Reads were not loaded.")
 
-        for rid in range(self.reads_size):
+        for rid in range(self.n_reads):
             read = self.get_read_by_rid(rid)
             subreads = read.split("~")
             for idx, subread in enumerate(subreads):
@@ -368,15 +368,15 @@ class AIndex:
         self._wrapper.load_13mer_index(hash_file, tf_file)
         self._loaded = True
         
-    def load_13mer_aindex(self, pos_file: str, index_file: str, indices_file: str):
+    def load_13mer_aindex(self, index_file: str, indices_file: str):
         """
         Load 13-mer position index from explicit file paths
         """
-        for fname, fpath in [('pos', pos_file), ('index', index_file), ('indices', indices_file)]:
+        for fname, fpath in [('index', index_file), ('indices', indices_file)]:
             if not os.path.exists(fpath):
                 raise FileNotFoundError(f"13-mer {fname} file not found: {fpath}")
         
-        self._wrapper.load_13mer_aindex(pos_file, index_file, indices_file)
+        self._wrapper.load_13mer_aindex(index_file, indices_file)
         
     @staticmethod
     def load_13mer_index_static(hash_file: str, tf_file: str) -> 'AIndex':
@@ -384,14 +384,14 @@ class AIndex:
         Load 13-mer index with automatic mode detection
     
         Args:
-            hash_file: Path to .hash file (from build_13mer_hash)
+            hash_file: Path to .pf file (from build_13mer_hash)
             tf_file: Path to .tf.bin file (from count_kmers13)
     
         Returns:
             AIndex instance configured for 13-mer mode
             
         Example:
-            >>> index = load_13mer_index('13mers.hash', '13mers.tf.bin')
+            >>> index = load_13mer_index('13mers.pf', '13mers.tf.bin')
             >>> tf_value = index.get_tf_value('ATCGATCGATCGA')
             >>> all_counts = index.get_13mer_tf_array()
         """
@@ -418,7 +418,7 @@ class AIndex:
         return index
 
     @staticmethod
-    def load_from_prefix(prefix: str, kmer_size: Optional[int] = None, max_tf: Optional[int] = None, 
+    def load_from_prefix(prefix: str, kmer_size: Optional[int] = None, max_tf: int = 100000, 
                         load_aindex: bool = True, load_reads: bool = False) -> 'AIndex':
         """
         Load index from prefix with auto-detection or manual specification
@@ -453,7 +453,7 @@ class AIndex:
         # Auto-detect k-mer size if not specified
         if kmer_size is None:
             # Check for 13-mer files
-            hash_13_file = f"{prefix}.hash"
+            hash_13_file = f"{prefix}.pf"
             tf_13_file = f"{prefix}.tf.bin"
             
             # Check for 23-mer files  
@@ -480,15 +480,18 @@ class AIndex:
         if load_reads:
             reads_file = f"{prefix}.reads"
             if not os.path.exists(reads_file):
-                logger.warning(f"Reads file not found: {reads_file}")
-                reads_file = ""
+                reads_file = reads_file.replace(".23.", ".")
+                reads_file = reads_file.replace(".13.", ".")
+                if not os.path.exists(reads_file):
+                    logger.warning(f"Reads file not found: {reads_file}")
+                    reads_file = ""
         
         # Load based on kmer size
         if kmer_size == 13:
             index.load_from_prefix_13mer(prefix, load_aindex=load_aindex, reads_file=reads_file)
         elif kmer_size == 23:
             if max_tf is None:
-                max_tf = 100  # Default value for 23-mers
+                max_tf = 100000  # Default value for 23-mers
             index.load_from_prefix_23mer(prefix, max_tf=max_tf, load_aindex=load_aindex, reads_file=reads_file)
         else:
             raise ValueError(f"Unsupported kmer size: {kmer_size}. Only 13 and 23 are supported.")
@@ -567,3 +570,225 @@ class AIndex:
             String with index information including mode, k-mer counts, etc.
         """
         return self._wrapper.get_index_info()
+
+    def _index_to_13mer(self, index: int) -> str:
+        """
+        Convert index to 13-mer string
+        
+        Args:
+            index: Index in the range [0, 4^13-1]
+            
+        Returns:
+            13-mer string
+        """
+        nucleotides = ['A', 'C', 'G', 'T']
+        kmer = []
+        temp_index = index
+        
+        for i in range(13):
+            kmer.append(nucleotides[temp_index % 4])
+            temp_index //= 4
+            
+        return ''.join(reversed(kmer))
+
+    def iter_kmers_by_frequency(self, min_tf: int = 1, max_kmers: Optional[int] = None, 
+                               kmer_type: str = "auto") -> Iterator[Tuple[str, int]]:
+        """
+        Iterate over k-mers sorted by term frequency (most frequent first)
+        
+        Args:
+            min_tf: Minimum term frequency threshold (default: 1)
+            max_kmers: Maximum number of k-mers to return (default: None - return all)
+            kmer_type: Type of k-mers to iterate over: "13mer", "23mer", or "auto" (default: "auto")
+            
+        Yields:
+            Tuple of (kmer, term_frequency) sorted by decreasing frequency
+            
+        Examples:
+            >>> # Get top 100 most frequent 13-mers
+            >>> for kmer, tf in index.iter_kmers_by_frequency(max_kmers=100, kmer_type="13mer"):
+            ...     print(f"{kmer}: {tf}")
+            
+            >>> # Get all 13-mers with tf >= 10
+            >>> for kmer, tf in index.iter_kmers_by_frequency(min_tf=10, kmer_type="13mer"):
+            ...     print(f"{kmer}: {tf}")
+            
+            >>> # Auto-detect mode and get top 1000
+            >>> for kmer, tf in index.iter_kmers_by_frequency(max_kmers=1000):
+            ...     print(f"{kmer}: {tf}")
+        """
+        if not self._loaded:
+            raise RuntimeError("Index not loaded")
+        
+        # Auto-detect k-mer type if needed
+        if kmer_type == "auto":
+            # Check if 13-mer mode is available
+            try:
+                tf_array = self._wrapper.get_13mer_tf_array()
+                kmer_type = "13mer"
+            except:
+                kmer_type = "23mer"
+        
+        if kmer_type == "13mer":
+            # Use 13-mer specific method
+            tf_array = self._wrapper.get_13mer_tf_array()
+            
+            # Create list of (index, tf) pairs for non-zero frequencies
+            freq_list = []
+            for index, tf in enumerate(tf_array):
+                if tf >= min_tf:
+                    freq_list.append((index, tf))
+            
+            # Sort by frequency (descending)
+            freq_list.sort(key=lambda x: x[1], reverse=True)
+            
+            # Apply max_kmers limit if specified
+            if max_kmers is not None:
+                freq_list = freq_list[:max_kmers]
+            
+            # Yield k-mers with their frequencies
+            for index, tf in freq_list:
+                kmer = self._index_to_13mer(index)
+                yield kmer, tf
+                
+        elif kmer_type == "23mer":
+            # Use traditional method for 23-mers
+            if not hasattr(self, 'n_kmers') or self.n_kmers == 0:
+                raise RuntimeError("23-mer index not properly loaded")
+            
+            # Create list of (kmer, tf) pairs
+            freq_list = []
+            for kid in range(self.n_kmers):
+                try:
+                    kmer = self.get_kmer_by_kid(kid)
+                    tf = self.get_tf_value(kmer)
+                    if tf >= min_tf:
+                        freq_list.append((kmer, tf))
+                except:
+                    continue
+            
+            # Sort by frequency (descending)
+            freq_list.sort(key=lambda x: x[1], reverse=True)
+            
+            # Apply max_kmers limit if specified
+            if max_kmers is not None:
+                freq_list = freq_list[:max_kmers]
+            
+            # Yield k-mers with their frequencies
+            for kmer, tf in freq_list:
+                yield kmer, tf
+        else:
+            raise ValueError(f"Unsupported kmer_type: {kmer_type}. Use '13mer', '23mer', or 'auto'")
+
+    def get_top_kmers(self, n: int = 100, min_tf: int = 1, kmer_type: str = "auto") -> List[Tuple[str, int]]:
+        """
+        Get top N most frequent k-mers
+        
+        Args:
+            n: Number of top k-mers to return (default: 100)
+            min_tf: Minimum term frequency threshold (default: 1)
+            kmer_type: Type of k-mers: "13mer", "23mer", or "auto" (default: "auto")
+            
+        Returns:
+            List of (kmer, term_frequency) tuples sorted by decreasing frequency
+            
+        Examples:
+            >>> # Get top 50 most frequent 13-mers
+            >>> top_kmers = index.get_top_kmers(50, kmer_type="13mer")
+            >>> for kmer, tf in top_kmers:
+            ...     print(f"{kmer}: {tf}")
+        """
+        return list(self.iter_kmers_by_frequency(min_tf=min_tf, max_kmers=n, kmer_type=kmer_type))
+
+    def get_kmer_frequency_stats(self, kmer_type: str = "auto") -> Dict[str, Any]:
+        """
+        Get frequency statistics for k-mers
+        
+        Args:
+            kmer_type: Type of k-mers: "13mer", "23mer", or "auto" (default: "auto")
+            
+        Returns:
+            Dictionary with statistics: total_kmers, non_zero_kmers, max_tf, min_tf, avg_tf, etc.
+            
+        Examples:
+            >>> stats = index.get_kmer_frequency_stats("13mer")
+            >>> print(f"Total k-mers: {stats['total_kmers']}")
+            >>> print(f"Non-zero k-mers: {stats['non_zero_kmers']}")
+            >>> print(f"Max frequency: {stats['max_tf']}")
+        """
+        if not self._loaded:
+            raise RuntimeError("Index not loaded")
+        
+        # Auto-detect k-mer type if needed
+        if kmer_type == "auto":
+            try:
+                tf_array = self._wrapper.get_13mer_tf_array()
+                kmer_type = "13mer"
+            except:
+                kmer_type = "23mer"
+        
+        if kmer_type == "13mer":
+            tf_array = self._wrapper.get_13mer_tf_array()
+            
+            total_kmers = len(tf_array)
+            non_zero_tf = [tf for tf in tf_array if tf > 0]
+            non_zero_kmers = len(non_zero_tf)
+            
+            if non_zero_kmers > 0:
+                max_tf = max(non_zero_tf)
+                min_tf = min(non_zero_tf)
+                avg_tf = sum(non_zero_tf) / non_zero_kmers
+                total_tf = sum(tf_array)
+            else:
+                max_tf = min_tf = avg_tf = total_tf = 0
+            
+            return {
+                'kmer_type': '13mer',
+                'total_kmers': total_kmers,
+                'non_zero_kmers': non_zero_kmers,
+                'zero_kmers': total_kmers - non_zero_kmers,
+                'max_tf': max_tf,
+                'min_tf': min_tf,
+                'avg_tf': avg_tf,
+                'total_tf': total_tf,
+                'coverage': non_zero_kmers / total_kmers if total_kmers > 0 else 0
+            }
+        
+        elif kmer_type == "23mer":
+            if not hasattr(self, 'n_kmers') or self.n_kmers == 0:
+                raise RuntimeError("23-mer index not properly loaded")
+            
+            frequencies = []
+            for kid in range(self.n_kmers):
+                try:
+                    kmer = self.get_kmer_by_kid(kid)
+                    tf = self.get_tf_value(kmer)
+                    frequencies.append(tf)
+                except:
+                    continue
+            
+            total_kmers = len(frequencies)
+            non_zero_tf = [tf for tf in frequencies if tf > 0]
+            non_zero_kmers = len(non_zero_tf)
+            
+            if non_zero_kmers > 0:
+                max_tf = max(non_zero_tf)
+                min_tf = min(non_zero_tf)
+                avg_tf = sum(non_zero_tf) / non_zero_kmers
+                total_tf = sum(frequencies)
+            else:
+                max_tf = min_tf = avg_tf = total_tf = 0
+            
+            return {
+                'kmer_type': '23mer',
+                'total_kmers': total_kmers,
+                'non_zero_kmers': non_zero_kmers,
+                'zero_kmers': total_kmers - non_zero_kmers,
+                'max_tf': max_tf,
+                'min_tf': min_tf,
+                'avg_tf': avg_tf,
+                'total_tf': total_tf,
+                'coverage': non_zero_kmers / total_kmers if total_kmers > 0 else 0
+            }
+        else:
+            raise ValueError(f"Unsupported kmer_type: {kmer_type}. Use '13mer', '23mer', or 'auto'")

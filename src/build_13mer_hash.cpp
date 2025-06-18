@@ -29,7 +29,8 @@ static std::mutex barrier;
  * Creates perfect hash for 13-mers from k-mers file
  */
 void create_13mer_perfect_hash(const std::string& kmers_file, 
-                              const std::string& output_hash_file) {
+                              const std::string& output_hash_file,
+                              const std::string& compute_mphf_seq_path) {
     
     barrier.lock();
     emphf::logger() << "Creating perfect hash for 13-mers..." << std::endl;
@@ -99,9 +100,9 @@ void create_13mer_perfect_hash(const std::string& kmers_file,
     }
     
     // Check if compute_mphf_seq binary exists
-    std::ifstream binary_test("./bin/compute_mphf_seq");
+    std::ifstream binary_test(compute_mphf_seq_path);
     if (!binary_test.is_open()) {
-        throw std::runtime_error("Cannot find ./bin/compute_mphf_seq binary");
+        throw std::runtime_error("Cannot find compute_mphf_seq binary at: " + compute_mphf_seq_path);
     }
     binary_test.close();
     
@@ -111,7 +112,7 @@ void create_13mer_perfect_hash(const std::string& kmers_file,
     emphf::logger() << "Memory estimate: ~" << (n * 50 / 1024 / 1024) << " MB needed" << std::endl;
     barrier.unlock();
     
-    std::string emphf_cmd = "./bin/compute_mphf_seq " + kmers_file + " " + output_hash_file + " 2>&1";
+    std::string emphf_cmd = compute_mphf_seq_path + " " + kmers_file + " " + output_hash_file + " 2>&1";
     barrier.lock();
     emphf::logger() << "Executing: " << emphf_cmd << std::endl;
     barrier.unlock();
@@ -136,18 +137,20 @@ void create_13mer_perfect_hash(const std::string& kmers_file,
 }
 
 int main(int argc, char** argv) {
-    if (argc < 3) {
-        std::cerr << "Usage: " << argv[0] << " <kmers_file> <output_hash_file>" << std::endl;
-        std::cerr << "  kmers_file      - File with sequences (one per line)" << std::endl;
-        std::cerr << "  output_hash_file - Output hash file (full path)" << std::endl;
+    if (argc < 4) {
+        std::cerr << "Usage: " << argv[0] << " <kmers_file> <output_hash_file> <compute_mphf_seq_path>" << std::endl;
+        std::cerr << "  kmers_file            - File with sequences (one per line)" << std::endl;
+        std::cerr << "  output_hash_file      - Output hash file (full path)" << std::endl;
+        std::cerr << "  compute_mphf_seq_path - Path to compute_mphf_seq binary" << std::endl;
         std::cerr << std::endl;
         std::cerr << "Example:" << std::endl;
-        std::cerr << "  " << argv[0] << " all_13mers.txt 13mer_index.hash" << std::endl;
+        std::cerr << "  " << argv[0] << " all_13mers.txt 13mer_index.pf ./bin/compute_mphf_seq" << std::endl;
         return 1;
     }
     
     std::string kmers_file = argv[1];
     std::string output_hash_file = argv[2];
+    std::string compute_mphf_seq_path = argv[3];
     
     auto start_time = std::chrono::high_resolution_clock::now();
     
@@ -157,7 +160,7 @@ int main(int argc, char** argv) {
     std::cout << std::endl;
     
     try {
-        create_13mer_perfect_hash(kmers_file, output_hash_file);
+        create_13mer_perfect_hash(kmers_file, output_hash_file, compute_mphf_seq_path);
         
         auto end_time = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);

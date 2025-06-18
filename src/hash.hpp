@@ -448,7 +448,9 @@ struct AIndexCompressed {
         memset(r, 0, max_tf * sizeof(uint32_t));
         auto h1 = hash_map.get_pfid(kmer);
         uint64_t j = 0;
-        for (uint64_t i=indices[h1]; i < indices[h1+1]; ++i) {
+        uint64_t start = indices[h1];
+        uint64_t end = indices[h1+1];
+        for (uint64_t i=start; i < end; ++i) {
             r[j] = positions[i];
             j += 1;
         }
@@ -457,19 +459,17 @@ struct AIndexCompressed {
     void set_positions(std::string kmer, uint32_t* r, PHASH_MAP &hash_map) {
         auto h1 = hash_map.get_pfid(kmer);
         uint64_t j = 0;
-        for (uint64_t i=indices[h1]; i < indices[h1+1]; ++i) {
+        uint64_t start = indices[h1];
+        uint64_t end = indices[h1+1];
+        for (uint64_t i=start; i < end; ++i) {
             positions[i] = r[j];
             j += 1;
         }
     }
 
-    void save(std::string pos_bin_file, std::string index_bin_file, std::string indices_bin_file, std::vector<uint64_t> start_positions, PHASH_MAP &hash_map) {
+    void save(std::string index_bin_file, std::string indices_bin_file, PHASH_MAP &hash_map) {
         //
-        emphf::logger() << "Saving pos.bin array..." << std::endl;
-        std::ofstream fout2(pos_bin_file, std::ios::out | std::ios::binary);
-        fout2.write((char *) &start_positions[0], start_positions.size() * sizeof(uint64_t));
-        fout2.close();
-
+        
         emphf::logger() << "Saving index.bin array..." << std::endl;
         std::ofstream fout3(index_bin_file, std::ios::out | std::ios::binary);
         emphf::logger() << "Positions array size: " << sizeof(uint64_t) * total_size << std::endl;

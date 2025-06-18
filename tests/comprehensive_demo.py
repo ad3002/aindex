@@ -55,13 +55,12 @@ def main():
     hash_file = str(temp_dir / "test_kmer_counter.23.pf")
     tf_bin_file = str(temp_dir / "test_kmer_counter.23.tf.bin")
     kmers_bin_file = str(temp_dir / "test_kmer_counter.23.kmers.bin")
-    pos_file = str(temp_dir / "test_kmer_counter.23.pos.bin")
     index_file = str(temp_dir / "test_kmer_counter.23.index.bin")
     indices_file = str(temp_dir / "test_kmer_counter.23.indices.bin")
     
     # Check if test results exist
     required_files = [reads_file, hash_file, tf_bin_file, kmers_bin_file, 
-                     pos_file, index_file, indices_file]
+                     index_file, indices_file]
     missing_files = [f for f in required_files if not Path(f).exists()]
     
     if missing_files:
@@ -99,7 +98,6 @@ def main():
             kmers_bin_file=kmers_bin_file,
             kmers_text_file="",
             reads_file=reads_file,
-            pos_file=pos_file,
             index_file=index_file,
             indices_file=indices_file,
             max_tf=10000

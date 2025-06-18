@@ -436,37 +436,11 @@ public:
         emphf::logger() << "13-mer index loaded successfully" << std::endl;
     }
     
-    void load_13mer_aindex(const std::string& pos_file, const std::string& index_file, const std::string& indices_file) {
+    void load_13mer_aindex(const std::string& index_file, const std::string& indices_file) {
         emphf::logger() << "Loading 13-mer AIndex files..." << std::endl;
-        emphf::logger() << "Pos file: " << pos_file << std::endl;
         emphf::logger() << "Index file: " << index_file << std::endl;
         emphf::logger() << "Indices file: " << indices_file << std::endl;
         
-        // Load pos.bin file
-        std::ifstream pos_in(pos_file, std::ios::in | std::ios::binary);
-        if (!pos_in) {
-            std::cerr << "Failed to open pos file: " << pos_file << std::endl;
-            std::terminate();
-        }
-        pos_in.seekg(0, std::ios::end);
-        uint64_t pos_length = pos_in.tellg();
-        pos_in.close();
-        
-        n_13mer = pos_length / sizeof(uint64_t);
-        emphf::logger() << "\tPositions length: " << pos_length << " (" << n_13mer << " positions)" << std::endl;
-        
-        FILE* pos_fp = std::fopen(pos_file.c_str(), "rb");
-        if (!pos_fp) {
-            std::cerr << "Failed to open pos file for mmap: " << pos_file << std::endl;
-            std::terminate();
-        }
-        
-        positions_13mer = (uint64_t*)mmap(NULL, pos_length, PROT_READ, MAP_SHARED, fileno(pos_fp), 0);
-        if (positions_13mer == MAP_FAILED) {
-            std::cerr << "Failed to mmap pos file" << std::endl;
-            std::terminate();
-        }
-        fclose(pos_fp);
         
         // Load indices.bin file
         std::ifstream indices_in(indices_file, std::ios::in | std::ios::binary);
@@ -496,12 +470,13 @@ public:
         emphf::logger() << "13-mer AIndex loaded successfully" << std::endl;
     }
     
+    // String overloads that delegate to string_view versions
     bool is_13mer(const std::string& kmer) const {
-        return kmer.length() == 13;
+        return is_13mer(std::string_view(kmer));
     }
     
     bool is_23mer(const std::string& kmer) const {
-        return kmer.length() == 23;
+        return is_23mer(std::string_view(kmer));
     }
     
     uint32_t get_tf_value_13mer(const std::string& kmer) {
@@ -688,8 +663,6 @@ public:
         }
     }
 
-    // ...existing code...
-
     std::string get_read_by_rid(uint64_t rid) {
         if (start_positions.size() <= rid) {
             return "";
@@ -697,7 +670,7 @@ public:
         uint64_t start = start_positions[rid];
         uint64_t end = start2end[start];
         
-        std::string read(reads + start, end - start + 1);
+        std::string read(reads + start, end - start);
         return read;
     }
 
@@ -815,28 +788,59 @@ public:
         return 0;
     }
 
+    inline bool is_13mer(std::string_view kmer) const noexcept {
+        return kmer.length() == 13;
+    }
+    
+    inline bool is_23mer(std::string_view kmer) const noexcept {
+        return kmer.length() == 23;
+    }
+
+    // ------------- fast version for 23-mers -----------------------
+    inline std::vector<uint64_t>
+    get_positions_23mer(std::string_view kmer) const noexcept
+    {
+        std::vector<uint64_t> out;
+
+        if (!hash_map || !positions || !indices)             // early-exit
+            return out;
+
+        const uint64_t h1 = hash_map->get_pfid(kmer);
+        if (h1 + 1 >= indices_length)                        // bad bucket
+            return out;
+
+        const uint64_t* beg = positions + indices[h1];
+        const uint64_t* end = positions + indices[h1 + 1];
+
+        out.reserve(end - beg);                              // avoid realloc
+
+        for (const uint64_t* p = beg; p != end; ++p)
+            if (uint64_t pos = *p; pos)                      // skip zeros
+                out.emplace_back(pos - 1);
+
+        return out;                                          // NRVO / RVO
+    }
+
+    // ------------- public dispatcher ------------------------------
+    inline std::vector<uint64_t>
+    get_positions(std::string_view kmer) const noexcept
+    {
+        return is_13mer(kmer) ? get_positions_13mer(kmer)
+            : is_23mer(kmer) ? get_positions_23mer(kmer)
+                            : std::vector<uint64_t>{};
+    }
+
+    // ------------- string overloads for pybind11 compatibility ----
     std::vector<uint64_t> get_positions(const std::string& kmer) {
-        // Route to appropriate function based on k-mer length
-        if (is_13mer(kmer)) {
-            return get_positions_13mer(kmer);
-        } else if (is_23mer(kmer)) {
-            // Use the original algorithm for 23-mers
-            std::vector<uint64_t> r;
-            if (!hash_map || !positions || !indices) {
-                return r;
-            }
-            auto h1 = hash_map->get_pfid(kmer);
-            for (uint64_t i=indices[h1]; i < indices[h1+1] && h1+1 < indices_length; ++i) {
-                if (positions[i] == 0) {
-                    continue;
-                }
-                r.push_back(positions[i]-1);
-            }
-            return r;
-        } else {
-            // Unsupported k-mer length
-            return std::vector<uint64_t>();
-        }
+        return get_positions(std::string_view(kmer));
+    }
+    
+    std::vector<uint64_t> get_positions_13mer(const std::string& kmer) {
+        return get_positions_13mer(std::string_view(kmer));
+    }
+    
+    std::vector<uint64_t> get_positions_23mer(const std::string& kmer) {
+        return get_positions_23mer(std::string_view(kmer));
     }
 
     uint64_t get_hash_size() {
@@ -847,7 +851,7 @@ public:
     }
 
     uint64_t get_reads_size() {
-        return n_reads;
+        return reads_size;
     }
 
     void check_get_reads_se_by_kmer(uint64_t kmer_id, UsedReads& used_reads, std::vector<Hit>& hits) {
@@ -944,7 +948,7 @@ public:
         emphf::stl_string_adaptor str_adapter;
         
         for (const auto& kmer : kmers) {
-            if (!is_13mer(kmer)) {
+            if (!is_13mer(std::string_view(kmer))) {
                 tf_values.push_back(0);
                 continue;
             }
@@ -1063,7 +1067,7 @@ public:
         return stats;
     }
     
-    std::vector<uint64_t> get_positions_13mer(const std::string& kmer) {
+    inline std::vector<uint64_t> get_positions_13mer(std::string_view kmer) const {
         std::vector<uint64_t> result;
         
         if (!is_13mer_mode || !is_13mer(kmer) || positions_13mer == nullptr || indices_13mer == nullptr) {
@@ -1116,6 +1120,7 @@ public:
         }
         
         // Load hash
+        emphf::logger() << "Loading 23-mer hash..." << std::endl;
         load_hash_file(pf_file, tf_file, kmers_bin_file, kmers_text_file);
         emphf::logger() << "23-mer hash loaded successfully" << std::endl;
         
@@ -1186,12 +1191,11 @@ public:
         emphf::logger() << "Loading 13-mer AIndex from prefix: " << prefix << std::endl;
         
         // Construct file paths
-        std::string pos_file = prefix + ".pos.bin";
         std::string index_file = prefix + ".index.bin";
         std::string indices_file = prefix + ".indices.bin";
         
         // Check required files exist
-        std::vector<std::string> required_files = {pos_file, index_file, indices_file};
+        std::vector<std::string> required_files = {index_file, indices_file};
         for (const auto& file : required_files) {
             std::ifstream test(file);
             if (!test.good()) {
@@ -1201,7 +1205,7 @@ public:
         }
         
         // Load 13-mer aindex
-        load_13mer_aindex(pos_file, index_file, indices_file);
+        load_13mer_aindex(index_file, indices_file);
         emphf::logger() << "13-mer AIndex loaded successfully" << std::endl;
         
         // Load reads if file provided and not already loaded
@@ -1314,125 +1318,818 @@ public:
 namespace py = pybind11;
 
 PYBIND11_MODULE(aindex_cpp, m) {
-    m.doc() = "Aindex C++ bindings using pybind11";
+    m.doc() = R"pbdoc(
+        AIndex C++ Extension - K-mer Indexing and Querying Library
+        
+        High-performance C++ library for k-mer indexing and term frequency analysis.
+        Supports both 13-mer and 23-mer indexing with memory-mapped file access
+        and efficient hash-based lookups.
+        
+        Features:
+        - Fast k-mer frequency counting and lookup
+        - Memory-mapped file access for large datasets  
+        - Support for both 13-mer and 23-mer k-mers
+        - Reverse complement analysis
+        - Read position tracking and retrieval
+        - Batch processing capabilities
+    )pbdoc";
     
     // Wrap the AindexWrapper class
-    py::class_<AindexWrapper>(m, "AindexWrapper")
-        .def(py::init<>())
+    py::class_<AindexWrapper>(m, "AindexWrapper", R"pbdoc(
+        Core AIndex wrapper class for k-mer indexing and querying.
         
-        // Loading functions with new signature
-        .def("load", &AindexWrapper::load,
-             "Load index from hash file, tf file, kmers bin file, and kmers text file")
-        .def("load_hash_file", &AindexWrapper::load_hash_file,
-             "Load hash file, tf file, kmers bin file, and kmers text file") 
-        .def("load_reads", &AindexWrapper::load_reads,
-             "Load reads file")
-        .def("load_reads_index", &AindexWrapper::load_reads_index,
-             "Load reads index file")
-        .def("load_reads_in_memory", &AindexWrapper::load_reads_in_memory,
-             "Load reads file into memory")
-        .def("load_aindex", &AindexWrapper::load_aindex,
-             "Load aindex file")
-        .def("load_13mer_index", &AindexWrapper::load_13mer_index,
-             "Load 13-mer index from hash file and tf file")
-        .def("load_13mer_aindex", &AindexWrapper::load_13mer_aindex,
-             "Load 13-mer position index from pos, index, and indices files")
+        This class provides a high-level interface to the AIndex C++ library,
+        supporting both 13-mer and 23-mer k-mer analysis with efficient
+        memory-mapped file access and hash-based lookups.
+    )pbdoc")
+        .def(py::init<>(), R"pbdoc(
+            Initialize a new AIndex wrapper instance.
+            
+            Creates an empty wrapper that can be configured to load
+            either 13-mer or 23-mer indices using the load methods.
+        )pbdoc")
         
-        // New prefix-based loading methods with reads file support
-        .def("load_from_prefix_23mer", &AindexWrapper::load_from_prefix_23mer,
-             "Load 23-mer index from prefix (auto-constructs file paths)",
+        // =====================================================================
+        // CATEGORY: Basic Index Loading Methods
+        // =====================================================================
+        .def("load", &AindexWrapper::load, R"pbdoc(
+            [BASIC LOADING] Load complete 23-mer index from individual files.
+            
+            Loads a complete 23-mer index from the component files: hash file,
+            term frequency file, k-mer binary file, and k-mer text file.
+            
+            Args:
+                hash_file (str): Path to the hash index file (.pf)
+                tf_file (str): Path to term frequency file (.tf.bin)  
+                kmers_bin_file (str): Path to k-mer binary file (.kmers.bin)
+                kmers_text_file (str): Path to k-mer text file (.kmers)
+                
+            Example:
+                >>> wrapper = AindexWrapper()
+                >>> wrapper.load("data.pf", "data.tf.bin", "data.kmers.bin", "data.kmers")
+        )pbdoc")
+        .def("load_hash_file", &AindexWrapper::load_hash_file, R"pbdoc(
+            [BASIC LOADING] Load hash index and term frequency data.
+            
+            Loads the core hash index and term frequency data needed for
+            k-mer frequency lookups. This is a lighter alternative to
+            full index loading when position data is not needed.
+            
+            Args:
+                hash_file (str): Path to the hash index file (.pf)
+                tf_file (str): Path to term frequency file (.tf.bin)
+                kmers_bin_file (str): Path to k-mer binary file (.kmers.bin) 
+                kmers_text_file (str): Path to k-mer text file (.kmers)
+                
+            Example:
+                >>> wrapper = AindexWrapper()
+                >>> wrapper.load_hash_file("data.pf", "data.tf.bin", "data.kmers.bin", "data.kmers")
+        )pbdoc")
+        .def("load_reads", &AindexWrapper::load_reads, R"pbdoc(
+            [BASIC LOADING] Load reads data from file.
+            
+            Loads read sequence data for position-based queries and read retrieval.
+            The reads file contains the original sequences that were indexed.
+            
+            Args:
+                reads_file (str): Path to the reads file
+                
+            Example:
+                >>> wrapper.load_reads("sequences.fasta")
+        )pbdoc")
+        .def("load_reads_index", &AindexWrapper::load_reads_index, R"pbdoc(
+            [BASIC LOADING] Load reads index for position tracking.
+            
+            Loads a pre-computed reads index that enables efficient mapping
+            from k-mer positions back to specific reads and their coordinates.
+            
+            Args:
+                reads_index_file (str): Path to the reads index file
+                
+            Example:
+                >>> wrapper.load_reads_index("reads.index")
+        )pbdoc")
+        .def("load_reads_in_memory", &AindexWrapper::load_reads_in_memory, R"pbdoc(
+            [BASIC LOADING] Load reads file completely into memory.
+            
+            Loads the entire reads file into memory for faster access.
+            Use this for smaller datasets or when memory is not a constraint
+            and maximum query speed is desired.
+            
+            Args:
+                reads_file (str): Path to the reads file
+                
+            Example:
+                >>> wrapper.load_reads_in_memory("small_dataset.fasta")
+        )pbdoc")
+        .def("load_aindex", &AindexWrapper::load_aindex, R"pbdoc(
+            [BASIC LOADING] Load AIndex position data.
+            
+            Loads the AIndex position mapping data that enables efficient
+            retrieval of k-mer positions within reads. Required for
+            position-based queries and read context analysis.
+            
+            Args:
+                aindex_file (str): Path to the AIndex file
+                
+            Example:
+                >>> wrapper.load_aindex("data.aindex")
+        )pbdoc")
+        .def("load_13mer_index", &AindexWrapper::load_13mer_index, R"pbdoc(
+            [13-MER LOADING] Load 13-mer hash index and term frequencies.
+            
+            Loads a 13-mer specific index consisting of hash mappings and
+            term frequency data. 13-mer mode provides faster lookups for
+            shorter k-mers with reduced memory usage.
+            
+            Args:
+                hash_file (str): Path to 13-mer hash file
+                tf_file (str): Path to 13-mer term frequency file
+                
+            Example:
+                >>> wrapper.load_13mer_index("data_13mer.hash", "data_13mer.tf")
+        )pbdoc")
+        .def("load_13mer_aindex", &AindexWrapper::load_13mer_aindex, R"pbdoc(
+            [13-MER LOADING] Load 13-mer position index from component files.
+            
+            Loads the 13-mer position index from its component files: position
+            data, index mappings, and indices arrays. Enables position-based
+            queries for 13-mer k-mers.
+            
+            Args:
+                index_file (str): Path to index mappings file (.index.bin)
+                indices_file (str): Path to indices array file (.indices.bin)
+                
+            Example:
+                >>> wrapper.load_13mer_aindex("data.index.bin", "data.indices.bin")
+        )pbdoc")
+        
+        // =====================================================================
+        // CATEGORY: Convenient Prefix-Based Loading Methods  
+        // =====================================================================
+        .def("load_from_prefix_23mer", &AindexWrapper::load_from_prefix_23mer, R"pbdoc(
+            [CONVENIENT LOADING] Load complete 23-mer index using file prefix.
+            
+            Automatically constructs file paths from a common prefix and loads
+            a complete 23-mer index. This is the recommended method for loading
+            23-mer indices as it handles all required files automatically.
+            
+            Args:
+                prefix (str): Common file prefix (e.g., "data" for "data.pf", "data.tf.bin", etc.)
+                reads_file (str, optional): Path to reads file to load alongside index
+                
+            File pattern:
+                {prefix}.pf, {prefix}.tf.bin, {prefix}.kmers.bin, {prefix}.kmers
+                
+            Example:
+                >>> wrapper = AindexWrapper()
+                >>> wrapper.load_from_prefix_23mer("my_dataset", "reads.fasta")
+        )pbdoc",
              py::arg("prefix"), py::arg("reads_file") = "")
-        .def("load_aindex_from_prefix_23mer", &AindexWrapper::load_aindex_from_prefix_23mer,
-             "Load 23-mer AIndex from prefix (auto-constructs file paths)",
+        .def("load_aindex_from_prefix_23mer", &AindexWrapper::load_aindex_from_prefix_23mer, R"pbdoc(
+            [CONVENIENT LOADING] Load 23-mer AIndex with position data using prefix.
+            
+            Loads a complete 23-mer index including position data for read context
+            queries. Uses automatic file path construction and applies TF filtering
+            for memory efficiency.
+            
+            Args:
+                prefix (str): Common file prefix for index files
+                max_tf (int): Maximum term frequency threshold for filtering
+                reads_file (str, optional): Path to reads file to load
+                
+            File pattern:
+                {prefix}.aindex, plus standard 23-mer files
+                
+            Example:
+                >>> wrapper = AindexWrapper()
+                >>> wrapper.load_aindex_from_prefix_23mer("dataset", max_tf=1000)
+        )pbdoc",
              py::arg("prefix"), py::arg("max_tf"), py::arg("reads_file") = "")
-        .def("load_from_prefix_13mer", &AindexWrapper::load_from_prefix_13mer,
-             "Load 13-mer index from prefix (auto-constructs file paths)",
+        .def("load_from_prefix_13mer", &AindexWrapper::load_from_prefix_13mer, R"pbdoc(
+            [CONVENIENT LOADING] Load complete 13-mer index using file prefix.
+            
+            Automatically constructs file paths and loads a complete 13-mer index.
+            13-mer indices are more memory efficient and provide faster lookups
+            for shorter k-mer analysis.
+            
+            Args:
+                prefix (str): Common file prefix (e.g., "data13" for "data13.hash", etc.)
+                reads_file (str, optional): Path to reads file to load
+                
+            File pattern:
+                {prefix}.hash, {prefix}.tf.bin
+                
+            Example:
+                >>> wrapper = AindexWrapper()
+                >>> wrapper.load_from_prefix_13mer("my_13mer_data", "sequences.fasta")
+        )pbdoc",
              py::arg("prefix"), py::arg("reads_file") = "")
-        .def("load_aindex_from_prefix_13mer", &AindexWrapper::load_aindex_from_prefix_13mer,
-             "Load 13-mer AIndex from prefix (auto-constructs file paths)",
+        .def("load_aindex_from_prefix_13mer", &AindexWrapper::load_aindex_from_prefix_13mer, R"pbdoc(
+            [CONVENIENT LOADING] Load 13-mer AIndex with position data using prefix.
+            
+            Loads a complete 13-mer index including position data for read context
+            queries. Provides the full functionality of 13-mer analysis including
+            position tracking and read retrieval.
+            
+            Args:
+                prefix (str): Common file prefix for position files  
+                reads_file (str, optional): Path to reads file to load
+                
+            File pattern:
+                {prefix}.index.bin, {prefix}.indices.bin
+                
+            Example:
+                >>> wrapper = AindexWrapper()
+                >>> wrapper.load_aindex_from_prefix_13mer("pos_data", "reads.fasta")
+        )pbdoc",
              py::arg("prefix"), py::arg("reads_file") = "")
         
-        // Query functions
-        .def("get_tf_values", &AindexWrapper::get_tf_values,
-             "Get term frequency values for kmers")
-        .def("get_tf_value", &AindexWrapper::get_tf_value,
-             "Get term frequency value for a kmer")
-        .def("get_hash_values", &AindexWrapper::get_hash_values,
-             "Get hash values for kmers")
-        .def("get_hash_value", &AindexWrapper::get_hash_value,
-             "Get hash value for a kmer")
-        .def("get_read_by_rid", &AindexWrapper::get_read_by_rid,
-             "Get read by read ID")
-        .def("get_read", &AindexWrapper::get_read,
-             "Get read by start and end positions", py::arg("start"), py::arg("end"), py::arg("revcomp") = false)
-        .def("get_reads_se_by_kmer", &AindexWrapper::get_reads_se_by_kmer,
-             "Get reads containing a specific kmer")
-        .def("get_kid_by_kmer", &AindexWrapper::get_kid_by_kmer,
-             "Get kmer ID by kmer")
-        .def("get_kmer_by_kid", &AindexWrapper::get_kmer_by_kid,
-             "Get kmer by kmer ID")
-        .def("get_strand", &AindexWrapper::get_strand,
-             "Get strand for kmer")
-        .def("get_kmer_info", &AindexWrapper::get_kmer_info,
-             "Get kmer info by kmer ID")
-        .def("get_rid", &AindexWrapper::get_rid,
-             "Get read ID by position")
-        .def("get_start", &AindexWrapper::get_start,
-             "Get start position by position")
-        .def("get_positions", &AindexWrapper::get_positions,
-             "Get positions for kmer")
-        .def("get_hash_size", &AindexWrapper::get_hash_size,
-             "Get hash size")
-        .def("get_reads_size", &AindexWrapper::get_reads_size,
-             "Get reads size")
+        // =====================================================================
+        // CATEGORY: Term Frequency and Hash Queries
+        // =====================================================================
+        .def("get_tf_values", &AindexWrapper::get_tf_values, R"pbdoc(
+            [TF QUERIES] Get term frequency values for multiple k-mers.
+            
+            Retrieves term frequency (TF) values for a batch of k-mers.
+            Term frequency represents how many times each k-mer appears
+            in the indexed dataset.
+            
+            Args:
+                kmers (List[str]): List of k-mer sequences to query
+                
+            Returns:
+                List[int]: Term frequency values for each k-mer
+                
+            Example:
+                >>> tf_values = wrapper.get_tf_values(["ATCGATCGATCG", "GCTAGCTAGCTA"])
+                >>> print(f"TF values: {tf_values}")
+        )pbdoc")
+        .def("get_tf_value", &AindexWrapper::get_tf_value, R"pbdoc(
+            [TF QUERIES] Get term frequency value for a single k-mer.
+            
+            Retrieves the term frequency (TF) value for a single k-mer.
+            Returns 0 if the k-mer is not found in the index.
+            
+            Args:
+                kmer (str): K-mer sequence to query
+                
+            Returns:
+                int: Term frequency value for the k-mer
+                
+            Example:
+                >>> tf = wrapper.get_tf_value("ATCGATCGATCG")
+                >>> print(f"K-mer frequency: {tf}")
+        )pbdoc")
+        .def("get_hash_values", &AindexWrapper::get_hash_values, R"pbdoc(
+            [HASH QUERIES] Get hash values for multiple k-mers.
+            
+            Retrieves hash index values for a batch of k-mers. Hash values
+            are internal identifiers used for efficient k-mer lookup.
+            
+            Args:
+                kmers (List[str]): List of k-mer sequences to hash
+                
+            Returns:
+                List[int]: Hash values for each k-mer
+                
+            Example:
+                >>> hashes = wrapper.get_hash_values(["ATCGATCGATCG", "GCTAGCTAGCTA"])
+                >>> print(f"Hash values: {hashes}")
+        )pbdoc")
+        .def("get_hash_value", &AindexWrapper::get_hash_value, R"pbdoc(
+            [HASH QUERIES] Get hash value for a single k-mer.
+            
+            Retrieves the hash index value for a single k-mer.
+            Hash values are used internally for efficient k-mer indexing.
+            
+            Args:
+                kmer (str): K-mer sequence to hash
+                
+            Returns:
+                int: Hash value for the k-mer
+                
+            Example:
+                >>> hash_val = wrapper.get_hash_value("ATCGATCGATCG")
+                >>> print(f"Hash: {hash_val}")
+        )pbdoc")
+        .def("get_kid_by_kmer", &AindexWrapper::get_kid_by_kmer, R"pbdoc(
+            [HASH QUERIES] Get k-mer ID by k-mer sequence.
+            
+            Retrieves the internal k-mer ID (kid) for a given k-mer sequence.
+            The k-mer ID is used internally for efficient k-mer indexing and lookup.
+            
+            Args:
+                kmer (str): K-mer sequence to get ID for
+                
+            Returns:
+                int: K-mer ID for the k-mer
+                
+            Example:
+                >>> kid = wrapper.get_kid_by_kmer("ATCGATCGATCG")
+                >>> print(f"K-mer ID: {kid}")
+        )pbdoc")
+        .def("get_kmer_by_kid", &AindexWrapper::get_kmer_by_kid, R"pbdoc(
+            [HASH QUERIES] Get k-mer sequence by k-mer ID.
+            
+            Retrieves the k-mer sequence for a given internal k-mer ID (kid).
+            This is the reverse operation of get_kid_by_kmer.
+            
+            Args:
+                kid (int): K-mer ID to get sequence for
+                
+            Returns:
+                str: K-mer sequence for the ID
+                
+            Example:
+                >>> kmer = wrapper.get_kmer_by_kid(42)
+                >>> print(f"K-mer for ID 42: {kmer}")
+        )pbdoc")
+        .def("get_strand", &AindexWrapper::get_strand, R"pbdoc(
+            [HASH QUERIES] Get strand information for a k-mer.
+            
+            Determines the strand (forward, reverse, or not found) for a given k-mer
+            by checking if it exists in forward or reverse complement form.
+            
+            Args:
+                kmer (str): K-mer sequence to check strand for
+                
+            Returns:
+                int: Strand value (0=not found, 1=forward, 2=reverse)
+                
+            Example:
+                >>> strand = wrapper.get_strand("ATCGATCGATCG")
+                >>> print(f"Strand: {strand}")
+        )pbdoc")
+        .def("get_kmer_info", &AindexWrapper::get_kmer_info, R"pbdoc(
+            [HASH QUERIES] Get comprehensive k-mer information by k-mer ID.
+            
+            Retrieves detailed information about a k-mer including its term frequency,
+            forward sequence, and reverse complement sequence using its k-mer ID.
+            
+            Args:
+                kid (int): K-mer ID to get information for
+                
+            Returns:
+                Tuple[int, str, str]: (term_frequency, kmer, reverse_complement_kmer)
+                
+            Example:
+                >>> tf, kmer, rkmer = wrapper.get_kmer_info(42)
+                >>> print(f"TF: {tf}, K-mer: {kmer}, Rev-comp: {rkmer}")
+        )pbdoc")
+        .def("get_rid", &AindexWrapper::get_rid, R"pbdoc(
+            [POSITION QUERIES] Get read ID by position.
+            
+            Retrieves the read ID that contains the specified position in the
+            concatenated reads data. Requires position index to be loaded.
+            
+            Args:
+                pos (int): Position to query
+                
+            Returns:
+                int: Read ID containing the position
+                
+            Example:
+                >>> rid = wrapper.get_rid(1000)
+                >>> print(f"Position 1000 is in read: {rid}")
+        )pbdoc")
+        .def("get_start", &AindexWrapper::get_start, R"pbdoc(
+            [POSITION QUERIES] Get start position of read containing given position.
+            
+            Retrieves the start position of the read that contains the specified
+            position in the concatenated reads data.
+            
+            Args:
+                pos (int): Position to query
+                
+            Returns:
+                int: Start position of the read containing pos
+                
+            Example:
+                >>> start = wrapper.get_start(1000)
+                >>> print(f"Read containing position 1000 starts at: {start}")
+        )pbdoc")
         
-        // Properties
-        .def_readwrite("aindex_loaded", &AindexWrapper::aindex_loaded)
-        .def_readwrite("n_reads", &AindexWrapper::n_reads)
-        .def_readwrite("n_kmers", &AindexWrapper::n_kmers)
-        .def_readwrite("reads_size", &AindexWrapper::reads_size)
+        // =====================================================================
+        // CATEGORY: Read and Position Queries
+        // =====================================================================
+        .def("get_read_by_rid", &AindexWrapper::get_read_by_rid, R"pbdoc(
+            [READ QUERIES] Get read sequence by read ID.
+            
+            Retrieves the complete sequence of a read using its unique read ID.
+            Requires reads data to be loaded via load_reads() or similar method.
+            
+            Args:
+                rid (int): Read ID to retrieve
+                
+            Returns:
+                str: Read sequence
+                
+            Example:
+                >>> read_seq = wrapper.get_read_by_rid(42)
+                >>> print(f"Read 42: {read_seq}")
+        )pbdoc")
+        .def("get_read", &AindexWrapper::get_read, R"pbdoc(
+            [READ QUERIES] Get read sequence by position range.
+            
+            Retrieves a read sequence from the specified start and end positions
+            within the concatenated reads data. Optionally returns the reverse
+            complement if requested.
+            
+            Args:
+                start (int): Start position in reads data
+                end (int): End position in reads data  
+                revcomp (bool): Return reverse complement if True
+                
+            Returns:
+                str: Read sequence (or reverse complement)
+                
+            Example:
+                >>> seq = wrapper.get_read(1000, 1023, revcomp=False)
+                >>> rev_seq = wrapper.get_read(1000, 1023, revcomp=True)
+        )pbdoc", py::arg("start"), py::arg("end"), py::arg("revcomp") = false)
+        .def("get_reads_se_by_kmer", &AindexWrapper::get_reads_se_by_kmer, R"pbdoc(
+            [READ QUERIES] Get reads containing a specific k-mer.
+            
+            Finds all reads that contain the specified k-mer and returns
+            information about their positions and context. Useful for
+            analyzing k-mer distribution across reads.
+            
+            Args:
+                kmer (str): K-mer sequence to search for
+                
+            Returns:
+                List: Information about reads containing the k-mer
+                
+            Example:
+                >>> reads_info = wrapper.get_reads_se_by_kmer("ATCGATCGATCG")
+                >>> print(f"Found in {len(reads_info)} reads")
+        )pbdoc")
+        .def("get_positions", 
+             static_cast<std::vector<uint64_t>(AindexWrapper::*)(const std::string&)>(&AindexWrapper::get_positions), 
+             R"pbdoc(
+            [POSITION QUERIES] Get all positions where a k-mer appears.
+            
+            Retrieves all positions in the indexed data where the specified
+            k-mer occurs. Requires AIndex position data to be loaded.
+            
+            Args:
+                kmer (str): K-mer sequence to locate
+                
+            Returns:
+                List[int]: List of positions where k-mer appears
+                
+            Example:
+                >>> positions = wrapper.get_positions("ATCGATCGATCG")
+                >>> print(f"K-mer found at positions: {positions}")
+        )pbdoc")
         
-        // Debug function
-        .def("debug_kmer_tf_values", &AindexWrapper::debug_kmer_tf_values,
-             "Debug kmer tf values")
-        .def("get_tf_values_13mer", &AindexWrapper::get_tf_values_13mer,
-             "Get term frequency values for 13-mers")
-        .def("get_total_tf_value_13mer", &AindexWrapper::get_total_tf_value_13mer,
-             "Get total term frequency value for 13-mer (forward + reverse complement)")
-        .def("get_total_tf_values_13mer", &AindexWrapper::get_total_tf_values_13mer,
-             "Get total term frequency values for 13-mers (forward + reverse complement)")
-        .def("get_tf_both_directions_13mer", &AindexWrapper::get_tf_both_directions_13mer,
-             "Get TF values for 13-mer in both directions (forward, reverse complement)")
-        .def("get_tf_both_directions_13mer_batch", &AindexWrapper::get_tf_both_directions_13mer_batch,
-             "Get TF values for multiple 13-mers in both directions")
-        .def("get_reverse_complement_13mer", &AindexWrapper::get_reverse_complement_13mer,
-             "Get reverse complement of a 13-mer")
-        .def("get_13mer_statistics", &AindexWrapper::get_13mer_statistics,
-             "Get statistics about the 13-mer index")
-        .def("get_13mer_tf_array", &AindexWrapper::get_13mer_tf_array,
-             "Get direct access to 13-mer tf array")
-        .def("get_tf_by_index_13mer", &AindexWrapper::get_tf_by_index_13mer,
-             "Get tf value by direct array index for 13-mers")
-        .def("get_index_info", &AindexWrapper::get_index_info,
-             "Get statistics about loaded index")
-        .def("get_positions_13mer", &AindexWrapper::get_positions_13mer,
-             "Get positions for 13-mers using the position index")
-        .def("get_13mer_statistics", &AindexWrapper::get_13mer_statistics,
-             "Get statistics about the 13-mer index")
+        // =====================================================================
+        // CATEGORY: Index Statistics and Metadata
+        // =====================================================================
+        .def("get_hash_size", &AindexWrapper::get_hash_size, R"pbdoc(
+            [METADATA] Get size of the hash index.
+            
+            Returns the total size of the hash index structure used
+            for k-mer lookups. Useful for memory usage analysis.
+            
+            Returns:
+                int: Size of hash index
+                
+            Example:
+                >>> size = wrapper.get_hash_size()
+                >>> print(f"Hash index size: {size}")
+        )pbdoc")
+        .def("get_reads_size", &AindexWrapper::get_reads_size, R"pbdoc(
+            [METADATA] Get total size of reads data.
+            
+            Returns the total size of the loaded reads data in characters/bases.
+            Useful for understanding dataset scale and memory usage.
+            
+            Returns:
+                int: Total size of reads data
+                
+            Example:
+                >>> size = wrapper.get_reads_size()
+                >>> print(f"Total reads size: {size} bases")
+        )pbdoc")
         
-        // 23-mer specific methods
-        .def("get_tf_values_23mer", &AindexWrapper::get_tf_values_23mer,
-             "Get term frequency values for 23-mers")
-        .def("get_total_tf_value_23mer", &AindexWrapper::get_total_tf_value_23mer,
-             "Get total term frequency value for 23-mer (forward + reverse complement)")
-        .def("get_total_tf_values_23mer", &AindexWrapper::get_total_tf_values_23mer,
-             "Get total term frequency values for 23-mers (forward + reverse complement)")
-        .def("get_tf_both_directions_23mer", &AindexWrapper::get_tf_both_directions_23mer,
-             "Get TF values for 23-mer in both directions (forward, reverse complement)")
-        .def("get_tf_both_directions_23mer_batch", &AindexWrapper::get_tf_both_directions_23mer_batch,
-             "Get TF values for multiple 23-mers in both directions")
-        .def("get_reverse_complement_23mer", &AindexWrapper::get_reverse_complement_23mer,
-             "Get reverse complement of a 23-mer")
-        .def("get_23mer_statistics", &AindexWrapper::get_23mer_statistics,
-             "Get statistics about the 23-mer index");
+        // =====================================================================
+        // CATEGORY: Instance Properties (Read/Write)
+        // =====================================================================
+        .def_readwrite("aindex_loaded", &AindexWrapper::aindex_loaded, R"pbdoc(
+            [PROPERTY] Boolean flag indicating if AIndex position data is loaded.
+            
+            True if position index data has been successfully loaded,
+            enabling position-based queries and read context analysis.
+        )pbdoc")
+        .def_readwrite("n_reads", &AindexWrapper::n_reads, R"pbdoc(
+            [PROPERTY] Number of reads in the loaded dataset.
+            
+            Total count of individual reads/sequences in the indexed dataset.
+            Updated when reads data is loaded.
+        )pbdoc")
+        .def_readwrite("n_kmers", &AindexWrapper::n_kmers, R"pbdoc(
+            [PROPERTY] Number of unique k-mers in the index.
+            
+            Total count of unique k-mers that have been indexed.
+            This represents the vocabulary size of the k-mer index.
+        )pbdoc")
+        .def_readwrite("reads_size", &AindexWrapper::reads_size, R"pbdoc(
+            [PROPERTY] Total size of reads data in characters.
+            
+            Total number of characters/bases across all loaded reads.
+            Useful for memory usage calculations and dataset statistics.
+        )pbdoc")
+        
+        // =====================================================================
+        // CATEGORY: Debugging and Development Tools
+        // =====================================================================
+        .def("debug_kmer_tf_values", &AindexWrapper::debug_kmer_tf_values, R"pbdoc(
+            [DEBUG] Debug k-mer term frequency values.
+            
+            Diagnostic function for debugging k-mer frequency calculations.
+            Provides detailed information about internal TF value computation.
+            
+            Example:
+                >>> wrapper.debug_kmer_tf_values()
+        )pbdoc")
+        .def("get_index_info", &AindexWrapper::get_index_info, R"pbdoc(
+            [DEBUG] Get comprehensive index statistics and information.
+            
+            Returns detailed information about the loaded index including
+            memory usage, k-mer counts, file sizes, and loading status.
+            
+            Returns:
+                str: Detailed index information and statistics
+                
+            Example:
+                >>> info = wrapper.get_index_info()
+                >>> print(info)
+        )pbdoc")
+        
+        // =====================================================================
+        // CATEGORY: Specialized 13-mer Analysis Methods
+        // =====================================================================
+        .def("get_total_tf_value_13mer", &AindexWrapper::get_total_tf_value_13mer, R"pbdoc(
+            [13-MER ANALYSIS] Get combined TF value for 13-mer and its reverse complement.
+            
+            Calculates the total term frequency by summing the TF values of
+            the forward k-mer and its reverse complement. Useful for strand-
+            agnostic k-mer frequency analysis.
+            
+            Args:
+                kmer (str): 13-mer sequence (must be length 13)
+                
+            Returns:
+                int: Combined TF value (forward + reverse complement)
+                
+            Example:
+                >>> total_tf = wrapper.get_total_tf_value_13mer("ATCGATCGATCGA")
+                >>> print(f"Total 13-mer frequency: {total_tf}")
+        )pbdoc")
+        .def("get_total_tf_values_13mer", &AindexWrapper::get_total_tf_values_13mer, R"pbdoc(
+            [13-MER ANALYSIS] Get combined TF values for multiple 13-mers and their reverse complements.
+            
+            Batch version of get_total_tf_value_13mer(). Efficiently calculates
+            combined forward and reverse complement frequencies for multiple 13-mers.
+            
+            Args:
+                kmers (List[str]): List of 13-mer sequences
+                
+            Returns:
+                List[int]: Combined TF values for each 13-mer
+                
+            Example:
+                >>> total_tfs = wrapper.get_total_tf_values_13mer(["ATCGATCGATCGA", "GCTAGCTAGCTAG"])
+                >>> print(f"Total frequencies: {total_tfs}")
+        )pbdoc")
+        .def("get_tf_both_directions_13mer", &AindexWrapper::get_tf_both_directions_13mer, R"pbdoc(
+            [13-MER ANALYSIS] Get separate TF values for 13-mer forward and reverse complement.
+            
+            Returns the term frequency values for both the forward k-mer and
+            its reverse complement as separate values. Useful for strand-specific
+            analysis and understanding k-mer directionality.
+            
+            Args:
+                kmer (str): 13-mer sequence (must be length 13)
+                
+            Returns:
+                Tuple[int, int]: (forward_tf, reverse_complement_tf)
+                
+            Example:
+                >>> fw_tf, rv_tf = wrapper.get_tf_both_directions_13mer("ATCGATCGATCGA")
+                >>> print(f"Forward: {fw_tf}, Reverse: {rv_tf}")
+        )pbdoc")
+        .def("get_tf_both_directions_13mer_batch", &AindexWrapper::get_tf_both_directions_13mer_batch, R"pbdoc(
+            [13-MER ANALYSIS] Get directional TF values for multiple 13-mers.
+            
+            Batch version of get_tf_both_directions_13mer(). Efficiently retrieves
+            forward and reverse complement TF values for multiple 13-mers.
+            
+            Args:
+                kmers (List[str]): List of 13-mer sequences
+                
+            Returns:
+                List[Tuple[int, int]]: List of (forward_tf, reverse_tf) pairs
+                
+            Example:
+                >>> results = wrapper.get_tf_both_directions_13mer_batch(["ATCGATCGATCGA", "GCTAGCTAGCTAG"])
+                >>> for fw, rv in results:
+                >>>     print(f"Forward: {fw}, Reverse: {rv}")
+        )pbdoc")
+        .def("get_reverse_complement_13mer", &AindexWrapper::get_reverse_complement_13mer, R"pbdoc(
+            [13-MER ANALYSIS] Get reverse complement of a 13-mer sequence.
+            
+            Computes the reverse complement of a 13-mer k-mer using optimized
+            bit operations. Part of the 13-mer analysis toolkit.
+            
+            Args:
+                kmer (str): 13-mer sequence (must be length 13)
+                
+            Returns:
+                str: Reverse complement sequence
+                
+            Example:
+                >>> rev_comp = wrapper.get_reverse_complement_13mer("ATCGATCGATCGA")
+                >>> print(f"Original: ATCGATCGATCGA, Rev comp: {rev_comp}")
+        )pbdoc")
+        .def("get_13mer_statistics", &AindexWrapper::get_13mer_statistics, R"pbdoc(
+            [13-MER ANALYSIS] Get comprehensive statistics about the 13-mer index.
+            
+            Returns detailed statistics about the loaded 13-mer index including
+            total k-mer count, read count, memory usage, and loading status.
+            
+            Returns:
+                str: Formatted statistics string
+                
+            Example:
+                >>> stats = wrapper.get_13mer_statistics()
+                >>> print(stats)
+        )pbdoc")
+        .def("get_13mer_tf_array", &AindexWrapper::get_13mer_tf_array, R"pbdoc(
+            [13-MER ANALYSIS] Get direct access to the 13-mer term frequency array.
+            
+            Provides low-level access to the internal TF array for 13-mers.
+            Advanced users can use this for custom analysis and optimization.
+            
+            Returns:
+                Array: Direct reference to 13-mer TF array
+                
+            Example:
+                >>> tf_array = wrapper.get_13mer_tf_array()
+                >>> print(f"Array size: {len(tf_array)}")
+        )pbdoc")
+        .def("get_tf_by_index_13mer", &AindexWrapper::get_tf_by_index_13mer, R"pbdoc(
+            [13-MER ANALYSIS] Get TF value by direct array index for 13-mers.
+            
+            Retrieves term frequency value using direct array indexing.
+            This is the fastest method for TF lookup when you know the
+            internal index of the k-mer.
+            
+            Args:
+                index (int): Internal array index
+                
+            Returns:
+                int: Term frequency value at index
+                
+            Example:
+                >>> tf = wrapper.get_tf_by_index_13mer(1234)
+                >>> print(f"TF at index 1234: {tf}")
+        )pbdoc")
+        .def("get_positions_13mer", 
+             static_cast<std::vector<uint64_t>(AindexWrapper::*)(const std::string&)>(&AindexWrapper::get_positions_13mer), 
+             R"pbdoc(
+            [13-MER ANALYSIS] Get positions for 13-mers using the position index.
+            
+            Retrieves all positions where 13-mer k-mers appear in the indexed
+            data using the specialized 13-mer position index for optimal performance.
+            
+            Args:
+                kmer (str): 13-mer sequence to locate
+                
+            Returns:
+                List[int]: Positions where 13-mer appears
+                
+            Example:
+                >>> positions = wrapper.get_positions_13mer("ATCGATCGATCGA")
+                >>> print(f"13-mer found at: {positions}")
+        )pbdoc")
+        
+        // =====================================================================
+        // CATEGORY: Specialized 23-mer Analysis Methods
+        // =====================================================================
+        .def("get_tf_values_23mer", &AindexWrapper::get_tf_values_23mer, R"pbdoc(
+            [23-MER ANALYSIS] Get term frequency values for 23-mer k-mers.
+            
+            Optimized method for retrieving term frequency values specifically
+            for 23-mer k-mers. Uses the 23-mer index for efficient lookup.
+            
+            Args:
+                kmers (List[str]): List of 23-mer sequences (must be length 23)
+                
+            Returns:
+                List[int]: Term frequency values for each 23-mer
+                
+            Example:
+                >>> tf_vals = wrapper.get_tf_values_23mer(["ATCGATCGATCGATCGATCGATC", "GCTAGCTAGCTAGCTAGCTAGCT"])
+                >>> print(f"23-mer TF values: {tf_vals}")
+        )pbdoc")
+        .def("get_total_tf_value_23mer", &AindexWrapper::get_total_tf_value_23mer, R"pbdoc(
+            [23-MER ANALYSIS] Get combined TF value for 23-mer and its reverse complement.
+            
+            Calculates the total term frequency by summing the TF values of
+            the forward k-mer and its reverse complement. Useful for strand-
+            agnostic k-mer frequency analysis in longer sequences.
+            
+            Args:
+                kmer (str): 23-mer sequence (must be length 23)
+                
+            Returns:
+                int: Combined TF value (forward + reverse complement)
+                
+            Example:
+                >>> total_tf = wrapper.get_total_tf_value_23mer("ATCGATCGATCGATCGATCGATC")
+                >>> print(f"Total 23-mer frequency: {total_tf}")
+        )pbdoc")
+        .def("get_total_tf_values_23mer", &AindexWrapper::get_total_tf_values_23mer, R"pbdoc(
+            [23-MER ANALYSIS] Get combined TF values for multiple 23-mers and their reverse complements.
+            
+            Batch version of get_total_tf_value_23mer(). Efficiently calculates
+            combined forward and reverse complement frequencies for multiple 23-mers.
+            
+            Args:
+                kmers (List[str]): List of 23-mer sequences
+                
+            Returns:
+                List[int]: Combined TF values for each 23-mer
+                
+            Example:
+                >>> total_tfs = wrapper.get_total_tf_values_23mer(["ATCGATCGATCGATCGATCGATC", "GCTAGCTAGCTAGCTAGCTAGCT"])
+                >>> print(f"Total frequencies: {total_tfs}")
+        )pbdoc")
+        .def("get_tf_both_directions_23mer", &AindexWrapper::get_tf_both_directions_23mer, R"pbdoc(
+            [23-MER ANALYSIS] Get separate TF values for 23-mer forward and reverse complement.
+            
+            Returns the term frequency values for both the forward k-mer and
+            its reverse complement as separate values. Useful for strand-specific
+            analysis and understanding k-mer directionality in longer sequences.
+            
+            Args:
+                kmer (str): 23-mer sequence (must be length 23)
+                
+            Returns:
+                Tuple[int, int]: (forward_tf, reverse_complement_tf)
+                
+            Example:
+                >>> fw_tf, rv_tf = wrapper.get_tf_both_directions_23mer("ATCGATCGATCGATCGATCGATC")
+                >>> print(f"Forward: {fw_tf}, Reverse: {rv_tf}")
+        )pbdoc")
+        .def("get_tf_both_directions_23mer_batch", &AindexWrapper::get_tf_both_directions_23mer_batch, R"pbdoc(
+            [23-MER ANALYSIS] Get directional TF values for multiple 23-mers.
+            
+            Batch version of get_tf_both_directions_23mer(). Efficiently retrieves
+            forward and reverse complement TF values for multiple 23-mers.
+            
+            Args:
+                kmers (List[str]): List of 23-mer sequences
+                
+            Returns:
+                List[Tuple[int, int]]: List of (forward_tf, reverse_tf) pairs
+                
+            Example:
+                >>> results = wrapper.get_tf_both_directions_23mer_batch(["ATCGATCGATCGATCGATCGATC", "GCTAGCTAGCTAGCTAGCTAGCT"])
+                >>> for fw, rv in results:
+                >>>     print(f"Forward: {fw}, Reverse: {rv}")
+        )pbdoc")
+        .def("get_reverse_complement_23mer", &AindexWrapper::get_reverse_complement_23mer, R"pbdoc(
+            [23-MER ANALYSIS] Get reverse complement of a 23-mer sequence.
+            
+            Computes the reverse complement of a 23-mer k-mer using optimized
+            bit operations. Part of the 23-mer analysis toolkit.
+            
+            Args:
+                kmer (str): 23-mer sequence (must be length 23)
+                
+            Returns:
+                str: Reverse complement sequence
+                
+            Example:
+                >>> rev_comp = wrapper.get_reverse_complement_23mer("ATCGATCGATCGATCGATCGATC")
+                >>> print(f"Original: ATCGATCGATCGATCGATCGATC")
+                >>> print(f"Rev comp: {rev_comp}")
+        )pbdoc")
+        .def("get_23mer_statistics", &AindexWrapper::get_23mer_statistics, R"pbdoc(
+            [23-MER ANALYSIS] Get comprehensive statistics about the 23-mer index.
+            
+            Returns detailed statistics about the loaded 23-mer index including
+            total k-mer count, read count, memory usage, and loading status.
+            
+            Returns:
+                str: Formatted statistics string
+                
+            Example:
+                >>> stats = wrapper.get_23mer_statistics()
+                >>> print(stats)
+        )pbdoc");
 }

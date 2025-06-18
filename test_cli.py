@@ -211,7 +211,7 @@ class TestAindexCLI(unittest.TestCase):
         
         # First generate k-mers
         kmers_file = self.current_output_dir / "kmers_for_hash.txt"
-        hash_file = self.current_output_dir / "test.hash"
+        hash_file = self.current_output_dir / "test.pf"
         
         # Create a simple k-mers file manually for testing
         with open(kmers_file, 'w') as f:
@@ -255,7 +255,7 @@ class TestAindexCLI(unittest.TestCase):
         
         # This test requires a hash file, which might not exist
         # For now, just test the argument parsing
-        hash_file = self.current_output_dir / "dummy.hash"
+        hash_file = self.current_output_dir / "dummy.pf"
         output_file = self.current_output_dir / "counts.tf.bin"
         
         # Create dummy hash file
@@ -361,7 +361,7 @@ class TestAindexCLI(unittest.TestCase):
         # This requires several pre-computed files, so it will likely fail
         # But we test the argument parsing
         output_prefix = self.current_output_dir / "aindex_direct"
-        dummy_hash = self.current_output_dir / "dummy.hash"
+        dummy_hash = self.current_output_dir / "dummy.pf"
         dummy_tf = self.current_output_dir / "dummy.tf.bin"
         
         # Create dummy files
@@ -385,7 +385,7 @@ class TestAindexCLI(unittest.TestCase):
         print("\n--- Testing compute-index ---")
         
         dummy_dat = self.current_output_dir / "dummy.dat"
-        dummy_hash = self.current_output_dir / "dummy.hash"
+        dummy_hash = self.current_output_dir / "dummy.pf"
         output_prefix = self.current_output_dir / "index_test"
         
         # Create dummy files
