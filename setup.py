@@ -11,7 +11,7 @@ import platform
 
 # Important: define package metadata at the beginning of the file
 PACKAGE_NAME = "aindex2"
-PACKAGE_VERSION = "1.4.4"
+PACKAGE_VERSION = "1.4.2"
 
 def check_dependencies():
     """Check if required build dependencies are available"""
@@ -170,14 +170,14 @@ class CustomInstall(install):
 with open('README.md', 'r', encoding='utf-8') as f:
     long_description = f.read()
 
-# Define ext_modules to make cibuildwheel recognize this as a binary package
-# The actual building is done through Makefile in build_ext
+# Standard build with C++ extensions for Linux/macOS  
 ext_modules = [
     Extension(
-        'aindex.core.aindex_cpp',
-        sources=[],  # Sources are compiled via Makefile
-        language='c++',
-    )
+        'aindex.core.aindex_cpp', 
+        sources=[],  # Built by Makefile
+        include_dirs=[],
+        library_dirs=[],
+    ),
 ]
 
 setup(

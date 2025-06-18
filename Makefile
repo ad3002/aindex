@@ -16,11 +16,11 @@ INSTALL_DIR = $(PREFIX)/bin
 # 1. FIRST, determine architecture
 # Check ARCHFLAGS (set by cibuildwheel)
 ifdef ARCHFLAGS
-	ifeq ($(findstring arm64,$(ARCHFLAGS)),arm64)
-		TARGET_ARCH = arm64
-	else ifeq ($(findstring x86_64,$(ARCHFLAGS)),x86_64)
-		TARGET_ARCH = x86_64
-	endif
+    ifeq ($(findstring arm64,$(ARCHFLAGS)),arm64)
+        TARGET_ARCH = arm64
+    else ifeq ($(findstring x86_64,$(ARCHFLAGS)),x86_64)
+        TARGET_ARCH = x86_64
+    endif
 endif
 
 # Set TARGET_ARCH by default if not defined
@@ -31,77 +31,74 @@ CROSS_COMPILE_FLAGS =
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
 	# On Apple Silicon (arm64) when building for x86_64
-	ifeq ($(TARGET_ARCH),x86_64)
-		ifeq ($(shell uname -m),arm64)
-			CROSS_COMPILE_FLAGS = -arch x86_64
-		endif
-	endif
+    ifeq ($(TARGET_ARCH),x86_64)
+        ifeq ($(shell uname -m),arm64)
+            CROSS_COMPILE_FLAGS = -arch x86_64
+        endif
+    endif
 	# On Intel (x86_64) when building for arm64
-	ifeq ($(TARGET_ARCH),arm64)
-		ifeq ($(shell uname -m),x86_64)
-			CROSS_COMPILE_FLAGS = -arch arm64
-		endif
-	endif
+    ifeq ($(TARGET_ARCH),arm64)
+        ifeq ($(shell uname -m),x86_64)
+            CROSS_COMPILE_FLAGS = -arch arm64
+        endif
+    endif
 endif
 
 # Python configuration
 PYTHON_CMD := $(shell \
-	if [ -n "$$CIBUILDWHEEL" ] && which python >/dev/null 2>&1; then \
-		echo python; \
-	elif /opt/homebrew/opt/python@3.11/bin/python3.11 --version >/dev/null 2>&1; then \
-		echo /opt/homebrew/opt/python@3.11/bin/python3.11; \
-	elif python3.11 --version >/dev/null 2>&1; then \
-		echo python3.11; \
-	elif python3 --version >/dev/null 2>&1; then \
-		echo python3; \
-	elif python --version >/dev/null 2>&1; then \
-		echo python; \
-	else \
-		echo python3; \
-	fi)
+    if [ -n "$$CIBUILDWHEEL" ] && which python >/dev/null 2>&1; then \
+        echo python; \
+    elif /opt/homebrew/opt/python@3.11/bin/python3.11 --version >/dev/null 2>&1; then \
+        echo /opt/homebrew/opt/python@3.11/bin/python3.11; \
+    elif python3.11 --version >/dev/null 2>&1; then \
+        echo python3.11; \
+    elif python3 --version >/dev/null 2>&1; then \
+        echo python3; \
+    elif python --version >/dev/null 2>&1; then \
+        echo python; \
+    else \
+        echo python3; \
+    fi)
 
 PYTHON_VERSION := $(shell $(PYTHON_CMD) -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
 
 PYTHON_CONFIG_CANDIDATES := $(shell \
-	if [ -n "$$CIBUILDWHEEL" ]; then \
-		echo "$(PYTHON_CMD)-config python$(PYTHON_VERSION)-config python3-config python-config"; \
-	else \
-		echo "$(PYTHON_CMD)-config python$(PYTHON_VERSION)-config python3-config python-config"; \
-	fi)
+    if [ -n "$$CIBUILDWHEEL" ]; then \
+        echo "$(PYTHON_CMD)-config python$(PYTHON_VERSION)-config python3-config python-config"; \
+    else \
+        echo "$(PYTHON_CMD)-config python$(PYTHON_VERSION)-config python3-config python-config"; \
+    fi)
 PYTHON_CONFIG = $(shell for cmd in $(PYTHON_CONFIG_CANDIDATES); do \
-	if which $$cmd >/dev/null 2>&1; then \
-		echo $$cmd; \
-		break; \
-	fi; \
+    if which $$cmd >/dev/null 2>&1; then \
+        echo $$cmd; \
+        break; \
+    fi; \
 done)
 
 ifeq ($(PYTHON_CONFIG),)
-	PYTHON_CONFIG = python3-config
+    PYTHON_CONFIG = python3-config
 endif
 
-# Get path to pybind11 with better error handling
 PYTHON_INCLUDE := $(shell $(PYTHON_CMD) -c "try: import pybind11; print(pybind11.get_include());\nexcept: pass" 2>/dev/null)
 PYTHON_HEADERS := $(shell $(PYTHON_CONFIG) --includes)
 PYTHON_SUFFIX := $(shell $(PYTHON_CONFIG) --extension-suffix)
 
-# 3. NOW, assemble final CXXFLAGS
 CXXFLAGS = $(BASE_CXXFLAGS) $(CROSS_COMPILE_FLAGS) $(PYTHON_HEADERS)
 
-# macOS flags setup
 ifeq ($(UNAME_S),Darwin)
-	CXXFLAGS += -stdlib=libc++
-	LDFLAGS_PYBIND = -shared -undefined dynamic_lookup $(CROSS_COMPILE_FLAGS)
-	MACOS = true
+    CXXFLAGS += -stdlib=libc++
+    LDFLAGS_PYBIND = -shared -undefined dynamic_lookup $(CROSS_COMPILE_FLAGS)
+    MACOS = true
 else
-	LDFLAGS_PYBIND = -shared -Wl,--export-dynamic
-	MACOS = false
+    LDFLAGS_PYBIND = -shared -Wl,--export-dynamic
+    MACOS = false
 endif
 
 # Platform-specific binary extensions
 ifeq ($(UNAME_S),Windows_NT)
-	BIN_EXT = .exe
+    BIN_EXT = .exe
 else
-	BIN_EXT = 
+    BIN_EXT = 
 endif
 
 # Architecture-specific variables
@@ -115,28 +112,27 @@ COMPUTE_AINDEX13_FLAGS =
 
 # ARM64/Apple Silicon optimization
 ifeq ($(UNAME_S),Darwin)
-	ifeq ($(TARGET_ARCH),arm64)
-		ARM64_FLAGS = -mcpu=apple-m1 -mtune=apple-m1 -DARM64_OPTIMIZED
-		ARM64_ENABLED = true
-		KMER_COUNTER_SRC = $(SRC_DIR)/count_kmers.arm64.cpp
-		KMER_COUNTER_FLAGS = $(ARM64_FLAGS)
-		COUNT_KMERS13_SRC = $(SRC_DIR)/count_kmers13.arm64.cpp
-		COUNT_KMERS13_FLAGS = $(ARM64_FLAGS)
-		COMPUTE_AINDEX13_SRC = $(SRC_DIR)/compute_aindex13.arm64.cpp
-		COMPUTE_AINDEX13_FLAGS = $(ARM64_FLAGS)
-	else ifeq ($(TARGET_ARCH),aarch64)
-		ARM64_FLAGS = -mcpu=apple-m1 -mtune=apple-m1 -DARM64_OPTIMIZED
-		ARM64_ENABLED = true
-		KMER_COUNTER_SRC = $(SRC_DIR)/count_kmers.arm64.cpp
-		KMER_COUNTER_FLAGS = $(ARM64_FLAGS)
-		COUNT_KMERS13_SRC = $(SRC_DIR)/count_kmers13.arm64.cpp
-		COUNT_KMERS13_FLAGS = $(ARM64_FLAGS)
-		COMPUTE_AINDEX13_SRC = $(SRC_DIR)/compute_aindex13.arm64.cpp
-		COMPUTE_AINDEX13_FLAGS = $(ARM64_FLAGS)
-	endif
+    ifeq ($(TARGET_ARCH),arm64)
+        ARM64_FLAGS = -mcpu=apple-m1 -mtune=apple-m1 -DARM64_OPTIMIZED
+        ARM64_ENABLED = true
+        KMER_COUNTER_SRC = $(SRC_DIR)/count_kmers.arm64.cpp
+        KMER_COUNTER_FLAGS = $(ARM64_FLAGS)
+        COUNT_KMERS13_SRC = $(SRC_DIR)/count_kmers13.arm64.cpp
+        COUNT_KMERS13_FLAGS = $(ARM64_FLAGS)
+        COMPUTE_AINDEX13_SRC = $(SRC_DIR)/compute_aindex13.arm64.cpp
+        COMPUTE_AINDEX13_FLAGS = $(ARM64_FLAGS)
+    else ifeq ($(TARGET_ARCH),aarch64)
+        ARM64_FLAGS = -mcpu=apple-m1 -mtune=apple-m1 -DARM64_OPTIMIZED
+        ARM64_ENABLED = true
+        KMER_COUNTER_SRC = $(SRC_DIR)/count_kmers.arm64.cpp
+        KMER_COUNTER_FLAGS = $(ARM64_FLAGS)
+        COUNT_KMERS13_SRC = $(SRC_DIR)/count_kmers13.arm64.cpp
+        COUNT_KMERS13_FLAGS = $(ARM64_FLAGS)
+        COMPUTE_AINDEX13_SRC = $(SRC_DIR)/compute_aindex13.arm64.cpp
+        COMPUTE_AINDEX13_FLAGS = $(ARM64_FLAGS)
+    endif
 endif
 
-# Flags for object files (with cross-compilation)
 OBJ_CXXFLAGS = $(BASE_CXXFLAGS) $(CROSS_COMPILE_FLAGS)
 
 # Binary targets
@@ -234,10 +230,6 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(INCLUDES) | $(OBJ_DIR)
 	$(CXX) $(OBJ_CXXFLAGS) -c $< -o $@
 
 # Pybind11 module
-# MAIN CHANGE: Simplified pybind11 target
-# All logic is now in CXXFLAGS and LDFLAGS_PYBIND
-# Pybind11 module - simplified version
-# Pybind11 module - with dynamic path to pybind11
 pybind11: $(OBJECTS) $(SRC_DIR)/python_wrapper.cpp | $(PACKAGE_DIR)
 	@echo "=== Building Python extension ==="
 	@echo "Target Arch: $(TARGET_ARCH)"
@@ -323,7 +315,7 @@ external-safe:
 	cp scripts/reads_to_fasta.py $(BIN_DIR)/
 	@echo "Safe external dependencies setup complete."
 
-install: all
+local:
 	@echo "Installing aindex package and CLI..."
 	@echo "Building package wheel..."
 	$(PYTHON_CMD) -m pip install --upgrade build
@@ -332,8 +324,37 @@ install: all
 	$(PYTHON_CMD) -m pip install --force-reinstall dist/aindex2-*.whl
 	@echo "Installation complete. You can now use 'aindex' command."
 
+
+install: all
+	mkdir -p ${BIN_DIR}
+	mkdir -p $(PACKAGE_DIR)
+	mkdir -p $(INSTALL_DIR)
+	@echo "Installing binaries to $(INSTALL_DIR)..."
+	cp bin/compute_index$(BIN_EXT) $(INSTALL_DIR)/
+	cp bin/compute_aindex$(BIN_EXT) $(INSTALL_DIR)/
+	cp bin/compute_reads$(BIN_EXT) $(INSTALL_DIR)/
+	cp bin/kmer_counter$(BIN_EXT) $(INSTALL_DIR)/
+	cp bin/generate_all_13mers$(BIN_EXT) $(INSTALL_DIR)/
+	cp bin/build_13mer_hash$(BIN_EXT) $(INSTALL_DIR)/
+	cp bin/compute_aindex13$(BIN_EXT) $(INSTALL_DIR)/
+	cp bin/count_kmers13$(BIN_EXT) $(INSTALL_DIR)/
+	cp bin/compute_mphf_seq$(BIN_EXT) $(INSTALL_DIR)/
+	@echo "Installing Python package with aindex CLI..."
+	$(PYTHON_CMD) -m pip install -e .
+	@echo "Installation complete. You can now use 'aindex' command and all binaries."
+
 uninstall:
-	@echo "Uninstalling aindex package..."
+	@echo "Removing aindex binaries from $(INSTALL_DIR)..."
+	rm -f $(INSTALL_DIR)/compute_index$(BIN_EXT)
+	rm -f $(INSTALL_DIR)/compute_aindex$(BIN_EXT)
+	rm -f $(INSTALL_DIR)/compute_reads$(BIN_EXT)
+	rm -f $(INSTALL_DIR)/kmer_counter$(BIN_EXT)
+	rm -f $(INSTALL_DIR)/generate_all_13mers$(BIN_EXT)
+	rm -f $(INSTALL_DIR)/build_13mer_hash$(BIN_EXT)
+	rm -f $(INSTALL_DIR)/compute_aindex13$(BIN_EXT)
+	rm -f $(INSTALL_DIR)/count_kmers13$(BIN_EXT)
+	rm -f $(INSTALL_DIR)/compute_mphf_seq$(BIN_EXT)
+	@echo "Uninstalling Python package and aindex CLI..."
 	$(PYTHON_CMD) -m pip uninstall -y aindex2
 	@echo "Uninstall complete."
 
@@ -341,7 +362,6 @@ clean:
 	rm -rf $(OBJ_DIR) $(SRC_DIR)/*.so $(BIN_DIR) $(PACKAGE_DIR)/python_wrapper.so $(PACKAGE_DIR)/aindex_cpp*.so
 	rm -rf external
 	rm -rf aindex/bin
-	rm -rf dist build *.egg-info
 
 # ARM64 target for Apple Silicon Macs  
 arm64: debug-info clean $(PACKAGE_DIR) $(OBJ_DIR) $(BIN_DIR)
@@ -469,4 +489,4 @@ debug-vars:
 	@echo "PYTHON_SUFFIX: $(PYTHON_SUFFIX)"
 	@echo "============================="
 
-.PHONY: all all-external simple-all clean external external-safe install uninstall macos macos-simple arm64 test test-all debug-platform help debug-vars copy-to-package objects local-scripts
+.PHONY: all local all-external simple-all clean external external-safe install uninstall macos macos-simple arm64 test test-all debug-platform help debug-vars copy-to-package objects local-scripts
