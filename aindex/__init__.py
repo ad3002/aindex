@@ -12,5 +12,5 @@ except ImportError as e:
         "For Windows users, please use WSL or Docker."
     ) from e
 
-__version__ = '1.4.3'
+__version__ = '1.4.4'
 __all__ = ['AIndex']
