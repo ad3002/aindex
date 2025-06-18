@@ -170,8 +170,15 @@ class CustomInstall(install):
 with open('README.md', 'r', encoding='utf-8') as f:
     long_description = f.read()
 
-# No ext_modules - we build everything through Makefile
-ext_modules = []
+# Define ext_modules to make cibuildwheel recognize this as a binary package
+# The actual building is done through Makefile in build_ext
+ext_modules = [
+    Extension(
+        'aindex.core.aindex_cpp',
+        sources=[],  # Sources are compiled via Makefile
+        language='c++',
+    )
+]
 
 setup(
     name=PACKAGE_NAME,
