@@ -26,7 +26,6 @@ AIndex uses several file types:
 - `.kmers.bin` - K-mer binary data
 - `.index.bin` - Position index
 - `.indices.bin` - Position data
-- `.pos.bin` - Position mappings
 - `.reads` - Read sequences
 - `.ridx` - Read index
 
@@ -408,7 +407,6 @@ When loading an AIndex, ensure these files exist:
 - `prefix.23.kmers.bin` - K-mer data
 - `prefix.23.index.bin` - Position index (for positional queries)
 - `prefix.23.indices.bin` - Position data
-- `prefix.23.pos.bin` - Position mappings
 - `prefix.reads` - Read sequences
 - `prefix.ridx` - Read index
 
